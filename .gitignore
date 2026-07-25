@@ -1,0 +1,42 @@
+
+
+# OS cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor artifacts
+*.swp
+*.swo
+*.swn
+*~
+.vscode/
+.idea/
+
+# Env / logs / general temp files
+.env
+.env.local
+*.log
+*.tmp
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+
+# Crystal (matches `crystal init`'s own template, which also skips
+# shard.lock for libraries - dependency locking is for the applications
+# that consume a shard, not the shard itself; ruby-teek does the same
+# with Gemfile.lock)
+/docs/
+/lib/
+/bin/
+/.shards/
+*.dwarf
+/shard.lock
+
+# Compiled Crystal binaries have no distinguishing file extension
+# (`crystal build foo.cr` with no -o produces a plain `foo`), so there's
+# no reliable name/extension pattern to add here. Instead a pre-commit
+# hook should be setup to inspect staged files to test if they look like
+# a built binary

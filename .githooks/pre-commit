@@ -1,0 +1,46 @@
+#!/bin/sh
+# Activate once per clone: git config core.hooksPath .githooks
+set -eu
+
+# --- 1. Ameba lint check ---------------------------------------------
+# Runs over the whole tree rather than just staged files - simplest
+# option at this project's size, and it means a lint issue introduced by
+# an uncommitted change elsewhere can't slip through unnoticed either.
+ameba_bin="lib/ameba/bin/ameba"
+if [ -x "$ameba_bin" ]; then
+  if ! "$ameba_bin" src/ spec/ examples/; then
+    echo "pre-commit: ameba found issues (see above) - fix or run 'crystal tool format' first." >&2
+    exit 1
+  fi
+else
+  echo "pre-commit: $ameba_bin not found - run 'shards install' first." >&2
+  exit 1
+fi
+
+# --- 2. Refuse compiled executables -----------------------------------
+# Compiled Crystal binaries have no distinguishing file extension
+# (`crystal build foo.cr` with no -o produces a plain `foo`), so a
+# name/extension-based .gitignore entry can't reliably catch a stray one
+# - this checks actual file content instead. See the project conventions
+# ("Examples & build artifacts").
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+if [ -n "$staged" ]; then
+  bad=""
+  for f in $staged; do
+    [ -f "$f" ] || continue
+    desc=$(file -b -- "$f")
+    case "$desc" in
+      *Mach-O*executable*|*ELF*executable*|*PE32*executable*)
+        bad="$bad
+$f: $desc"
+        ;;
+    esac
+  done
+
+  if [ -n "$bad" ]; then
+    echo "pre-commit: refusing to commit compiled executable(s):" >&2
+    printf '%s\n' "$bad" >&2
+    echo "Build artifacts belong outside the repo (scratch/tmp) - see the project conventions." >&2
+    exit 1
+  fi
+fi
