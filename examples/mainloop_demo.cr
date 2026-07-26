@@ -6,13 +6,13 @@
 require "../src/teek"
 
 interp = Teek::Interp.new
-interp.invoke("wm", "title", ".", "crystal-teek mainloop spike")
+interp.tcl_invoke("wm", "title", ".", "crystal-teek mainloop spike")
 
 # A bare CLI-launched Tk process doesn't automatically get foreground
 # focus on macOS - without this the window exists but sits unfocused,
 # easy to miss entirely.
-interp.eval("wm attributes . -topmost 1; raise .; focus -force .")
-interp.eval("after 5000 {destroy .}")
+interp.tcl_eval("wm attributes . -topmost 1; raise .; focus -force .")
+interp.tcl_eval("after 5000 {destroy .}")
 
 puts "Entering mainloop (window auto-closes after 5s)..."
 interp.mainloop

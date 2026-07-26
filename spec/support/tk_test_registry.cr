@@ -5,13 +5,17 @@ require "../../src/teek"
 {% end %}
 
 module TkTest
-  REGISTRY = {} of String => Proc(Teek::Interp, Nil)
+  REGISTRY = {} of String => Proc(Teek::App, Nil)
 end
 
 # Registers a named Tk test case. The block runs against a shared,
-# already-initialized Teek::Interp (Tk_Init can only happen once per
+# already-initialized Teek::App (Tk_Init can only happen once per
 # process - see spec/support/tk_worker.cr) - never construct a
-# Teek::Interp of your own inside a tk_test block.
+# Teek::App of your own inside a tk_test block. App#interp exposes the
+# underlying Interp for anything that doesn't have an App-level
+# equivalent yet (create_widget/pack/bind/simulate_event/wait_until/
+# queue_for_main/pump_once - all Interp-only conveniences until their
+# own tasks land at the App layer).
 #
 # Compiles into two different roles depending on how the CURRENT binary
 # is built, without the call site ever changing:
@@ -23,7 +27,7 @@ end
 #    in this process - there's no Tk_Init here at all. Instead a real
 #    Crystal::Spec example is generated that asks the persistent worker
 #    (TkWorkerClient) to run this test by name and asserts on the result.
-def tk_test(name : String, &block : Teek::Interp -> Nil) : Nil
+def tk_test(name : String, &block : Teek::App -> Nil) : Nil
   TkTest::REGISTRY[name] = block
 
   {% unless flag?(:tk_worker_mode) %}

@@ -6,8 +6,8 @@
 require "../src/teek"
 
 interp = Teek::Interp.new
-interp.invoke("wm", "title", ".", "crystal-teek")
-interp.eval("wm attributes . -topmost 1; raise .; focus -force .")
+interp.tcl_invoke("wm", "title", ".", "crystal-teek")
+interp.tcl_eval("wm attributes . -topmost 1; raise .; focus -force .")
 
 interp.create_widget("label", ".l", text: "no clicks yet")
 interp.create_widget("button", ".b", text: "Click me")
@@ -16,9 +16,9 @@ interp.pack(".l", ".b", side: "top", pady: 10)
 clicks = 0
 id = interp.register_callback do
   clicks += 1
-  interp.invoke(".l", "configure", "-text", "clicked #{clicks} time#{clicks == 1 ? "" : "s"}")
+  interp.tcl_invoke(".l", "configure", "-text", "clicked #{clicks} time#{clicks == 1 ? "" : "s"}")
 end
-interp.invoke(".b", "configure", "-command", "crystal_callback #{id}")
+interp.tcl_invoke(".b", "configure", "-command", "crystal_callback #{id}")
 
 puts "Entering mainloop - click the button, watch the label update. Close the window when done."
 interp.mainloop

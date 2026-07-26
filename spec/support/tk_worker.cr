@@ -2,7 +2,7 @@ require "./tk_worker_protocol"
 require "./tk_test_registry"
 require "./tk_cases"
 
-# Persistent worker process for fast Tk test execution: one Teek::Interp
+# Persistent worker process for fast Tk test execution: one Teek::App
 # for the whole run (Tk_Init can only happen once per process), reset
 # between tests instead of recreated. Ported from ruby-teek's
 # Teek::TestWorker (test/teek_test_worker.rb) - same persistent-worker,
@@ -15,7 +15,7 @@ require "./tk_cases"
 module TkWorker
   class Server
     def initialize
-      @interp = Teek::Interp.new
+      @app = Teek::App.new
     end
 
     def run : Nil
@@ -40,7 +40,7 @@ module TkWorker
       test = TkTest::REGISTRY[name]?
       raise "unknown test: #{name.inspect}" unless test
 
-      test.call(@interp)
+      test.call(@app)
       Response.new(true)
     rescue ex
       Response.new(false, "#{ex.class}: #{ex.message}")
@@ -49,14 +49,15 @@ module TkWorker
     end
 
     # Mirrors ruby-teek's reset_tk_state! (test/teek_test_worker.rb) as
-    # far as our current Interp supports: destroy every child of root and
+    # far as our current App supports: destroy every child of root and
     # hide it again, without recreating the interpreter. Doesn't yet port
     # the grid-geometry-manager reset (column/row weights) - nothing
     # exercises grid yet, so there's nothing to prove that against.
     private def reset_tk_state! : Nil
-      @interp.eval("foreach w [winfo children .] { destroy $w }")
-      @interp.eval("wm withdraw .")
-      @interp.eval("wm minsize . 1 1")
+      @app.tcl_eval("foreach w [winfo children .] { destroy $w }")
+      @app.hide
+      @app.tcl_eval("wm minsize . 1 1")
+      @app.reset_widget_counters!
     end
   end
 end
