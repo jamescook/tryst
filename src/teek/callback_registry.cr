@@ -38,6 +38,22 @@ module Teek
   # Generic over App so this can be tested against a fake app stub with
   # no Tk interpreter needed (see spec/teek/callback_registry_spec.cr) -
   # the registry only ever calls #unregister_callback on it.
+  #
+  # Known deviation from ruby-teek, not yet revisited: ruby-teek's
+  # @entries is a plain untyped Hash (Hash.new { |h, k| h[k] = {} }) with
+  # no restriction at all on the inner hash's key type, since Ruby never
+  # requires one - CanvasBindInterceptor's Ruby source uses a real
+  # 2-element Array ([tag_or_id, seq]) as a key directly. #reconcile here
+  # is narrowed to Hash(String, String) because that's what every
+  # consumer needed when this class was first ported (bind's
+  # event_str => cb, menu's id => id) - not a deliberate scope decision,
+  # just the concrete type Crystal's static typing forced a choice on.
+  # CanvasBindInterceptor (src/teek/canvas_bind_interceptor.cr), the
+  # first consumer that actually needs a composite key, works around
+  # this by encoding a (tag_or_id, seq) pair as one space-joined String
+  # key rather than widening this class - revisit (e.g. a generic
+  # #reconcile(container, &block : Hash(K, String) -> Hash(K, String))
+  # via `forall K`) if more consumers hit the same wall.
   class CallbackRegistry(App)
     alias Container = Tuple(Symbol, String)
 

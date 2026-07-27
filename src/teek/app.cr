@@ -4,6 +4,10 @@ require "./callback_registry"
 require "./winfo"
 require "./window"
 require "./widget"
+require "./command_interceptors"
+require "./after_handle"
+require "./repeating_timer"
+require "./clipboard"
 
 module Teek
   # Raised by App#command when more than one registered CommandInterceptor
@@ -52,41 +56,81 @@ module Teek
     ttk::treeview
   ]
 
+  # App#widgets' value shape - ruby-teek uses a bare {class:, parent:}
+  # Hash; a real struct here instead since `class` is a reserved word in
+  # Crystal (can't be a NamedTuple/method key), so the field is
+  # class_name. Accessed as widgets[path].class_name, not widgets[path][:class].
+  record WidgetInfo, class_name : String, parent : String
+
   # Ruby interface to Tcl/Tk (mirrors ruby-teek's lib/teek.rb). App wraps
   # a Teek::Interp - the low-level bridge - with the ergonomic API real
   # applications use: creating widgets, evaluating Tcl code, running the
   # event loop.
   class App
     getter interp : Interp
+    getter widgets : Hash(String, WidgetInfo)
+
+    # @api private - set by RepeatingTimer when a tick's on_error: :raise
+    # strategy fires, so the error surfaces from the next #update call
+    # instead of going through teek_crystal_callback_dispatch's own
+    # rescue (which would just report it as a generic Tcl error).
+    setter _pending_exception : Exception?
+
+    # Symbol shorthands for #bind's substitution codes - Tk's own %-codes
+    # can always be passed directly instead (e.g. "%K") for anything not
+    # listed here. Mirrors ruby-teek's App::BIND_SUBS (lib/teek.rb).
+    BIND_SUBS = {
+      :x => "%x", :y => "%y",            # window coordinates
+      :root_x => "%X", :root_y => "%Y",  # screen coordinates
+      :widget => "%W",                   # widget path
+      :keysym => "%K", :keycode => "%k", # key events
+      :char => "%A",                     # character (key events)
+      :width => "%w", :height => "%h",   # Configure events
+      :button => "%b",                   # mouse button number
+      :mouse_wheel => "%D",              # mousewheel delta
+      :type => "%T",                     # event type
+      :data => "%d",                     # virtual event data (Tk 8.6+)
+    } of Symbol => String
 
     # Bootstraps a new App, running *block* with self rebound to the new
     # instance (mirrors ruby-teek's App.new { ... } via instance_eval, see
     # epic notes: 'with instance yield' only works spliced in here, never
     # inside #initialize itself - confirmed by direct test).
-    def self.new(title : String? = nil, &)
+    def self.new(title : String? = nil, track_widgets : Bool = true, &)
       instance = allocate
-      instance.initialize(title)
+      instance.initialize(title, track_widgets)
       with instance yield
       instance
     end
 
-    def self.new(title : String? = nil)
+    def self.new(title : String? = nil, track_widgets : Bool = true)
       instance = allocate
-      instance.initialize(title)
+      instance.initialize(title, track_widgets)
       instance
     end
 
-    def initialize(title : String? = nil)
+    # track_widgets: whether to populate #widgets as widgets are created
+    # (via a Tcl execution trace on every WIDGET_COMMANDS entry) - see
+    # #setup_widget_tracking. Callback cleanup on widget destruction (see
+    # #setup_destroy_cleanup) happens either way; ruby-teek's debug-mode
+    # forcing of track_widgets on, and its Debugger integration, are out
+    # of scope for this port (see project notes on Debugger).
+    def initialize(title : String? = nil, track_widgets : Bool = true)
       @interp = Interp.new
       @installed_tcl_helpers = {} of Symbol => Bool
       @widget_types_by_path = {} of String => String
       @widget_counters = Hash(String, Int32).new(0)
+      @widgets = {} of String => WidgetInfo
+      @track_widgets = track_widgets
+      @_pending_exception = nil
       # Assigned last, deliberately: passing self to another object's
       # constructor before every ivar is assigned permanently marks any
       # not-yet-assigned ivar as nilable (Crystal can't guarantee nothing
       # observed it as nil during the escape) - so this must come after
       # every other ivar above, not before.
       @callback_registry = CallbackRegistry(App).new(self)
+      setup_widget_tracking if track_widgets
+      setup_destroy_cleanup
       hide
       set_window_title(title) if title
     end
@@ -104,6 +148,22 @@ module Teek
 
     def tcl_invoke(args : Enumerable(String)) : String
       @interp.tcl_invoke(args)
+    end
+
+    # Set a Tcl variable. Useful for widget textvariable and variable
+    # options. Goes through Tcl_SetVar directly (no re-parsing), so the
+    # value never needs escaping - braces, backslashes, $, [, whatever,
+    # all safe. name accepts array-element and namespaced forms.
+    def set_variable(name, value) : String
+      @interp.tcl_set_var(name.to_s, value.to_s)
+    end
+
+    # Get a Tcl variable's value. name accepts array-element and
+    # namespaced forms.
+    def get_variable(name) : String
+      value = @interp.tcl_get_var(name.to_s)
+      return value if value
+      raise TclError.new("can't read \"#{name}\": no such variable")
     end
 
     # Register a Crystal callable as a Tcl callback. The block's second
@@ -133,6 +193,34 @@ module Teek
       @interp.unregister_callback(id)
     end
 
+    # Bind a Tk event on a widget, with optional substitutions forwarded
+    # as the block's Array(String) argument, in order requested. subs can
+    # be Symbols (mapped via BIND_SUBS) or raw Tcl %-codes passed through
+    # as-is. widget accepts a Widget, a path String, or a class tag (e.g.
+    # "Entry").
+    #
+    # @example Mouse click with window coordinates
+    #   app.bind(".c", "Button-1", :x, :y) { |values, _signal| puts values.join(",") }
+    # @example No substitutions
+    #   app.bind(".btn", "Enter") { |_values, _signal| highlight }
+    # @example Raw Tcl expression (for codes not in BIND_SUBS)
+    #   app.bind(".c", "Button-1", "%T") { |values, _signal| ... }
+    def bind(widget, event : String, *subs, &block : Array(String), CallbackSignal -> Nil) : String
+      event_str = event.starts_with?('<') ? event : "<#{event}>"
+      cb = register_callback(&block)
+      callback_registry.reconcile({:bind, widget.to_s}) { |before| before.merge({event_str => cb}) }
+      tcl_subs = subs.map { |sub| sub.is_a?(Symbol) ? BIND_SUBS[sub] : sub.to_s }
+      sub_str = tcl_subs.empty? ? "" : " " + tcl_subs.join(" ")
+      tcl_eval("bind #{widget} #{event_str} {crystal_callback #{cb}#{sub_str}}")
+    end
+
+    # Remove an event binding previously set with #bind.
+    def unbind(widget, event : String) : Nil
+      event_str = event.starts_with?('<') ? event : "<#{event}>"
+      callback_registry.reconcile({:bind, widget.to_s}) { |before| before.reject { |key, _| key == event_str } }
+      tcl_eval("bind #{widget} #{event_str} {}")
+    end
+
     # Evaluate *script* once per App instance under *name*, skipping it on
     # later calls. Meant for widget-behavior code that needs to define a
     # Tcl-side helper proc without re-sending and re-parsing that
@@ -141,6 +229,65 @@ module Teek
       return if @installed_tcl_helpers[name]?
       tcl_eval(yield)
       @installed_tcl_helpers[name] = true
+    end
+
+    # Schedule a one-shot timer. Calls the block after ms milliseconds.
+    # on_error: :raise (default) - exception propagates to Tcl's
+    # background error handler; a Proc(Exception, Nil) - called with the
+    # exception, error is swallowed; nil - error is silently swallowed.
+    # Returns an AfterHandle - pass to #after_cancel to cancel.
+    def after(ms : Int32, on_error : (Symbol | Proc(Exception, Nil))? = :raise, &block : -> Nil) : AfterHandle
+      cb_id = ""
+      cb_id = register_callback do |_args, _signal|
+        begin
+          block.call
+        rescue ex
+          case handler = on_error
+          when Proc(Exception, Nil)
+            handler.call(ex)
+          when :raise
+            raise ex
+          end
+        ensure
+          unregister_callback(cb_id)
+        end
+      end
+      tcl_id = tcl_eval("after #{ms.to_i} {crystal_callback #{cb_id}}")
+      AfterHandle.new(tcl_id, cb_id)
+    end
+
+    # Schedule a block to run once when the event loop is idle. Returns
+    # an AfterHandle - pass to #after_cancel to cancel.
+    def after_idle(&block : -> Nil) : AfterHandle
+      cb_id = ""
+      cb_id = register_callback do |_args, _signal|
+        block.call
+        unregister_callback(cb_id)
+      end
+      tcl_id = tcl_eval("after idle {crystal_callback #{cb_id}}")
+      AfterHandle.new(tcl_id, cb_id)
+    end
+
+    # Schedule a repeating timer. Calls the block every ms milliseconds
+    # until cancelled. The block runs on the main thread in the event
+    # loop, so it must be fast (don't block the UI). Returns a
+    # RepeatingTimer - call #cancel on it later.
+    #
+    # @example Basic polling loop
+    #   timer = app.every(50) { update_display }
+    #   timer.cancel  # stop later
+    def every(ms : Int32, on_error : (Symbol | Proc(Exception, Nil))? = :raise, &block : -> Nil) : RepeatingTimer
+      RepeatingTimer.new(self, ms, on_error, &block)
+    end
+
+    # Cancel a pending #after or #after_idle timer.
+    def after_cancel(after_id : AfterHandle) : AfterHandle
+      tcl_eval("after cancel #{after_id.tcl_id}")
+      if cb_id = after_id.cb_id
+        unregister_callback(cb_id)
+        after_id.cb_id = nil
+      end
+      after_id
     end
 
     # Destroy a widget and all its children. widget accepts a Widget, a
@@ -198,9 +345,16 @@ module Teek
       @interp.mainloop
     end
 
-    # Process all pending events and idle callbacks, then return.
+    # Process all pending events and idle callbacks, then return. Raises
+    # an exception a RepeatingTimer's on_error: :raise tick handling
+    # stashed via #_pending_exception= (see there for why it can't just
+    # raise directly from the tick).
     def update : Nil
       tcl_eval("update")
+      if ex = @_pending_exception
+        @_pending_exception = nil
+        raise ex
+      end
     end
 
     # Process only pending idle callbacks (e.g. geometry redraws), then return.
@@ -248,6 +402,14 @@ module Teek
       @winfo ||= Winfo.new(self)
     end
 
+    # Typed wrapper around Tk's `clipboard` command family - see
+    # Clipboard. Lazily constructed on first access, same reasoning as #winfo.
+    @clipboard : Clipboard?
+
+    def clipboard : Clipboard
+      @clipboard ||= Clipboard.new(self)
+    end
+
     # Build and evaluate a Tcl command from Crystal values. Positional args
     # are converted: Symbols pass bare, Procs become callbacks (bind-shaped
     # - see #callback), everything else is brace-quoted via #tcl_arg_value.
@@ -259,8 +421,11 @@ module Teek
     # WIDGET_COMMANDS name as cmd, the new path as the first positional
     # arg).
     #
-    # No CommandInterceptors lookup yet (a later task) - always falls
-    # through to #raw_command's generic handling.
+    # Consults CommandInterceptors.for_type(type) for the widget type
+    # recorded at cmd's path (see #record_widget_type) before falling
+    # through to #raw_command's generic handling. Raises
+    # AmbiguousCommandError if more than one registered interceptor claims
+    # the same call.
     # @example
     #   app.command(:pack, ".btn", side: :left, padx: 10)
     #   # evaluates: pack .btn -side left -padx {10}
@@ -269,8 +434,27 @@ module Teek
       kwarg_hash = to_tcl_kwarg_hash(kwargs)
 
       record_widget_type(cmd, arg_list)
-      processed = track_widget_option_callbacks(cmd, arg_list, kwarg_hash)
-      raw_command_argv(cmd, arg_list, processed)
+
+      type = @widget_types_by_path[cmd.to_s]?
+      entries = type ? CommandInterceptors.for_type(type) : [] of CommandInterceptors::Entry
+      matches = [] of {String, String}
+      entries.each do |entry|
+        result = entry.block.call(self, cmd.to_s, arg_list, kwarg_hash)
+        matches << {entry.label, result} if result
+      end
+
+      case matches.size
+      when 0
+        processed = track_widget_option_callbacks(cmd, arg_list, kwarg_hash)
+        raw_command_argv(cmd, arg_list, processed)
+      when 1
+        matches.first[1]
+      else
+        labels = matches.map { |label, _| label }.join(", ")
+        raise AmbiguousCommandError.new(
+          "#{matches.size} command interceptors (#{labels}) matched #{cmd.inspect} #{arg_list.inspect} " \
+          "for widget type #{type.inspect}")
+      end
     end
 
     # The dumb Tcl builder underneath #command - no interceptor lookup, no
@@ -288,15 +472,26 @@ module Teek
       raw_command_argv(cmd, to_tcl_arg_list(args), to_tcl_kwarg_hash(kwargs))
     end
 
+    # Same as the splat overload above, for callers that already have a
+    # built Array(TclArgValue)/Hash(String, TclArgValue) in hand - a
+    # CommandInterceptors block, for instance, which receives exactly this
+    # shape and can't re-splat a runtime Array into another method's own
+    # *args (verified directly, same reason Teek.make_list needed its own
+    # Enumerable overload: "argument to splat must be a tuple"). Mirrors
+    # ruby-teek's raw_command being directly callable from within an
+    # interceptor.
+    def raw_command(cmd, args : Array(TclArgValue), kwargs : Hash(String, TclArgValue)) : String
+      raw_command_argv(cmd, args, kwargs)
+    end
+
     # Create a Tk widget and return a Widget wrapper.
     #
     # Auto-generates a unique path if none is given, derived from the
     # widget type and a monotonic counter. parent accepts a Widget, a
-    # path String, or nil.
-    #
-    # ruby-teek's idempotent: option (skip creation if a widget already
-    # exists at path, used by #menu) is deferred - #menu itself is out of
-    # scope here too.
+    # path String, or nil. idempotent: skip the creation command if a
+    # widget already exists at path (see #menu) - for widgets meant to be
+    # fetched by a stable, caller-chosen path and reused across many
+    # calls, rather than freshly created each time.
     #
     # @example Auto-named
     #   btn = app.create_widget("ttk::button", text: "Click")
@@ -305,11 +500,28 @@ module Teek
     #   frm = app.create_widget("ttk::frame")
     #   btn = app.create_widget("ttk::button", parent: frm, text: "Click")
     #   # btn.path => ".ttkfrm1.ttkbtn1"
-    def create_widget(type, path : String? = nil, parent = nil, **kwargs) : Widget
+    def create_widget(type, path : String? = nil, parent = nil, idempotent : Bool = false, **kwargs) : Widget
       type_s = type.to_s
       resolved_path = path || next_widget_path(type_s, parent)
-      command(type_s, resolved_path, **kwargs)
+      if idempotent && winfo.exists?(resolved_path)
+        # Still record the type even though creation itself is skipped - a
+        # path that already existed (e.g. built with a raw tcl_eval) is
+        # otherwise never seen by #command, so no interceptor could ever
+        # engage for it.
+        record_widget_type(type_s, [resolved_path] of TclArgValue)
+      else
+        command(type_s, resolved_path, **kwargs)
+      end
       Widget.new(self, resolved_path)
+    end
+
+    # Wrap a Tk menu at the given path, creating it (tearoff disabled) if
+    # it doesn't exist yet. Safe to call repeatedly with the same path -
+    # it's a flyweight, not a handle you need to hold onto: call this
+    # again any time you're about to rebuild the menu (e.g. on every
+    # right-click).
+    def menu(path, **kwargs) : Widget
+      create_widget(:menu, path.to_s, **kwargs, idempotent: true, tearoff: 0)
     end
 
     # Resets #create_widget's auto-naming counters back to zero, without
@@ -400,6 +612,59 @@ module Teek
       path = args[0]?
       return unless path.is_a?(String)
       @widget_types_by_path[path] = cmd.to_s
+    end
+
+    # Populates #widgets as widgets are created, via a Tcl execution trace
+    # on every WIDGET_COMMANDS command - fires regardless of how the
+    # widget was created (a raw #tcl_eval, not just #command/#create_widget),
+    # unlike #record_widget_type's WIDGET_COMMANDS-name-plus-first-arg
+    # heuristic. Mirrors ruby-teek's setup_widget_tracking (lib/teek.rb).
+    private def setup_widget_tracking : Nil
+      create_cb_id = register_callback do |args, _signal|
+        path = args[0]
+        cls = args[1]
+        next if path.starts_with?(".teek_debug")
+        @widgets[path] = WidgetInfo.new(class_name: cls, parent: parent_path(path))
+      end
+
+      tcl_eval(<<-TCL)
+        proc ::teek_track_create {cmd_string code result op} {
+          set path [lindex $cmd_string 1]
+          if {$code == 0 && [winfo exists $path]} {
+            set cls [winfo class $path]
+            crystal_callback #{create_cb_id} $path $cls
+          }
+        }
+        TCL
+
+      WIDGET_COMMANDS.each do |cmd|
+        tcl_eval("catch {trace add execution #{cmd} leave ::teek_track_create}")
+      end
+    end
+
+    # Installed unconditionally (unlike widget-creation tracking, which is
+    # opt-out via track_widgets: false) so that bind-callback cleanup
+    # always runs. A single `bind all <Destroy>` script is used because
+    # Tcl's bind command replaces rather than appends per tag+event, so
+    # widget-tracking cleanup is folded into the same callback rather than
+    # installed separately. Mirrors ruby-teek's setup_destroy_cleanup
+    # (lib/teek.rb).
+    private def setup_destroy_cleanup : Nil
+      destroy_cb_id = register_callback do |args, _signal|
+        path = args[0]
+        callback_registry.forget_all_for_path(path)
+        next if path.starts_with?(".teek_debug")
+        @widgets.delete(path) if @track_widgets
+      end
+      tcl_eval("bind all <Destroy> {crystal_callback #{destroy_cb_id} %W}")
+    end
+
+    # Tk paths are "."-joined, not "/"-joined, so the parent of ".f.b1" is
+    # ".f" - the last "." before the final path component.
+    private def parent_path(path : String) : String
+      last_dot = path.rindex('.')
+      return "." if last_dot.nil? || last_dot == 0
+      path[0...last_dot]
     end
 
     # #command's fallback for any call: registers any Proc-valued kwarg

@@ -542,3 +542,1138 @@ tk_test "Widget equality is by path" do |app|
   raise "expected btn == Widget.new(app, btn.path)" unless btn == Teek::Widget.new(app, btn.path)
   raise "expected matching hash" unless btn.path.hash == btn.hash
 end
+
+tk_test "should track created widgets" do |app|
+  app.command(:button, ".b_track", text: "hello")
+  app.command(:label, ".l_track", text: "world")
+  app.command(:frame, ".f_track")
+
+  raise "missing .b_track" unless app.widgets[".b_track"]?
+  raise "expected Button, got #{app.widgets[".b_track"].class_name}" unless app.widgets[".b_track"].class_name == "Button"
+  raise "expected Label, got #{app.widgets[".l_track"].class_name}" unless app.widgets[".l_track"].class_name == "Label"
+  raise "expected Frame, got #{app.widgets[".f_track"].class_name}" unless app.widgets[".f_track"].class_name == "Frame"
+
+  app.destroy(".b_track")
+  app.destroy(".l_track")
+  app.destroy(".f_track")
+end
+
+tk_test "should remove destroyed widgets from app.widgets" do |app|
+  app.command(:button, ".b_untrack", text: "hello")
+  raise "missing .b_untrack" unless app.widgets[".b_untrack"]?
+
+  app.destroy(".b_untrack")
+  raise ".b_untrack should be gone" if app.widgets[".b_untrack"]?
+end
+
+# A second App in the same process is safe here (no mainloop/timer
+# reliance on it - just tcl_eval/destroy) - Tk_Init is per-interpreter,
+# not a hard once-per-process limit (verified directly), though the
+# event loop/notifier itself is process-global, so this never runs
+# app2.mainloop or otherwise depends on its own independent event timing.
+tk_test "should not populate app.widgets when track_widgets is disabled" do |_app|
+  app2 = Teek::App.new(track_widgets: false)
+  app2.tcl_eval("button .b_no_track -text hello")
+  raise "expected app2.widgets to stay empty" unless app2.widgets.empty?
+  app2.destroy(".b_no_track")
+end
+
+tk_test "destroying a widget releases its -command callback" do |app|
+  baseline = app.interp.callback_ids.size
+
+  btn = app.create_widget("ttk::button", text: "Go", command: app.callback { })
+  raise "creating should register one callback" unless app.interp.callback_ids.size == baseline + 1
+
+  btn.destroy
+
+  raise "destroy should release the widget's -command callback" unless app.interp.callback_ids.size == baseline
+end
+
+tk_test "reconfiguring -command releases the old callback" do |app|
+  btn = app.create_widget("ttk::button", text: "Go", command: app.callback { })
+  baseline = app.interp.callback_ids.size
+
+  btn.command(:configure, command: app.callback { })
+
+  raise "reconfiguring should replace, not accumulate, the tracked callback" unless app.interp.callback_ids.size == baseline
+end
+
+tk_test "App#bind fires the callback on the event" do |app|
+  fired = false
+
+  app.show
+  app.tcl_eval("entry .e_bind1")
+  app.tcl_eval("pack .e_bind1")
+
+  app.bind(".e_bind1", "Key-a") { fired = true }
+
+  app.tcl_eval("focus -force .e_bind1")
+  app.update
+  app.tcl_eval("event generate .e_bind1 <Key-a>")
+  app.update
+
+  raise "callback did not fire" unless fired
+end
+
+# The block's first argument is always Array(String) (in the requested
+# sub order) rather than individually destructured positional params -
+# ruby-teek's proc.call(*args) works for a block of any arity since Ruby
+# procs adapt automatically; Crystal blocks have a fixed arity, and the
+# number of substitution values is only known at the call site (runtime,
+# for a variable-length *subs), not encodable as a fixed block type.
+tk_test "App#bind forwards a single substitution value" do |app|
+  received_keysym = nil
+
+  app.show
+  app.tcl_eval("entry .e_bind2")
+  app.tcl_eval("pack .e_bind2")
+
+  app.bind(".e_bind2", "KeyPress", :keysym) { |values, _signal| received_keysym = values[0] }
+
+  app.tcl_eval("focus -force .e_bind2")
+  app.update
+  app.tcl_eval("event generate .e_bind2 <KeyPress-a> -keysym a")
+  app.update
+
+  raise "expected 'a', got #{received_keysym.inspect}" unless received_keysym == "a"
+end
+
+tk_test "App#bind forwards multiple substitution values in order" do |app|
+  got_x = nil
+  got_y = nil
+
+  app.show
+  app.tcl_eval("frame .f_bind1 -width 100 -height 100")
+  app.tcl_eval("pack .f_bind1")
+  app.update
+
+  app.bind(".f_bind1", "Button-1", :x, :y) { |values, _signal| got_x = values[0]; got_y = values[1] }
+
+  app.tcl_eval("event generate .f_bind1 <Button-1> -x 42 -y 17")
+  app.update
+
+  raise "expected x=42, got #{got_x.inspect}" unless got_x == "42"
+  raise "expected y=17, got #{got_y.inspect}" unless got_y == "17"
+end
+
+tk_test "App#bind with a raw %-code forwards the substitution" do |app|
+  got_widget = nil
+
+  app.show
+  app.tcl_eval("entry .e_bind3")
+  app.tcl_eval("pack .e_bind3")
+
+  app.bind(".e_bind3", "FocusIn", "%W") { |values, _signal| got_widget = values[0] }
+
+  app.tcl_eval("focus -force .e_bind3")
+  app.update
+
+  raise "expected .e_bind3, got #{got_widget.inspect}" unless got_widget == ".e_bind3"
+end
+
+tk_test "App#bind does not double-wrap <> in the event string" do |app|
+  fired = false
+
+  app.show
+  app.tcl_eval("entry .e_bind4")
+  app.tcl_eval("pack .e_bind4")
+
+  app.bind(".e_bind4", "<Key-b>") { fired = true }
+
+  app.tcl_eval("focus -force .e_bind4")
+  app.update
+  app.tcl_eval("event generate .e_bind4 <Key-b>")
+  app.update
+
+  raise "callback did not fire with a pre-bracketed event string" unless fired
+end
+
+tk_test "App#bind on a class tag works" do |app|
+  fired = false
+
+  app.show
+  app.tcl_eval("entry .e_bind5")
+  app.tcl_eval("pack .e_bind5")
+
+  app.bind("Entry", "Key-z") { fired = true }
+
+  app.tcl_eval("focus -force .e_bind5")
+  app.update
+  app.tcl_eval("event generate .e_bind5 <Key-z>")
+  app.update
+
+  app.unbind("Entry", "Key-z")
+
+  raise "class binding did not fire" unless fired
+end
+
+tk_test "command(:bind) folds a %-code into the callback script" do |app|
+  received_keysym = nil
+
+  app.show
+  app.tcl_eval("entry .e_bind6")
+  app.tcl_eval("pack .e_bind6")
+
+  cb = app.callback { |values, _signal| received_keysym = values[0] }
+  app.command(:bind, ".e_bind6", "<KeyPress>", cb, "%K")
+
+  app.tcl_eval("focus -force .e_bind6")
+  app.update
+  app.tcl_eval("event generate .e_bind6 <KeyPress-a> -keysym a")
+  app.update
+
+  raise "expected 'a', got #{received_keysym.inspect}" unless received_keysym == "a"
+end
+
+tk_test "command(:bind) folds multiple %-codes into the callback script" do |app|
+  got_x = nil
+  got_y = nil
+
+  app.show
+  app.tcl_eval("frame .f_bind2 -width 100 -height 100")
+  app.tcl_eval("pack .f_bind2")
+  app.update
+
+  cb = app.callback { |values, _signal| got_x = values[0]; got_y = values[1] }
+  app.command(:bind, ".f_bind2", "<Button-1>", cb, "%x", "%y")
+
+  app.tcl_eval("event generate .f_bind2 <Button-1> -x 42 -y 17")
+  app.update
+
+  raise "expected x=42, got #{got_x.inspect}" unless got_x == "42"
+  raise "expected y=17, got #{got_y.inspect}" unless got_y == "17"
+end
+
+tk_test "App#unbind removes a binding" do |app|
+  count = 0
+
+  app.show
+  app.tcl_eval("entry .e_bind7")
+  app.tcl_eval("pack .e_bind7")
+
+  app.bind(".e_bind7", "Key-q") { count += 1 }
+
+  app.tcl_eval("focus -force .e_bind7")
+  app.update
+  app.tcl_eval("event generate .e_bind7 <Key-q>")
+  app.update
+  raise "binding didn't fire initially" unless count == 1
+
+  app.unbind(".e_bind7", "Key-q")
+
+  app.tcl_eval("event generate .e_bind7 <Key-q>")
+  app.update
+  raise "binding still fired after unbind" unless count == 1
+end
+
+tk_test "rebinding the same widget+event does not grow the callback count" do |app|
+  app.tcl_eval("entry .e_bind8")
+
+  app.bind(".e_bind8", "Key-a") { }
+  baseline = app.interp.callback_ids.size
+
+  5.times { app.bind(".e_bind8", "Key-a") { } }
+
+  raise "rebinding should replace, not accumulate, the registered callback" unless app.interp.callback_ids.size == baseline
+end
+
+tk_test "App#unbind releases the registered callback" do |app|
+  app.tcl_eval("entry .e_bind9")
+
+  baseline = app.interp.callback_ids.size
+  app.bind(".e_bind9", "Key-a") { }
+  raise "bind should register one callback" unless app.interp.callback_ids.size == baseline + 1
+
+  app.unbind(".e_bind9", "Key-a")
+
+  raise "unbind should release the callback" unless app.interp.callback_ids.size == baseline
+end
+
+tk_test "destroying a widget releases its bind callbacks" do |app|
+  app.tcl_eval("frame .f_bind3")
+
+  baseline = app.interp.callback_ids.size
+  app.bind(".f_bind3", "Button-1") { }
+  app.bind(".f_bind3", "Key-a") { }
+  raise "bind should register two callbacks" unless app.interp.callback_ids.size == baseline + 2
+
+  app.destroy(".f_bind3")
+
+  raise "destroy should release all bind callbacks owned by the widget" unless app.interp.callback_ids.size == baseline
+end
+
+tk_test "destroying a widget releases bind callbacks on its descendants" do |app|
+  app.tcl_eval("frame .f_bind4")
+  app.tcl_eval("button .f_bind4.b -text hi")
+
+  baseline = app.interp.callback_ids.size
+  app.bind(".f_bind4", "Button-1") { }
+  app.bind(".f_bind4.b", "Key-a") { }
+  raise "bind should register two callbacks" unless app.interp.callback_ids.size == baseline + 2
+
+  app.destroy(".f_bind4")
+
+  raise "destroy should recursively release descendant bind callbacks" unless app.interp.callback_ids.size == baseline
+end
+
+tk_test "bind cleanup works even with track_widgets disabled" do |_app|
+  app2 = Teek::App.new(track_widgets: false)
+  app2.tcl_eval("frame .f_bind5")
+
+  baseline = app2.interp.callback_ids.size
+  app2.bind(".f_bind5", "Button-1") { }
+  raise "bind should register one callback" unless app2.interp.callback_ids.size == baseline + 1
+
+  app2.destroy(".f_bind5")
+
+  raise "destroy should release bind callbacks regardless of track_widgets" unless app2.interp.callback_ids.size == baseline
+end
+
+tk_test "menu and toplevel widgets release bind callbacks on destroy" do |app|
+  app.tcl_eval("menu .m_bind1")
+  app.tcl_eval("toplevel .t_bind1")
+
+  baseline = app.interp.callback_ids.size
+  app.bind(".m_bind1", "<<MenuSelect>>") { }
+  app.bind(".t_bind1", "Key-a") { }
+  raise "bind should register two callbacks" unless app.interp.callback_ids.size == baseline + 2
+
+  app.destroy(".m_bind1")
+  app.destroy(".t_bind1")
+
+  raise "menu/toplevel destroy should release bind callbacks" unless app.interp.callback_ids.size == baseline
+end
+
+# CommandInterceptors is a class-level (whole-process), never-unregistered
+# registry, and these tests run in a shared persistent worker alongside
+# every other tk_test case in this file - so each interceptor is
+# registered under "scale" (a widget type no other test in this file
+# touches) and gated on a marker subcommand unique to its own test, so it
+# stays permanently registered but never actually matches any other
+# test's calls, including each other's.
+tk_test "CommandInterceptors: a single matching interceptor overrides raw_command" do |app|
+  Teek::CommandInterceptors.register("scale", "ctk-test-single") do |_app, _path, args, _kwargs|
+    args.first? == "ctk_intercept_marker_single" ? "intercepted-result" : nil
+  end
+
+  path = app.create_widget("scale")
+  result = app.command(path, "ctk_intercept_marker_single")
+  raise "expected the interceptor's result, got #{result.inspect}" unless result == "intercepted-result"
+end
+
+tk_test "CommandInterceptors: a non-matching interceptor falls through to raw_command" do |app|
+  path = app.create_widget("scale", from: 0, to: 100)
+  result = app.command(path, :cget, "-from")
+  raise "expected the real Tcl result, got #{result.inspect}" unless result == "0.0"
+end
+
+tk_test "CommandInterceptors: two matching interceptors raise AmbiguousCommandError" do |app|
+  Teek::CommandInterceptors.register("scale", "ctk-test-ambiguous-a") do |_app, _path, args, _kwargs|
+    args.first? == "ctk_intercept_marker_ambiguous" ? "result-a" : nil
+  end
+  Teek::CommandInterceptors.register("scale", "ctk-test-ambiguous-b") do |_app, _path, args, _kwargs|
+    args.first? == "ctk_intercept_marker_ambiguous" ? "result-b" : nil
+  end
+
+  path = app.create_widget("scale")
+  begin
+    app.command(path, "ctk_intercept_marker_ambiguous")
+    raise "expected AmbiguousCommandError, got no exception"
+  rescue ex : Teek::AmbiguousCommandError
+    message = ex.message || ""
+    unless message.includes?("ctk-test-ambiguous-a") && message.includes?("ctk-test-ambiguous-b")
+      raise "expected error message to mention both labels, got #{message.inspect}"
+    end
+  end
+end
+
+# Menu-entry callback tracking through plain app.command() calls - there's
+# no separate wrapper method to know about (app.command recognizes
+# add/insert/entryconfigure/delete on a menu path and tracks their
+# command: callbacks automatically). Every raw `menu` creation here passes
+# tearoff: 0 - -tearoff defaults to on for X11/Windows (off on Aqua),
+# which inserts a real entry at index 0 for the tear-off handle, shifting
+# every other index down by one; these tests address entries by index.
+tk_test "a Proc added via raw app.command fires on invoke" do |app|
+  fired = false
+  app.command(:menu, ".m1", tearoff: 0)
+
+  app.command(".m1", :add, :command, label: "Go", command: app.callback { fired = true })
+  app.tcl_eval(".m1 invoke 0")
+
+  raise "menu entry command did not fire" unless fired
+end
+
+tk_test "rebuilding a menu via raw app.command does not grow the callback count" do |app|
+  app.command(:menu, ".m2", tearoff: 0)
+
+  app.command(".m2", :add, :command, label: "One", command: app.callback { })
+  app.command(".m2", :add, :command, label: "Two", command: app.callback { })
+  app.command(".m2", :add, :separator)
+  baseline = app.interp.callback_ids.size
+
+  5.times do
+    app.command(".m2", :delete, 0, :end)
+    app.command(".m2", :add, :command, label: "One", command: app.callback { })
+    app.command(".m2", :add, :command, label: "Two", command: app.callback { })
+    app.command(".m2", :add, :separator)
+  end
+
+  raise "rebuilding the menu repeatedly should not accumulate callbacks" unless app.interp.callback_ids.size == baseline
+end
+
+tk_test "insert/entryconfigure/partial-delete via raw app.command reconciles by live value, not index" do |app|
+  app.command(:menu, ".m3", tearoff: 0)
+
+  before = app.interp.callback_ids
+  app.command(".m3", :add, :command, label: "A", command: app.callback { })
+  id_a = (app.interp.callback_ids - before).first?
+  raise "adding A should register a callback" unless id_a
+
+  before = app.interp.callback_ids
+  app.command(".m3", :add, :command, label: "C", command: app.callback { })
+  id_c = (app.interp.callback_ids - before).first?
+  raise "adding C should register a callback" unless id_c
+
+  # entries: 0=A 1=C. Insert "B" in the middle -> 0=A 1=B 2=C.
+  before = app.interp.callback_ids
+  app.command(".m3", :insert, 1, :command, label: "B", command: app.callback { })
+  id_b = (app.interp.callback_ids - before).first?
+  raise "inserting B should register a callback" unless id_b
+
+  # Replace C's (index 2) command in place.
+  before = app.interp.callback_ids
+  app.command(".m3", :entryconfigure, 2, command: app.callback { })
+  id_c_new = (app.interp.callback_ids - before).first?
+  raise "entryconfigure should register a new callback" unless id_c_new
+
+  live_after_entryconfigure = app.interp.callback_ids
+  raise "entryconfigure should release the callback it replaced" if live_after_entryconfigure.includes?(id_c)
+  raise "entryconfigure's new callback should be tracked live" unless live_after_entryconfigure.includes?(id_c_new)
+
+  # Partial delete of A (index 0) only - B and C must survive untouched,
+  # even though Tk renumbers them internally after the delete.
+  app.command(".m3", :delete, 0)
+
+  live = app.interp.callback_ids
+  raise "deleted entry A's callback should be released" if live.includes?(id_a)
+  raise "surviving entry B's callback should remain tracked" unless live.includes?(id_b)
+  raise "surviving entry C's (replaced) callback should remain tracked" unless live.includes?(id_c_new)
+end
+
+tk_test "destroying a menu releases all its tracked callbacks, built via raw app.command" do |app|
+  app.command(:menu, ".m4", tearoff: 0)
+
+  baseline = app.interp.callback_ids.size
+  app.command(".m4", :add, :command, label: "One", command: app.callback { })
+  app.command(".m4", :add, :command, label: "Two", command: app.callback { })
+  raise "add should register two callbacks" unless app.interp.callback_ids.size == baseline + 2
+
+  app.destroy(".m4")
+
+  raise "destroy should release all tracked menu-entry callbacks" unless app.interp.callback_ids.size == baseline
+end
+
+tk_test "clearing a menu then destroying it does not error or double-release, via raw app.command" do |app|
+  app.command(:menu, ".m5", tearoff: 0)
+
+  app.command(".m5", :add, :command, label: "One", command: app.callback { })
+  baseline = app.interp.callback_ids.size
+
+  app.command(".m5", :delete, 0, :end)
+  raise "delete 0 end should release the entry" unless app.interp.callback_ids.size == baseline - 1
+
+  app.destroy(".m5") # must not raise, must not go negative / double-release
+
+  raise "destroying an already-cleared menu should not change callback count" unless app.interp.callback_ids.size == baseline - 1
+end
+
+tk_test "a menu rebuilt at a reused path does not inherit stale tracking, via raw app.command" do |app|
+  app.command(:menu, ".m7", tearoff: 0)
+  app.command(".m7", :add, :command, label: "Old", command: app.callback { })
+  baseline_before_destroy = app.interp.callback_ids.size
+
+  app.destroy(".m7")
+  raise "expected release on destroy" unless app.interp.callback_ids.size == baseline_before_destroy - 1
+
+  app.command(:menu, ".m7", tearoff: 0)
+  before = app.interp.callback_ids.size
+  app.command(".m7", :add, :command, label: "New", command: app.callback { })
+
+  raise "the new menu at the reused path should track only its own entry" unless app.interp.callback_ids.size == before + 1
+
+  app.destroy(".m7")
+  raise "expected release on destroy" unless app.interp.callback_ids.size == before
+end
+
+tk_test "signal.break! in a menu entry's command does not raise" do |app|
+  fired = false
+  app.command(:menu, ".m6", tearoff: 0)
+
+  break_callback = app.callback do |_args, signal|
+    fired = true
+    signal.break!
+  end
+  app.command(".m6", :add, :command, label: "Go", command: break_callback)
+  app.tcl_eval(".m6 invoke 0")
+
+  raise "menu entry command did not fire" unless fired
+end
+
+tk_test "App#menu survives many mixed mutations without crashing or leaking" do |app|
+  baseline = app.interp.callback_ids.size
+
+  menu = app.menu(".stress")
+  fired = 0
+
+  300.times do |i|
+    empty = app.tcl_eval("#{menu} index end") == "none"
+    case i % 7
+    when 0
+      menu.command(:delete, 0, :end) unless empty
+    when 1
+      menu.command(:add, :command, label: "cmd#{i}", command: app.callback { fired += 1 })
+    when 2
+      menu.command(:add, :checkbutton, label: "chk#{i}", command: app.callback { fired += 1 })
+    when 3
+      menu.command(:add, :radiobutton, label: "rad#{i}", command: app.callback { fired += 1 })
+    when 4
+      menu.command(:add, :separator)
+      menu.command(:add, :command, label: "post_sep#{i}", command: app.callback { fired += 1 })
+      menu.command(:insert, 0, :command, label: "inserted#{i}", command: app.callback { fired += 1 }) unless empty
+    when 5
+      menu.command(:entryconfigure, 0, command: app.callback { fired += 1 }) unless empty
+    when 6
+      menu.command(:delete, 0) unless empty
+    end
+  end
+
+  # Invoke whatever survived, to make sure live entries still work.
+  last = app.tcl_eval(".stress index end")
+  unless last == "none"
+    (0..last.to_i).each do |idx|
+      begin
+        type = app.tcl_eval(".stress type #{idx}")
+        next if type == "separator"
+        app.tcl_eval(".stress invoke #{idx}")
+      rescue
+      end
+    end
+  end
+
+  app.destroy(".stress")
+
+  raise "callback count should return to baseline after destroy, no leaked ids" unless app.interp.callback_ids.size == baseline
+  raise "fired should never go negative" if fired < 0
+end
+
+# Text-tag callback tracking through plain app.command() calls - there's
+# no separate wrapper method to know about. A tag name is a stable hash
+# key Tk never renumbers, so tracking reconciles against Tk's live tag
+# state (tag names + tag bind readback) after every mutating call - a
+# full scan, the same style menu tracking uses, actually simpler than
+# menu since there's no renumbering risk.
+tk_test "a tag binding added via raw app.command fires when the insert cursor is within the tagged range" do |app|
+  app.show
+  app.command(:text, ".txt1")
+  app.command(:pack, ".txt1")
+  app.command(".txt1", :insert, "1.0", "hello world")
+  app.command(".txt1", "tag", "add", "greeting", "1.0", "1.5")
+
+  fired = false
+  app.command(".txt1", "tag", "bind", "greeting", "<Key-a>", app.callback { fired = true })
+
+  app.command(".txt1", "mark", "set", "insert", "1.2")
+  app.tcl_eval("focus -force .txt1")
+  app.update
+  app.tcl_eval("event generate .txt1 <Key-a>")
+  app.update
+
+  raise "tag binding did not fire" unless fired
+end
+
+tk_test "rebinding the same tag+event via raw app.command does not grow the callback count" do |app|
+  app.command(:text, ".txt2")
+
+  app.command(".txt2", "tag", "bind", "mytag", "<Button-1>", app.callback { })
+  baseline = app.interp.callback_ids.size
+
+  5.times { app.command(".txt2", "tag", "bind", "mytag", "<Button-1>", app.callback { }) }
+
+  raise "rebinding should replace, not accumulate, the registered callback" unless app.interp.callback_ids.size == baseline
+end
+
+tk_test "clearing a tag binding via raw app.command releases the registered callback" do |app|
+  app.command(:text, ".txt3")
+  baseline = app.interp.callback_ids.size
+
+  app.command(".txt3", "tag", "bind", "mytag", "<Button-1>", app.callback { })
+  raise "tag bind should register one callback" unless app.interp.callback_ids.size == baseline + 1
+
+  app.command(".txt3", "tag", "bind", "mytag", "<Button-1>", "")
+
+  raise "clearing the binding should release the callback" unless app.interp.callback_ids.size == baseline
+end
+
+tk_test "deleting a tag via raw app.command releases all of its bound callbacks" do |app|
+  app.command(:text, ".txt4")
+  baseline = app.interp.callback_ids.size
+
+  app.command(".txt4", "tag", "bind", "mytag", "<Button-1>", app.callback { })
+  app.command(".txt4", "tag", "bind", "mytag", "<Key-a>", app.callback { })
+  raise "tag bind should register two callbacks" unless app.interp.callback_ids.size == baseline + 2
+
+  app.command(".txt4", "tag", "delete", "mytag")
+
+  raise "tag delete should release all of the deleted tag's callbacks" unless app.interp.callback_ids.size == baseline
+end
+
+tk_test "deleting one tag via raw app.command does not release another tag's callback" do |app|
+  app.command(:text, ".txt5")
+  baseline = app.interp.callback_ids.size
+
+  app.command(".txt5", "tag", "bind", "tag_a", "<Button-1>", app.callback { })
+  app.command(".txt5", "tag", "bind", "tag_b", "<Button-1>", app.callback { })
+  raise "expected two callbacks" unless app.interp.callback_ids.size == baseline + 2
+
+  app.command(".txt5", "tag", "delete", "tag_a")
+
+  raise "only tag_a's callback should be released" unless app.interp.callback_ids.size == baseline + 1
+end
+
+tk_test "destroying a text widget releases all tag callbacks registered via raw app.command" do |app|
+  app.command(:text, ".txt6")
+  baseline = app.interp.callback_ids.size
+
+  app.command(".txt6", "tag", "bind", "mytag", "<Button-1>", app.callback { })
+  app.command(".txt6", "tag", "bind", "othertag", "<Key-a>", app.callback { })
+  raise "expected two callbacks" unless app.interp.callback_ids.size == baseline + 2
+
+  app.destroy(".txt6")
+
+  raise "destroy should release all tracked tag callbacks" unless app.interp.callback_ids.size == baseline
+end
+
+# Canvas item-binding callback tracking through plain app.command() calls.
+# Canvas has no "list every live binding" enumeration command (unlike
+# menu's index end or text's tag names), so tracking can't do a full-scan
+# reconcile - it re-queries only the (tagOrId, sequence) keys it already
+# knows about via `canvas bind tagOrId sequence` after every bind/delete.
+tk_test "a Proc bound to an item id via raw app.command still actually fires" do |app|
+  app.command(:canvas, ".cvs1")
+  item = app.command(".cvs1", :create, :rectangle, 0, 0, 50, 50)
+
+  fired = false
+  app.command(".cvs1", :bind, item, "<Button-1>", app.callback { fired = true })
+
+  # Tk has no "invoke this item binding" command - read back the embedded
+  # script and eval it directly, mirroring what Tk itself runs when the
+  # item is actually clicked.
+  script = app.tcl_eval(".cvs1 bind #{item} <Button-1>")
+  app.tcl_eval(script)
+
+  raise "item binding did not fire" unless fired
+end
+
+tk_test "rebinding the same item+event via raw app.command does not grow the callback count" do |app|
+  app.command(:canvas, ".cvs2")
+  item = app.command(".cvs2", :create, :rectangle, 0, 0, 50, 50)
+
+  app.command(".cvs2", :bind, item, "<Button-1>", app.callback { })
+  baseline = app.interp.callback_ids.size
+
+  5.times { app.command(".cvs2", :bind, item, "<Button-1>", app.callback { }) }
+
+  raise "rebinding should replace, not accumulate, the registered callback" unless app.interp.callback_ids.size == baseline
+end
+
+tk_test "clearing an item binding via raw app.command releases the callback" do |app|
+  app.command(:canvas, ".cvs3")
+  item = app.command(".cvs3", :create, :rectangle, 0, 0, 50, 50)
+  baseline = app.interp.callback_ids.size
+
+  app.command(".cvs3", :bind, item, "<Button-1>", app.callback { })
+  raise "bind should register one callback" unless app.interp.callback_ids.size == baseline + 1
+
+  app.command(".cvs3", :bind, item, "<Button-1>", "")
+
+  raise "clearing the binding should release the callback" unless app.interp.callback_ids.size == baseline
+end
+
+tk_test "deleting a bound item via raw app.command releases its callback" do |app|
+  app.command(:canvas, ".cvs4")
+  item = app.command(".cvs4", :create, :rectangle, 0, 0, 50, 50)
+  baseline = app.interp.callback_ids.size
+
+  app.command(".cvs4", :bind, item, "<Button-1>", app.callback { })
+  raise "expected one callback" unless app.interp.callback_ids.size == baseline + 1
+
+  app.command(".cvs4", :delete, item)
+
+  raise "deleting the bound item should release its tracked callback" unless app.interp.callback_ids.size == baseline
+end
+
+tk_test "deleting an item bound with %-substitution codes still releases its callback" do |app|
+  app.command(:canvas, ".cvs4b")
+  item = app.command(".cvs4b", :create, :rectangle, 0, 0, 50, 50)
+  baseline = app.interp.callback_ids.size
+
+  app.command(".cvs4b", :bind, item, "<B1-Motion>", app.callback { }, "%x", "%y")
+  raise "expected one callback" unless app.interp.callback_ids.size == baseline + 1
+
+  app.command(".cvs4b", :delete, item)
+
+  raise "deleting the bound item should release its tracked callback even with %-substitution args" unless app.interp.callback_ids.size == baseline
+end
+
+tk_test "a tag binding via raw app.command survives deleting the tagged item" do |app|
+  app.command(:canvas, ".cvs5")
+  item = app.command(".cvs5", :create, :rectangle, 0, 0, 50, 50, tags: "mytag")
+  baseline = app.interp.callback_ids.size
+
+  app.command(".cvs5", :bind, "mytag", "<Button-1>", app.callback { })
+  raise "expected one callback" unless app.interp.callback_ids.size == baseline + 1
+
+  app.command(".cvs5", :delete, item)
+
+  raise "deleting the item should not release its tag's still-live binding" unless app.interp.callback_ids.size == baseline + 1
+end
+
+tk_test "an item id binding and a tag binding via raw app.command are tracked independently" do |app|
+  app.command(:canvas, ".cvs6")
+  item1 = app.command(".cvs6", :create, :rectangle, 0, 0, 50, 50)
+  app.command(".cvs6", :create, :rectangle, 60, 0, 110, 50, tags: "mytag")
+  baseline = app.interp.callback_ids.size
+
+  app.command(".cvs6", :bind, item1, "<Button-1>", app.callback { })
+  app.command(".cvs6", :bind, "mytag", "<Button-1>", app.callback { })
+  raise "both the item and the tag binding should register their own callback" unless app.interp.callback_ids.size == baseline + 2
+
+  app.command(".cvs6", :bind, item1, "<Button-1>", app.callback { })
+  raise "replacing item1's binding should not touch the tag's" unless app.interp.callback_ids.size == baseline + 2
+end
+
+tk_test "destroying a canvas releases all its tracked item/tag binding callbacks" do |app|
+  app.command(:canvas, ".cvs7")
+  item = app.command(".cvs7", :create, :rectangle, 0, 0, 50, 50, tags: "mytag")
+  baseline = app.interp.callback_ids.size
+
+  app.command(".cvs7", :bind, item, "<Button-1>", app.callback { })
+  app.command(".cvs7", :bind, "mytag", "<Key-a>", app.callback { })
+  raise "expected two callbacks" unless app.interp.callback_ids.size == baseline + 2
+
+  app.destroy(".cvs7")
+
+  raise "destroy should release all tracked item and tag binding callbacks" unless app.interp.callback_ids.size == baseline
+end
+
+tk_test "set_variable/get_variable round-trip" do |app|
+  app.set_variable("myvar", "hello")
+  raise "expected 'hello'" unless app.get_variable("myvar") == "hello"
+end
+
+tk_test "set_variable overwrites an existing value" do |app|
+  app.set_variable("x", "first")
+  app.set_variable("x", "second")
+  raise "expected 'second'" unless app.get_variable("x") == "second"
+end
+
+tk_test "get_variable on a nonexistent variable raises" do |app|
+  begin
+    app.get_variable("does_not_exist_xyz")
+    raise "expected TclError, got no exception"
+  rescue Teek::TclError
+  end
+end
+
+tk_test "a variable works with widget textvariable" do |app|
+  app.set_variable("lbl_text", "initial")
+  app.command("ttk::label", ".lbl_var", textvariable: :lbl_text)
+
+  raise "expected 'initial'" unless app.tcl_eval(".lbl_var cget -text") == "initial"
+
+  app.set_variable("lbl_text", "updated")
+  raise "expected 'updated'" unless app.tcl_eval(".lbl_var cget -text") == "updated"
+end
+
+tk_test "set_variable returns the value" do |app|
+  raise "expected '42'" unless app.set_variable("rv", "42") == "42"
+end
+
+# set_variable/get_variable route through Interp#tcl_set_var/tcl_get_var
+# (Tcl_SetVar/Tcl_GetVar directly) rather than building a "set name
+# {value}" string and re-parsing it through the Tcl interpreter, so none
+# of these need any escaping on the Crystal side.
+tk_test "a value with an unbalanced closing brace round-trips" do |app|
+  app.set_variable("v_close_brace", "a}b")
+  raise "expected round-trip" unless app.get_variable("v_close_brace") == "a}b"
+end
+
+tk_test "a value with an unbalanced opening brace round-trips" do |app|
+  app.set_variable("v_open_brace", "a{b")
+  raise "expected round-trip" unless app.get_variable("v_open_brace") == "a{b"
+end
+
+tk_test "a value ending with a backslash round-trips" do |app|
+  app.set_variable("v_trailing_bs", "C:\\path\\")
+  raise "expected round-trip" unless app.get_variable("v_trailing_bs") == "C:\\path\\"
+end
+
+tk_test "a value containing a dollar sign is not variable-substituted" do |app|
+  app.set_variable("some_other_var", "SHOULD_NOT_APPEAR")
+  app.set_variable("v_dollar", "$some_other_var")
+  raise "expected literal $some_other_var" unless app.get_variable("v_dollar") == "$some_other_var"
+end
+
+tk_test "a value containing brackets is not command-substituted" do |app|
+  app.set_variable("v_bracket", "[set injection_target_var INJECTED]")
+  raise "expected literal brackets" unless app.get_variable("v_bracket") == "[set injection_target_var INJECTED]"
+  begin
+    app.get_variable("injection_target_var")
+    raise "expected TclError - injection should not have run"
+  rescue Teek::TclError
+  end
+end
+
+tk_test "a value with spaces and embedded newlines round-trips" do |app|
+  value = "line one\n  line two with spaces\nline three"
+  app.set_variable("v_multiline", value)
+  raise "expected round-trip" unless app.get_variable("v_multiline") == value
+end
+
+tk_test "a value combining braces, backslash, dollar, and brackets round-trips byte-for-byte" do |app|
+  value = "weird{value}\\with $vars and [brackets] and \\"
+  app.set_variable("v_combo", value)
+  raise "expected round-trip" unless app.get_variable("v_combo") == value
+end
+
+tk_test "array-element variable names round-trip" do |app|
+  app.set_variable("arr(key1)", "value1")
+  app.set_variable("arr(key2)", "value2")
+  raise "expected 'value1'" unless app.get_variable("arr(key1)") == "value1"
+  raise "expected 'value2'" unless app.get_variable("arr(key2)") == "value2"
+end
+
+tk_test "fully-qualified namespaced variable names round-trip" do |app|
+  app.tcl_eval("namespace eval ::teekbfmtest {}")
+  app.set_variable("::teekbfmtest::v1", "nsvalue")
+  raise "expected round-trip" unless app.get_variable("::teekbfmtest::v1") == "nsvalue"
+end
+
+# real call sites pass non-String values (e.g. an Int32 progress %)
+tk_test "set_variable coerces a non-String value" do |app|
+  app.set_variable("v_int", 42)
+  raise "expected '42'" unless app.get_variable("v_int") == "42"
+end
+
+tk_test "set_variable coerces a non-String name" do |app|
+  app.set_variable(:v_sym_name, "ok")
+  raise "expected 'ok'" unless app.get_variable("v_sym_name") == "ok"
+end
+
+tk_test "after fires the callback" do |app|
+  fired = false
+  app.after(50) { fired = true }
+
+  raise "timer did not fire" unless app.interp.wait_until(2.seconds) { fired }
+end
+
+tk_test "after_idle fires the callback" do |app|
+  fired = false
+  app.after_idle { fired = true }
+
+  raise "after_idle did not fire" unless app.interp.wait_until(2.seconds) { fired }
+end
+
+tk_test "after_cancel prevents the callback" do |app|
+  fired = false
+  timer_id = app.after(50) { fired = true }
+  app.after_cancel(timer_id)
+
+  app.interp.wait_until(300.milliseconds) { false }
+  raise "callback fired despite cancel" if fired
+end
+
+tk_test "nested timers both fire" do |app|
+  results = [] of String
+
+  app.after(50) do
+    results << "first"
+    app.after(50) do
+      results << "second"
+    end
+  end
+
+  app.interp.wait_until(2.seconds) { results.size >= 2 }
+  raise "expected [first, second], got #{results.inspect}" unless results == ["first", "second"]
+end
+
+tk_test "every fires repeatedly" do |app|
+  count = 0
+  app.every(30, on_error: nil) { count += 1 }
+
+  app.interp.wait_until(2.seconds) { count >= 3 }
+  raise "expected at least 3 ticks, got #{count}" unless count >= 3
+end
+
+tk_test "RepeatingTimer#cancel stops the timer" do |app|
+  count = 0
+  timer = app.every(30, on_error: nil) { count += 1 }
+
+  app.interp.wait_until(300.milliseconds) { count >= 2 }
+  timer.cancel
+  frozen_count = count
+
+  app.interp.wait_until(200.milliseconds) { false }
+  raise "timer kept firing after cancel" unless count == frozen_count
+end
+
+tk_test "RepeatingTimer#cancelled? reflects state" do |app|
+  timer = app.every(30, on_error: nil) { }
+  raise "expected not cancelled" if timer.cancelled?
+  timer.cancel
+  raise "expected cancelled" unless timer.cancelled?
+end
+
+tk_test "double RepeatingTimer#cancel does not raise" do |app|
+  timer = app.every(30, on_error: nil) { }
+  timer.cancel
+  timer.cancel
+  raise "expected cancelled" unless timer.cancelled?
+end
+
+tk_test "every with a zero interval raises ArgumentError" do |app|
+  begin
+    app.every(0, on_error: nil) { }
+    raise "expected ArgumentError, got no exception"
+  rescue ArgumentError
+  end
+end
+
+tk_test "every with a negative interval raises ArgumentError" do |app|
+  begin
+    app.every(-10, on_error: nil) { }
+    raise "expected ArgumentError, got no exception"
+  rescue ArgumentError
+  end
+end
+
+# on_error: :raise (default)
+
+tk_test "on_error: :raise raises from app.update" do |app|
+  count = 0
+  timer = app.every(30) do
+    count += 1
+    raise "boom" if count == 2
+  end
+
+  caught = nil
+  deadline = Time.instant + 1.second
+  until caught || Time.instant >= deadline
+    begin
+      app.update
+    rescue ex
+      caught = ex
+    end
+    sleep 10.milliseconds
+  end
+
+  raise "timer should be cancelled after error" unless timer.cancelled?
+  raise "should have ticked twice before error, got #{count}" unless count == 2
+  raise "exception should propagate from app.update" unless caught
+  raise "expected 'boom'" unless caught.message == "boom"
+  raise "expected timer.last_error to be 'boom'" unless timer.last_error.try(&.message) == "boom"
+end
+
+tk_test "on_error: :raise does not hang the event loop" do |app|
+  count = 0
+  timer = app.every(30) do
+    count += 1
+    raise "fail" if count == 1
+  end
+
+  caught = nil
+  20.times do
+    begin
+      app.update
+    rescue ex
+      caught = ex
+    end
+    sleep 10.milliseconds
+  end
+
+  raise "expected cancelled" unless timer.cancelled?
+  raise "expected count 1, got #{count}" unless count == 1
+  raise "expected an exception to be caught" unless caught
+  raise "expected 'fail'" unless caught.message == "fail"
+end
+
+tk_test "on_error: :raise does not spam exceptions" do |app|
+  count = 0
+  app.every(30) do
+    count += 1
+    raise "once" if count == 1
+  end
+
+  errors = [] of String?
+  30.times do
+    begin
+      app.update
+    rescue ex
+      errors << ex.message
+    end
+    sleep 10.milliseconds
+  end
+
+  raise "should raise exactly once, not spam - got #{errors.inspect}" unless errors == ["once"]
+end
+
+# on_error: proc
+
+tk_test "on_error proc keeps the timer running" do |app|
+  errors = [] of String?
+  count = 0
+
+  app.every(30, on_error: ->(ex : Exception) { errors << ex.message; nil }) do
+    count += 1
+    raise "oops" if count == 2
+  end
+
+  app.interp.wait_until(1.second) { count >= 4 }
+  raise "expected at least 4 ticks, got #{count}" unless count >= 4
+  raise "expected [oops], got #{errors.inspect}" unless errors == ["oops"]
+end
+
+tk_test "on_error proc receives the exception object" do |app|
+  captured = nil
+  timer = app.every(30, on_error: ->(ex : Exception) { captured = ex; nil }) do
+    raise ArgumentError.new("bad arg")
+  end
+
+  app.interp.wait_until(500.milliseconds) { !captured.nil? }
+  timer.cancel
+
+  raise "expected an ArgumentError" unless captured.is_a?(ArgumentError)
+  raise "expected 'bad arg'" unless captured.try(&.message) == "bad arg"
+end
+
+tk_test "an on_error proc that raises cancels the timer" do |app|
+  count = 0
+  timer = app.every(30, on_error: ->(_ex : Exception) { raise "handler boom" }) do
+    count += 1
+    raise "tick boom" if count == 2
+  end
+
+  caught = nil
+  deadline = Time.instant + 1.second
+  until timer.cancelled? || Time.instant >= deadline
+    begin
+      app.update
+    rescue ex
+      caught = ex
+    end
+    sleep 10.milliseconds
+  end
+
+  raise "timer should be cancelled when on_error raises" unless timer.cancelled?
+  raise "expected count 2, got #{count}" unless count == 2
+  raise "expected 'handler boom'" unless timer.last_error.try(&.message) == "handler boom"
+  raise "handler error should raise from app.update" unless caught
+  raise "expected 'handler boom'" unless caught.message == "handler boom"
+end
+
+# on_error: nil
+
+tk_test "on_error: nil silently cancels" do |app|
+  count = 0
+  timer = app.every(30, on_error: nil) do
+    count += 1
+    raise "quiet" if count == 2
+  end
+
+  app.interp.wait_until(500.milliseconds) { timer.cancelled? }
+
+  raise "expected cancelled" unless timer.cancelled?
+  raise "expected count 2, got #{count}" unless count == 2
+  raise "expected a last_error" unless timer.last_error
+  raise "expected 'quiet'" unless timer.last_error.try(&.message) == "quiet"
+end
+
+tk_test "on_error: nil does not keep firing after an error" do |app|
+  count = 0
+  timer = app.every(30, on_error: nil) do
+    count += 1
+    raise "stop" if count == 1
+  end
+
+  20.times { app.update; sleep 10.milliseconds }
+
+  raise "timer should have stopped after first error, got count #{count}" unless count == 1
+  raise "expected cancelled" unless timer.cancelled?
+end
+
+# interval
+
+tk_test "RepeatingTimer#interval is readable and writable" do |app|
+  timer = app.every(30, on_error: nil) { }
+  raise "expected 30" unless timer.interval == 30
+  timer.interval = 100
+  raise "expected 100" unless timer.interval == 100
+  timer.cancel
+end
+
+tk_test "RepeatingTimer#interval= rejects non-positive values" do |app|
+  timer = app.every(30, on_error: nil) { }
+  begin
+    timer.interval = 0
+    raise "expected ArgumentError for 0"
+  rescue ArgumentError
+  end
+  begin
+    timer.interval = -5
+    raise "expected ArgumentError for -5"
+  rescue ArgumentError
+  end
+  timer.cancel
+end
+
+# introspection
+
+tk_test "RepeatingTimer#late_ticks starts at zero" do |app|
+  timer = app.every(30, on_error: nil) { }
+  raise "expected 0" unless timer.late_ticks == 0
+  timer.cancel
+end
+
+tk_test "RepeatingTimer#last_error is nil when there have been no errors" do |app|
+  timer = app.every(30, on_error: nil) { }
+  raise "expected nil" unless timer.last_error.nil?
+  timer.cancel
+end
+
+tk_test "clipboard.set followed by .get round-trips the text" do |app|
+  app.clipboard.set("hello world")
+  raise "expected 'hello world'" unless app.clipboard.get == "hello world"
+end
+
+tk_test "a second clipboard.set replaces the contents, not appends to them" do |app|
+  app.clipboard.set("first")
+  app.clipboard.set("second")
+  raise "expected 'second'" unless app.clipboard.get == "second"
+end
+
+tk_test "clipboard.set treats a leading hyphen as literal data, not an append option" do |app|
+  app.clipboard.set("-not-an-option")
+  raise "expected '-not-an-option'" unless app.clipboard.get == "-not-an-option"
+end
+
+tk_test "clipboard.get returns nil rather than raising when nothing has been set" do |app|
+  app.clipboard.clear
+  raise "expected nil" unless app.clipboard.get.nil?
+end
+
+tk_test "clipboard.clear empties a clipboard that already had content" do |app|
+  app.clipboard.set("something")
+  app.clipboard.clear
+  raise "expected nil" unless app.clipboard.get.nil?
+end

@@ -55,6 +55,13 @@ lib LibTcl
   fun do_one_event = Tcl_DoOneEvent(flags : LibC::Int) : LibC::Int
   fun set_obj_result = Tcl_SetObjResult(interp : Interp*, obj : Obj*)
 
+  # NULL on failure (get: no such variable; set: e.g. write to a
+  # read-only or nonexistent array). TCL_GLOBAL_ONLY (below) - a plain
+  # #defined flag, not a stub-table entry - makes both operate on the
+  # global variable table regardless of the interp's current call frame.
+  fun get_var = Tcl_GetVar(interp : Interp*, var_name : LibC::Char*, flags : LibC::Int) : LibC::Char*
+  fun set_var = Tcl_SetVar(interp : Interp*, var_name : LibC::Char*, new_value : LibC::Char*, flags : LibC::Int) : LibC::Char*
+
   # ObjCmdProc/CmdDeleteProc: the C signatures Tcl_CreateObjCommand expects
   # for a custom command's handler and (optional) cleanup callback. Crystal
   # can hand a real, C-ABI-compatible function pointer for these directly -
@@ -90,6 +97,9 @@ lib LibTcl
   # reproduced here, see CallbackSignal.
   TCL_ERROR = 1
   TCL_BREAK = 3
+
+  # From tcl.h - see #tcl_get_var/#tcl_set_var.
+  TCL_GLOBAL_ONLY = 1
 end
 
 lib LibTk
@@ -221,6 +231,25 @@ module Teek
       end
     end
 
+    # Gets a Tcl variable's value (array-element and namespaced forms
+    # work), or nil if it doesn't exist. Mirrors ruby-teek's
+    # Interp#tcl_get_var.
+    def tcl_get_var(name : String) : String?
+      ptr = LibTcl.get_var(@ptr, name, LibTcl::TCL_GLOBAL_ONLY)
+      return if ptr.null?
+      String.new(ptr)
+    end
+
+    # Sets a Tcl variable (array-element and namespaced forms work). Goes
+    # through Tcl_SetVar directly (no re-parsing), so the value never
+    # needs escaping - braces, backslashes, $, [, whatever, all safe.
+    # Mirrors ruby-teek's Interp#tcl_set_var.
+    def tcl_set_var(name : String, value : String) : String
+      ptr = LibTcl.set_var(@ptr, name, value, LibTcl::TCL_GLOBAL_ONLY)
+      raise TclError.new("failed to set variable '#{name}'") if ptr.null?
+      value
+    end
+
     # Creates a widget of the given kind (e.g. "button", "label", "frame")
     # at the given Tk path (e.g. ".b", ".f.label1") with Tcl "-key value"
     # options built from named args. Just a thin tcl_invoke wrapper - no
@@ -264,6 +293,13 @@ module Teek
     # already gone (a no-op) - callers like CallbackRegistry rely on this.
     def unregister_callback(id : String) : Nil
       @callbacks.delete(id)
+    end
+
+    # Currently registered callback id strings - test/introspection use:
+    # asserting exactly which ids survive a release, not just how many.
+    # Mirrors ruby-teek's Interp#callback_ids.
+    def callback_ids : Array(String)
+      @callbacks.keys
     end
 
     # Binds a Tcl event (e.g. "<Key-a>", "<Button-1>") on a widget/path to

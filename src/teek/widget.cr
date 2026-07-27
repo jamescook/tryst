@@ -68,6 +68,16 @@ module Teek
       self
     end
 
+    # Bind an event on this widget. See App#bind.
+    def bind(event : String, *subs, &block : Array(String), CallbackSignal -> Nil) : String
+      @app.bind(@path, event, *subs, &block)
+    end
+
+    # Remove an event binding from this widget. See App#unbind.
+    def unbind(event : String) : Nil
+      @app.unbind(@path, event)
+    end
+
     # This widget as a Window - the window-scoped counterpart covering
     # `wm` subcommands and composite behaviors (on_close, grab_set/
     # grab_release, modal). Meant for toplevels.
