@@ -1,5 +1,17 @@
 require "./tk_test_registry"
 
+# Parses a Tcl arg list of the form "-flag1 value1 -flag2 value2 ..."
+# (e.g. a stubbed dialog command's captured $args) into a Hash, so
+# dialog-test assertions don't depend on the order a wrapper method
+# happens to build its flags in. Mirrors ruby-teek's own TestContext#tcl_flag_hash
+# (test/teek_test_worker.rb) - pure Tcl-list parsing, no App/Tk needed.
+private def tcl_flag_hash(list_str : String) : Hash(String, String)
+  parts = Teek.split_list(list_str)
+  hash = {} of String => String
+  parts.each_slice(2) { |pair| hash[pair[0]] = pair[1] }
+  hash
+end
+
 tk_test "eval and invoke marshaling round trip" do |app|
   app.tcl_invoke("set", "greeting", "hello with spaces {and braces}")
   result = app.tcl_eval("set greeting")
@@ -457,6 +469,121 @@ tk_test "Window#modal releases the grab if its window is destroyed without an ex
   app.destroy(".t")
 
   raise "expected the grab to be released after destroy" unless app.tcl_eval("grab current") == ""
+end
+
+tk_test "App#grab_set/#grab_release set and clear the current grab" do |app|
+  app.tcl_eval("toplevel .t")
+  app.update
+
+  app.grab_set(".t")
+  raise "expected .t to hold the grab" unless app.tcl_eval("grab current .t") == ".t"
+
+  app.grab_release(".t")
+  raise "expected the grab to be released" unless app.tcl_eval("grab current .t") == ""
+
+  app.destroy(".t")
+end
+
+tk_test "App#grab_set without global: is a local grab, with global: true is global" do |app|
+  app.tcl_eval("toplevel .t")
+  app.update
+
+  app.grab_set(".t")
+  raise "expected a local grab" unless app.tcl_eval("grab status .t") == "local"
+  app.grab_release(".t")
+
+  app.grab_set(".t", global: true)
+  raise "expected a global grab" unless app.tcl_eval("grab status .t") == "global"
+  app.grab_release(".t")
+
+  app.destroy(".t")
+end
+
+tk_test "App#grab_release on a window that never held the grab does not raise" do |app|
+  app.tcl_eval("toplevel .t")
+  app.update
+
+  app.grab_release(".t")
+
+  app.destroy(".t")
+end
+
+tk_test "App#modal grabs input and forces focus" do |app|
+  app.tcl_eval("toplevel .t")
+  app.update
+
+  app.modal(".t")
+
+  raise "expected .t to hold the grab" unless app.tcl_eval("grab current .t") == ".t"
+  raise "expected .t to hold focus" unless app.tcl_eval("focus") == ".t"
+
+  app.grab_release(".t")
+  app.destroy(".t")
+end
+
+tk_test "App#modal's grab is still held after its block returns normally" do |app|
+  app.tcl_eval("toplevel .t")
+  app.update
+
+  app.modal(".t") { app.tcl_eval("wm title .t Modal") }
+
+  raise "expected .t to still hold the grab" unless app.tcl_eval("grab current .t") == ".t"
+
+  app.grab_release(".t")
+  app.destroy(".t")
+end
+
+tk_test "App#modal releases the grab immediately if its setup block raises" do |app|
+  app.tcl_eval("toplevel .t")
+  app.update
+
+  begin
+    app.modal(".t") { raise "boom" }
+    raise "expected an exception to propagate"
+  rescue ex : Exception
+    raise "expected 'boom', got #{ex.message.inspect}" unless ex.message == "boom"
+  end
+
+  raise "expected the grab to be released after the block raised" unless app.tcl_eval("grab current .t") == ""
+
+  app.destroy(".t")
+end
+
+tk_test "App#modal releases the grab if its window is destroyed without an explicit grab_release" do |app|
+  app.tcl_eval("toplevel .t")
+  app.update
+
+  app.modal(".t")
+  raise "expected .t to hold the grab" unless app.tcl_eval("grab current .t") == ".t"
+
+  app.destroy(".t")
+
+  raise "expected the grab to be released after destroy" unless app.tcl_eval("grab current") == ""
+end
+
+# add_debug_console is only available on macOS/Windows (Tk has no console
+# window on Linux) - every case below tolerates either outcome rather
+# than asserting the console is actually available, same as ruby-teek's
+# own test_debug_console.rb.
+tk_test "App#add_debug_console returns true or false" do |app|
+  result = app.add_debug_console
+  raise "expected a Bool, got #{result.inspect}" unless result.is_a?(Bool)
+end
+
+tk_test "App#add_debug_console leaves the console hidden" do |app|
+  next unless app.add_debug_console
+  app.tcl_eval("console hide") # should not raise - it's already hidden
+end
+
+tk_test "App#add_debug_console's console can be shown and hidden" do |app|
+  next unless app.add_debug_console
+  app.tcl_eval("console show")
+  app.tcl_eval("console hide")
+end
+
+tk_test "App#add_debug_console accepts a custom keybinding" do |app|
+  result = app.add_debug_console("<F11>")
+  raise "expected a Bool, got #{result.inspect}" unless result.is_a?(Bool)
 end
 
 # Widget wrapper tests. Two ruby-teek test cases aren't ported here since
@@ -1676,4 +1803,401 @@ tk_test "clipboard.clear empties a clipboard that already had content" do |app|
   app.clipboard.set("something")
   app.clipboard.clear
   raise "expected nil" unless app.clipboard.get.nil?
+end
+
+# Real dialogs block waiting for a human, so these stub the underlying Tcl
+# command (tk_getOpenFile, etc.) to capture the args it was actually
+# invoked with and return a canned result - that proves the wrapper
+# builds its Tcl call via tcl_invoke (no string interpolation), with
+# options containing spaces/braces passed through intact, without ever
+# popping up a real dialog.
+tk_test "choose_open_file passes options with spaces/braces safely and returns the path" do |app|
+  app.tcl_eval(<<-TCL)
+    proc tk_getOpenFile {args} {
+      set ::last_call $args
+      return {/tmp/some dir/a file {with braces}.png}
+    }
+    TCL
+
+  result = app.choose_open_file(title: "Pick a } file", initialdir: "/tmp/some dir")
+
+  raise "expected the stubbed path" unless result == "/tmp/some dir/a file {with braces}.png"
+  captured = tcl_flag_hash(app.tcl_eval("set ::last_call"))
+  expected = {"-title" => "Pick a } file", "-initialdir" => "/tmp/some dir"}
+  raise "expected #{expected}, got #{captured}" unless captured == expected
+end
+
+tk_test "choose_open_file returns nil when the user cancels (empty Tk result)" do |app|
+  app.tcl_eval("proc tk_getOpenFile {args} { return {} }")
+  raise "expected nil" unless app.choose_open_file.nil?
+end
+
+tk_test "choose_open_file with multiple: true splits Tk's list result into an array" do |app|
+  app.tcl_eval(<<-TCL)
+    proc tk_getOpenFile {args} {
+      return {{/tmp/a file.png} /tmp/b.png}
+    }
+    TCL
+
+  result = app.choose_open_file(multiple: true)
+
+  raise "expected the split array, got #{result.inspect}" unless result == ["/tmp/a file.png", "/tmp/b.png"]
+end
+
+tk_test "choose_open_file builds a correctly nested Tcl list for filetypes" do |app|
+  app.tcl_eval(<<-TCL)
+    proc tk_getOpenFile {args} {
+      set ::last_call $args
+      return {}
+    }
+    TCL
+
+  app.choose_open_file(filetypes: [{"PNG Images", ".png"}, {"All Files", "*"}])
+
+  captured = app.split_list(app.tcl_eval("set ::last_call"))
+  filetypes_arg = captured[captured.index!("-filetypes") + 1]
+  entries = app.split_list(filetypes_arg)
+  raise "expected PNG entry" unless app.split_list(entries[0]) == ["PNG Images", ".png"]
+  raise "expected All Files entry" unless app.split_list(entries[1]) == ["All Files", "*"]
+end
+
+tk_test "choose_open_file filetypes accepts an array of extensions per entry" do |app|
+  app.tcl_eval(<<-TCL)
+    proc tk_getOpenFile {args} {
+      set ::last_call $args
+      return {}
+    }
+    TCL
+
+  app.choose_open_file(filetypes: [{"Images", [".png", ".jpg"]}])
+
+  captured = app.split_list(app.tcl_eval("set ::last_call"))
+  filetypes_arg = captured[captured.index!("-filetypes") + 1]
+  entry = app.split_list(app.split_list(filetypes_arg)[0])
+  raise "expected 'Images'" unless entry[0] == "Images"
+  raise "expected extensions array" unless app.split_list(entry[1]) == [".png", ".jpg"]
+end
+
+tk_test "choose_save_file passes options safely and returns the path" do |app|
+  app.tcl_eval(<<-TCL)
+    proc tk_getSaveFile {args} {
+      set ::last_call $args
+      return {/tmp/save dir/out.png}
+    }
+    TCL
+
+  result = app.choose_save_file(title: "Save As", initialfile: "my file.png", defaultextension: ".png")
+
+  raise "expected the stubbed path" unless result == "/tmp/save dir/out.png"
+  captured = tcl_flag_hash(app.tcl_eval("set ::last_call"))
+  expected = {"-title" => "Save As", "-initialfile" => "my file.png", "-defaultextension" => ".png"}
+  raise "expected #{expected}, got #{captured}" unless captured == expected
+end
+
+tk_test "choose_save_file returns nil when the user cancels" do |app|
+  app.tcl_eval("proc tk_getSaveFile {args} { return {} }")
+  raise "expected nil" unless app.choose_save_file.nil?
+end
+
+tk_test "message_box passes options safely and returns the pressed button as a symbol" do |app|
+  app.tcl_eval(<<-TCL)
+    proc tk_messageBox {args} {
+      set ::last_call $args
+      return {yes}
+    }
+    TCL
+
+  result = app.message_box(message: "Delete {this}?", title: "Confirm", icon: :warning, type: :yesno)
+
+  raise "expected :yes, got #{result.inspect}" unless result == :yes
+  captured = tcl_flag_hash(app.tcl_eval("set ::last_call"))
+  expected = {"-message" => "Delete {this}?", "-title" => "Confirm", "-icon" => "warning", "-type" => "yesno"}
+  raise "expected #{expected}, got #{captured}" unless captured == expected
+end
+
+tk_test "choose_color passes options safely and returns the chosen color" do |app|
+  app.tcl_eval(<<-TCL)
+    proc tk_chooseColor {args} {
+      set ::last_call $args
+      return {#ff0080}
+    }
+    TCL
+
+  result = app.choose_color(initial: "#ff0000", title: "Pick a } color")
+
+  raise "expected '#ff0080'" unless result == "#ff0080"
+  captured = tcl_flag_hash(app.tcl_eval("set ::last_call"))
+  expected = {"-initialcolor" => "#ff0000", "-title" => "Pick a } color"}
+  raise "expected #{expected}, got #{captured}" unless captured == expected
+end
+
+tk_test "choose_color returns nil when the user cancels" do |app|
+  app.tcl_eval("proc tk_chooseColor {args} { return {} }")
+  raise "expected nil" unless app.choose_color.nil?
+end
+
+tk_test "choose_dir passes options safely and returns the chosen directory" do |app|
+  app.tcl_eval(<<-TCL)
+    proc tk_chooseDirectory {args} {
+      set ::last_call $args
+      return {/tmp/some dir/with {braces}}
+    }
+    TCL
+
+  result = app.choose_dir(title: "Pick a } folder", initialdir: "/tmp/some dir")
+
+  raise "expected the stubbed path" unless result == "/tmp/some dir/with {braces}"
+  captured = tcl_flag_hash(app.tcl_eval("set ::last_call"))
+  expected = {"-title" => "Pick a } folder", "-initialdir" => "/tmp/some dir"}
+  raise "expected #{expected}, got #{captured}" unless captured == expected
+end
+
+tk_test "choose_dir returns nil when the user cancels (empty Tk result)" do |app|
+  app.tcl_eval("proc tk_chooseDirectory {args} { return {} }")
+  raise "expected nil" unless app.choose_dir.nil?
+end
+
+tk_test "choose_dir's mustexist: only appears on the wire when true (Tk's own default is false)" do |app|
+  app.tcl_eval(<<-TCL)
+    proc tk_chooseDirectory {args} {
+      set ::last_call $args
+      return {}
+    }
+    TCL
+
+  app.choose_dir
+  raise "did not expect -mustexist" if app.tcl_eval("set ::last_call").includes?("-mustexist")
+
+  app.choose_dir(mustexist: true)
+  captured = tcl_flag_hash(app.tcl_eval("set ::last_call"))
+  raise "expected -mustexist 1" unless captured["-mustexist"] == "1"
+end
+
+tk_test "popup_menu invokes tk_popup with the menu path and screen coordinates" do |app|
+  app.tcl_eval(<<-TCL)
+    proc tk_popup {args} {
+      set ::last_call $args
+    }
+    TCL
+  menu = app.menu(".popup_test_menu")
+
+  app.popup_menu(menu, x: 100, y: 200)
+
+  captured = app.split_list(app.tcl_eval("set ::last_call"))
+  raise "expected [#{menu}, 100, 200], got #{captured.inspect}" unless captured == [menu.to_s, "100", "200"]
+end
+
+tk_test "popup_menu passes an explicit active entry when given" do |app|
+  app.tcl_eval(<<-TCL)
+    proc tk_popup {args} {
+      set ::last_call $args
+    }
+    TCL
+  menu = app.menu(".popup_test_menu2")
+
+  app.popup_menu(menu, x: 10, y: 20, entry: 1)
+
+  captured = app.split_list(app.tcl_eval("set ::last_call"))
+  raise "expected [#{menu}, 10, 20, 1], got #{captured.inspect}" unless captured == [menu.to_s, "10", "20", "1"]
+end
+
+# BackgroundWork - unified thread-based implementation (no mode:, no
+# Ractor variant, per the epic's agreed simplification). Every test that
+# checks exact per-item progress sets drop_intermediate = false (global,
+# process-wide config - reset back to true afterward so it doesn't leak
+# into other tests sharing this persistent worker).
+tk_test "background_work fires progress and done callbacks" do |app|
+  Teek::BackgroundWork.drop_intermediate = false
+
+  results = [] of Int32
+  done = false
+
+  Teek::BackgroundWork(Array(Int32), Int32).new(app, [1, 2, 3]) do |ctx, data|
+    data.each { |num| ctx.yield(num * 10) }
+  end.on_progress do |result|
+    results << result
+  end.on_done do
+    done = true
+  end
+
+  app.interp.wait_until(5.seconds) { done }
+  Teek::BackgroundWork.drop_intermediate = true
+
+  raise "task did not complete" unless done
+  raise "expected [10, 20, 30], got #{results.inspect}" unless results == [10, 20, 30]
+end
+
+tk_test "background_work pause works" do |app|
+  counter = 0
+  done = false
+
+  task = Teek::BackgroundWork(Int32, Int32).new(app, 50) do |ctx, count|
+    count.times do |i|
+      ctx.check_pause
+      ctx.yield(i)
+      sleep 20.milliseconds
+    end
+  end.on_progress do |i|
+    counter = i
+  end.on_done do
+    done = true
+  end
+
+  app.interp.wait_until(2.seconds) { counter >= 10 }
+
+  task.pause
+  paused_at = counter
+
+  app.interp.wait_until(200.milliseconds) { false }
+  10.times { app.update; sleep 20.milliseconds }
+  after_pause = counter
+
+  advance = after_pause - paused_at
+  raise "counter advanced too much while paused: #{advance}" if advance > 3
+
+  task.resume
+
+  app.interp.wait_until(5.seconds) { done }
+
+  raise "task did not complete after resume" unless done
+  raise "expected 49, got #{counter}" unless counter == 49
+end
+
+tk_test "background_work receives final progress before done" do |app|
+  progress_values = [] of Float64
+  final_progress_before_done = nil
+  done = false
+
+  Teek::BackgroundWork(Int32, Float64).new(app, 5) do |ctx, total|
+    total.times { |i| ctx.yield((i + 1).to_f / total) }
+  end.on_progress do |progress|
+    progress_values << progress
+  end.on_done do
+    final_progress_before_done = progress_values.last
+    done = true
+  end
+
+  app.interp.wait_until(5.seconds) { done }
+
+  raise "task did not complete" unless done
+  raise "expected final progress 1.0, got #{final_progress_before_done}" unless final_progress_before_done == 1.0
+  raise "expected 1.0 to be included in #{progress_values.inspect}" unless progress_values.includes?(1.0)
+end
+
+tk_test "BackgroundWork#done?/#paused? reflect state" do |app|
+  task = Teek::BackgroundWork(Nil, Symbol).new(app, nil) do |ctx, _data|
+    ctx.check_pause
+    ctx.yield(:ok)
+  end
+
+  raise "expected not done yet" if task.done?
+  raise "expected not paused yet" if task.paused?
+
+  done = false
+  task.on_progress { |_| }.on_done { done = true }
+  app.interp.wait_until(2.seconds) { done }
+
+  raise "expected done" unless task.done?
+end
+
+tk_test "on_message and send_message work bidirectionally" do |app|
+  Teek::BackgroundWork.drop_intermediate = false
+  received_by_main = [] of String
+  done = false
+
+  task = Teek::BackgroundWork(Nil, Symbol).new(app, nil) do |ctx, _data|
+    msg = ctx.wait_message
+    ctx.send_message("echo:#{msg}")
+    ctx.yield(:done)
+  end
+
+  task.on_message { |msg| received_by_main << msg }
+  task.on_progress { |_| }
+  task.on_done { done = true }
+
+  task.send_message("hello")
+
+  app.interp.wait_until(3.seconds) { done }
+  Teek::BackgroundWork.drop_intermediate = true
+
+  raise "task should complete" unless done
+  raise "expected 'echo:hello' in #{received_by_main.inspect}" unless received_by_main.includes?("echo:hello")
+end
+
+tk_test "TaskContext#check_message returns nil when empty" do |app|
+  Teek::BackgroundWork.drop_intermediate = false
+  results = [] of String
+  done = false
+
+  Teek::BackgroundWork(Nil, String).new(app, nil) do |ctx, _data|
+    msg = ctx.check_message
+    ctx.yield(msg.nil? ? "none" : msg.to_s)
+  end.on_progress { |res| results << res }
+    .on_done { done = true }
+
+  app.interp.wait_until(3.seconds) { done }
+  Teek::BackgroundWork.drop_intermediate = true
+
+  raise "expected ['none'], got #{results.inspect}" unless results == ["none"]
+end
+
+tk_test "BackgroundWork#stop terminates the worker" do |app|
+  progress_count = 0
+  done = false
+
+  task = Teek::BackgroundWork(Int32, Int32).new(app, 1000) do |ctx, count|
+    count.times do |i|
+      ctx.check_message
+      ctx.yield(i)
+      sleep 10.milliseconds
+    end
+  end.on_progress { |_| progress_count += 1 }
+    .on_done { done = true }
+
+  app.interp.wait_until(2.seconds) { progress_count >= 3 }
+  task.stop
+
+  app.interp.wait_until(3.seconds) { done }
+  raise "task should complete after stop" unless done
+  raise "should not have run all iterations, got #{progress_count}" unless progress_count < 1000
+end
+
+tk_test "BackgroundWork#close marks done immediately" do |app|
+  task = Teek::BackgroundWork(Nil, Int32).new(app, nil) do |_ctx, _data|
+    loop { sleep 100.milliseconds }
+  end.on_progress { |_| }
+
+  task.start
+  raise "expected not done yet" if task.done?
+
+  task.close
+  raise "expected done after close" unless task.done?
+end
+
+# From ruby-teek's test_threading.rb - the parts not already covered by
+# other tests (after firing, tcl_eval, widget callbacks firing) are
+# specifically about background concurrency alongside Tk, adapted here to
+# Fiber::ExecutionContext::Isolated (this project's Thread equivalent)
+# instead of BackgroundWork's higher-level API.
+tk_test "a Fiber::ExecutionContext::Isolated context executes alongside Tk" do |app|
+  result = nil
+  Fiber::ExecutionContext::Isolated.new("Worker") { result = 42 }
+
+  app.interp.wait_until(2.seconds) { !result.nil? }
+
+  raise "isolated context did not execute" unless result == 42
+end
+
+tk_test "a widget callback can spawn an Isolated context" do |app|
+  callback_thread_result = nil
+  spawn_and_wait = app.callback do
+    done_channel = Channel(String).new
+    Fiber::ExecutionContext::Isolated.new("Worker") { done_channel.send("from_callback") }
+    callback_thread_result = done_channel.receive
+  end
+  app.command(:button, ".b_thr", command: spawn_and_wait)
+  app.command(:pack, ".b_thr")
+  app.command(".b_thr", "invoke")
+
+  raise "expected 'from_callback', got #{callback_thread_result.inspect}" unless callback_thread_result == "from_callback"
 end

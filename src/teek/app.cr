@@ -8,6 +8,7 @@ require "./command_interceptors"
 require "./after_handle"
 require "./repeating_timer"
 require "./clipboard"
+require "./dialogs"
 
 module Teek
   # Raised by App#command when more than one registered CommandInterceptor
@@ -75,6 +76,11 @@ module Teek
     # instead of going through teek_crystal_callback_dispatch's own
     # rescue (which would just report it as a generic Tcl error).
     setter _pending_exception : Exception?
+
+    # Set by #add_debug_console; declared with a default here (rather
+    # than in #initialize) since it's meaningless until that method is
+    # actually called.
+    @console_visible = false
 
     # Symbol shorthands for #bind's substitution codes - Tk's own %-codes
     # can always be passed directly instead (e.g. "%K") for anything not
@@ -308,6 +314,33 @@ module Teek
       self.window(window).withdraw
     end
 
+    # Enable the Tk debug console, toggled with the given keyboard
+    # shortcut (default: F12). The console is a built-in interactive Tcl
+    # shell, useful for inspecting variables and running Tcl commands at
+    # runtime - available on macOS and Windows only; on Linux this is a
+    # no-op (Linux has a real terminal instead).
+    # @return true if the console was created, false if unavailable on
+    #   this platform.
+    def add_debug_console(keybinding = "<F12>") : Bool
+      @interp.create_console
+      @console_visible = false
+
+      bind(".", keybinding) do
+        if @console_visible
+          tcl_eval("console hide")
+          @console_visible = false
+        else
+          tcl_eval("console show")
+          @console_visible = true
+        end
+      end
+
+      true
+    rescue ex : TclError
+      STDERR.puts "Teek: debug console not available on this platform (#{ex.message})"
+      false
+    end
+
     # Set a window's title. Defaults to the root window ("."). window
     # accepts a Widget or a path String.
     def set_window_title(title : String, window = ".") : String
@@ -318,6 +351,69 @@ module Teek
     # window accepts a Widget or a path String.
     def window_title(window = ".") : String
       self.window(window).title
+    end
+
+    # Set a window's geometry (e.g. "400x300", "400x300+100+50"). Defaults
+    # to the root window ("."). window accepts a Widget or a path String.
+    def set_window_geometry(geometry : String, window = ".") : String
+      self.window(window).set_geometry(geometry)
+    end
+
+    # Get a window's current geometry. Defaults to the root window (".").
+    # window accepts a Widget or a path String.
+    def window_geometry(window = ".") : String
+      self.window(window).geometry
+    end
+
+    # Set whether a window is resizable. Defaults to the root window
+    # ("."). window accepts a Widget or a path String.
+    def set_window_resizable(width : Bool, height : Bool, window = ".") : Nil
+      self.window(window).set_resizable(width, height)
+    end
+
+    # Get whether a window is resizable ([width_resizable,
+    # height_resizable]). Defaults to the root window ("."). window
+    # accepts a Widget or a path String.
+    def window_resizable(window = ".") : Array(Bool)
+      self.window(window).resizable
+    end
+
+    # Register a handler for the window manager's close button. Defaults
+    # to the root window ("."). window accepts a Widget or a path String.
+    # Prefer app.window(window).on_close { } for new code - this flat
+    # method is kept for parity with ruby-teek and just delegates there.
+    def on_close(window = ".", &block : Array(String), CallbackSignal -> Nil) : Nil
+      self.window(window).on_close(&block)
+    end
+
+    # Set the input grab on a window. Defaults to the root window (".").
+    # window accepts a Widget or a path String. Prefer
+    # app.window(window).grab_set for new code - this flat method is kept
+    # for parity with ruby-teek and just delegates there.
+    def grab_set(window = ".", global : Bool = false) : Nil
+      self.window(window).grab_set(global: global)
+    end
+
+    # Release a grab previously set with #grab_set. Defaults to the root
+    # window ("."). window accepts a Widget or a path String. Prefer
+    # app.window(window).grab_release for new code - this flat method is
+    # kept for parity with ruby-teek and just delegates there.
+    def grab_release(window = ".") : Nil
+      self.window(window).grab_release
+    end
+
+    # Make a window modal. Defaults to the root window ("."). window
+    # accepts a Widget or a path String. Prefer app.window(window).modal
+    # for new code - this flat method is kept for parity with ruby-teek
+    # and just delegates there.
+    def modal(window = ".", global : Bool = false, & : -> Nil) : Nil
+      self.window(window).modal(global: global) { yield }
+    end
+
+    # Make a window modal without a setup block. Defaults to the root
+    # window ("."). window accepts a Widget or a path String.
+    def modal(window = ".", global : Bool = false) : Nil
+      self.window(window).modal(global: global)
     end
 
     # A single toplevel window, addressed by path - groups `wm`

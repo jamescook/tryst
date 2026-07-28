@@ -4,8 +4,10 @@
 # land, one file per class - mirroring ruby-teek's lib/teek/*.rb layout.
 require "./teek/interp"
 require "./teek/values"
+require "./teek/platform"
 require "./teek/callback_registry"
 require "./teek/app"
+require "./teek/background_work"
 require "./teek/menu_interceptor"
 require "./teek/tag_bind_interceptor"
 require "./teek/canvas_bind_interceptor"

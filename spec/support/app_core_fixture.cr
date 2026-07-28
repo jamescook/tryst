@@ -7,7 +7,8 @@ require "../../src/teek"
 # run inside the shared crystal spec process without risking two Tk_Init
 # calls across different spec examples. #mainloop itself isn't exercised
 # here - a real blocking mainloop needs its own dedicated subprocess
-# mechanism (ctk-s34.34), not a single shared fixture like this one.
+# mechanism (see spec/teek/mainloop_spec.cr), not a single shared fixture
+# like this one.
 
 app = Teek::App.new(title: "app core fixture")
 raise "expected an Interp" unless app.interp.is_a?(Teek::Interp)

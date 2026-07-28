@@ -105,6 +105,10 @@ end
 lib LibTk
   fun init = Tk_Init(interp : LibTcl::Interp*) : LibC::Int
   fun get_num_main_windows = Tk_GetNumMainWindows : LibC::Int
+
+  # See Interp#create_console.
+  fun init_console_channels = Tk_InitConsoleChannels(interp : LibTcl::Interp*)
+  fun create_console_window = Tk_CreateConsoleWindow(interp : LibTcl::Interp*) : LibC::Int
 end
 
 module Teek
@@ -187,6 +191,13 @@ module Teek
       raise_unless_ok("Tcl_Init") { LibTcl.init(@ptr) }
       raise_unless_ok("Tk_Init") { LibTk.init(@ptr) }
 
+      # Hide the Tk console if it was auto-created during Tk_Init - on
+      # macOS/Windows, Tk may create a console window depending on how
+      # the process was launched. "catch" handles Linux, where the
+      # console command doesn't exist at all. Mirrors ruby-teek's C ext
+      # (tcltkbridge.c interp_initialize).
+      LibTcl.eval(@ptr, "catch {console hide}")
+
       # client_data is this Interp itself (boxed), recovered in
       # teek_crystal_callback_dispatch so it can reach @callbacks. Kept
       # alive for as long as the caller holds this Interp (same lifetime
@@ -248,6 +259,23 @@ module Teek
       ptr = LibTcl.set_var(@ptr, name, value, LibTcl::TCL_GLOBAL_ONLY)
       raise TclError.new("failed to set variable '#{name}'") if ptr.null?
       value
+    end
+
+    # Creates a Tk console window - a built-in interactive Tcl shell,
+    # useful for inspecting variables and running Tcl commands at
+    # runtime. Only available on macOS and Windows (Tk provides no
+    # equivalent on Linux, which has a real terminal instead); raises
+    # TclError there. Starts hidden - see App#add_debug_console for the
+    # visibility-toggle wrapper built on top of this. Mirrors ruby-teek's
+    # Interp#create_console (ext/teek/tcltkbridge.c).
+    def create_console : Nil
+      # tcl_interactive is normally set by tclsh/wish at startup; console.tcl
+      # checks it to decide whether the console starts shown or withdrawn, so
+      # embedding Tcl directly (as here) must set it explicitly first.
+      tcl_set_var("tcl_interactive", "0") if tcl_get_var("tcl_interactive").nil?
+
+      LibTk.init_console_channels(@ptr)
+      raise_unless_ok("Tk_CreateConsoleWindow") { LibTk.create_console_window(@ptr) }
     end
 
     # Creates a widget of the given kind (e.g. "button", "label", "frame")
