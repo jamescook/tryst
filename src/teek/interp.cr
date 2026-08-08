@@ -112,6 +112,35 @@ lib LibTk
 end
 
 module Teek
+  # Depth counter around #dispatch_callback, so .in_callback? can detect
+  # "is this code running synchronously inside a Tk callback right now"
+  # - used to auto-detect unsafe operations (e.g. Handle#destroy!
+  # deferring a widget's own teardown when called from its own click
+  # handler, which needs this). Mirrors ruby-teek's Teek.in_callback?
+  # (ext/teek/tcltkbridge.c's rbtk_callback_depth), a genuine
+  # core-library gap missed during the earlier core-library port. A
+  # plain, unsynchronized class variable - deliberately, not a
+  # Mutex-guarded one like
+  # @@utility_interp/@@utility_mutex in values.cr: those genuinely can be
+  # called from any thread/fiber, but a Tcl callback only ever dispatches
+  # on the interpreter's own owning thread, so there's no concurrent
+  # writer to guard against here.
+  @@callback_depth = 0
+
+  def self.in_callback? : Bool
+    @@callback_depth > 0
+  end
+
+  # @api private - called by Interp#dispatch_callback only.
+  def self.enter_callback : Nil
+    @@callback_depth += 1
+  end
+
+  # @api private - called by Interp#dispatch_callback only.
+  def self.exit_callback : Nil
+    @@callback_depth -= 1
+  end
+
   # errorinfo/errorcode mirror Tcl's own -errorinfo/-errorcode return
   # options (ruby-teek's raise_tcl_error, ext/teek/tcltkbridge.c) - the
   # traceback through Tcl procs, and the machine-readable error category,
@@ -351,7 +380,12 @@ module Teek
       entry = @callbacks[id]?
       return {LibTcl::TCL_ERROR, "unknown callback id: #{id}"} unless entry
       signal = CallbackSignal.new
-      entry.proc.call(args, signal)
+      Teek.enter_callback
+      begin
+        entry.proc.call(args, signal)
+      ensure
+        Teek.exit_callback
+      end
       (signal.break? && entry.relay_break) ? {LibTcl::TCL_BREAK, nil} : {TCL_OK, nil}
     rescue ex
       {LibTcl::TCL_ERROR, "#{ex.class}: #{ex.message}"}

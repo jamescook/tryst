@@ -1,4 +1,4 @@
-require "../app"
+require "./app_contract"
 
 module Teek
   module UI
@@ -16,11 +16,14 @@ module Teek
     # arrange_path points there instead, since that's what has to be
     # packed/gridded into the surrounding layout.
     #
-    # app is nilable, matching how ruby-teek's own tests construct this
+    # app is AppContract (see app_contract.cr), not the concrete
+    # Teek::App, so a Realizer built against FakeApp for a headless spec
+    # produces RealizedNodes usable exactly the same way as a real one -
+    # and nilable, matching how ruby-teek's own tests construct this
     # (RealizedNode.new(app: nil, path: ...)) for App-free Document/Node
-    # coverage - the Realizer (ctk-w16.3) always supplies a real one.
-    record RealizedNode, app : App?, path : String, arrange_path : String do
-      def initialize(@app : App?, @path : String, arrange_path : String? = nil)
+    # coverage.
+    record RealizedNode, app : AppContract?, path : String, arrange_path : String do
+      def initialize(@app : AppContract?, @path : String, arrange_path : String? = nil)
         @arrange_path = arrange_path || @path
       end
     end

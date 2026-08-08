@@ -1,9 +1,18 @@
 require "./scope"
 require "./realized_node"
 require "./event_binding"
+require "./app_contract"
 
 module Teek
   module UI
+    # A node's position inside its parent ui.grid, set by WidgetDSL#cell.
+    # A dedicated field on Node (see #cell_position below) rather than
+    # living in node.layout (ruby: layout[:cell] = {row:, col:, span:}) -
+    # a nested Hash doesn't fit TclArgValue's closed union, same reasoning
+    # as WidgetType#flow needing its own FlowConfig record instead of
+    # Hash(Symbol, TclArgValue).
+    record CellPosition, row : Int32, col : Int32, span : Int32 = 1
+
     # A single element of the retained-mode tree - a widget, layout
     # container, reactive var, or deferred build-time op (the categories
     # from the architecture doc; this class itself is generic across all of
@@ -40,6 +49,29 @@ module Teek
       property key : String?
       property layout : Hash(Symbol, TclArgValue)?
       property realized : RealizedNode?
+
+      # WidgetDSL#raw's deferred block, for a :raw_op node only - run by
+      # Realizer#run_raw_op with the live app once realized. Ruby stuffs
+      # this into node.opts[:block] instead (opts is a bare Hash there);
+      # here it's a dedicated field because opts is Hash(Symbol,
+      # TclArgValue), and a block taking the live app doesn't fit
+      # TclArgValue's closed union (which only has room for the
+      # bind-shaped Proc(Array(String), CallbackSignal, Nil) a widget
+      # option callback needs) without either widening that union for one
+      # edge case or giving core's own TclArgValue a dependency on
+      # teek-ui's AppContract - both worse than a dedicated field.
+      property raw_block : Proc(AppContract, Nil)?
+
+      # This node's own position inside its parent ui.grid, if any - see
+      # CellPosition above for why this isn't part of node.layout.
+      property cell_position : CellPosition?
+
+      # This node's placement anchor on its parent ui.canvas, if any, set
+      # by WidgetDSL#overlay - one of OverlayAnchors::POSITIONS's keys.
+      # Ruby nests this in node.layout too (layout[:overlay] = { at: }),
+      # but since it's a single Symbol value (unlike CellPosition's three
+      # fields), a plain property needs no dedicated record type at all.
+      property overlay_anchor : Symbol?
 
       # Whether a deferred Handle#destroy! is currently scheduled (via
       # "after idle") but hasn't run yet - lets a second destroy! call on

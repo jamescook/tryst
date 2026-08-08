@@ -44,3 +44,24 @@ $f: $desc"
     exit 1
   fi
 fi
+
+# --- 3. Refuse bead/tracker ids in code -------------------------------
+# Beads is internal to the workflow; a bead id in a code comment means
+# nothing to a reader of the source and leaks the internal process into
+# permanent history. Checks the STAGED content (git grep --cached), not
+# the working tree, so this can't be fooled by fixing a file without
+# re-staging it. Scoped to the same paths ameba covers - a doc file
+# describing the rule itself (e.g. the project conventions) is allowed to name
+# the pattern as an example. The [a-z][0-9]+ shape matches this
+# tracker's real ids (ctk-s34, ctk-w16.5) without matching an unrelated
+# literal string that merely starts with "ctk-" (e.g. a test fixture's
+# own "ctk-test-*" labels).
+if [ -n "$staged" ]; then
+  hits=$(git grep -n --cached -E 'ctk-[a-z][0-9]+(\.[0-9]+)*' -- 'src/*' 'spec/*' 'examples/*' 2>/dev/null || true)
+  if [ -n "$hits" ]; then
+    echo "pre-commit: refusing to commit bead/tracker id(s) in code:" >&2
+    printf '%s\n' "$hits" >&2
+    echo "Describe the change/rationale itself instead of pointing at the bead - see the project conventions." >&2
+    exit 1
+  fi
+fi

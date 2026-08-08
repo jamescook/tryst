@@ -212,6 +212,15 @@ module Teek
     # @example Raw Tcl expression (for codes not in BIND_SUBS)
     #   app.bind(".c", "Button-1", "%T") { |values, _signal| ... }
     def bind(widget, event : String, *subs, &block : Array(String), CallbackSignal -> Nil) : String
+      bind(widget, event, subs, &block)
+    end
+
+    # Same as the splat overload above, but for a subs list only known at
+    # runtime (e.g. Realizer forwarding an EventBinding's own subs) -
+    # Crystal has no way to splat a runtime-sized Array/Enumerable into a
+    # plain *subs parameter the way Ruby's *binding.subs does. Mirrors
+    # #tcl_invoke's own splat-args/Enumerable-args pair.
+    def bind(widget, event : String, subs : Enumerable, &block : Array(String), CallbackSignal -> Nil) : String
       event_str = event.starts_with?('<') ? event : "<#{event}>"
       cb = register_callback(&block)
       callback_registry.reconcile({:bind, widget.to_s}) { |before| before.merge({event_str => cb}) }
@@ -526,29 +535,36 @@ module Teek
     #   app.command(:pack, ".btn", side: :left, padx: 10)
     #   # evaluates: pack .btn -side left -padx {10}
     def command(cmd, *args : TclArgValue, **kwargs) : String
-      arg_list = to_tcl_arg_list(args)
-      kwarg_hash = to_tcl_kwarg_hash(kwargs)
+      command(cmd, to_tcl_arg_list(args), to_tcl_kwarg_hash(kwargs))
+    end
 
-      record_widget_type(cmd, arg_list)
+    # Same as the splat overload above, for callers that already have a
+    # built Array(TclArgValue)/Hash(String, TclArgValue) in hand (e.g.
+    # Realizer forwarding a Node's own opts, only known at runtime) - a
+    # runtime Array/Hash can't be re-splatted into another method's own
+    # *args/**kwargs (same reason #raw_command needed this exact overload
+    # - see its own comment).
+    def command(cmd, args : Array(TclArgValue), kwargs : Hash(String, TclArgValue)) : String
+      record_widget_type(cmd, args)
 
       type = @widget_types_by_path[cmd.to_s]?
       entries = type ? CommandInterceptors.for_type(type) : [] of CommandInterceptors::Entry
       matches = [] of {String, String}
       entries.each do |entry|
-        result = entry.block.call(self, cmd.to_s, arg_list, kwarg_hash)
+        result = entry.block.call(self, cmd.to_s, args, kwargs)
         matches << {entry.label, result} if result
       end
 
       case matches.size
       when 0
-        processed = track_widget_option_callbacks(cmd, arg_list, kwarg_hash)
-        raw_command_argv(cmd, arg_list, processed)
+        processed = track_widget_option_callbacks(cmd, args, kwargs)
+        raw_command_argv(cmd, args, processed)
       when 1
         matches.first[1]
       else
         labels = matches.map { |label, _| label }.join(", ")
         raise AmbiguousCommandError.new(
-          "#{matches.size} command interceptors (#{labels}) matched #{cmd.inspect} #{arg_list.inspect} " \
+          "#{matches.size} command interceptors (#{labels}) matched #{cmd.inspect} #{args.inspect} " \
           "for widget type #{type.inspect}")
       end
     end

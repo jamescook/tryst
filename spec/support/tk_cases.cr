@@ -1,4 +1,6 @@
 require "./tk_test_registry"
+require "./widget_dsl_harness"
+require "../../src/teek/ui/realizer"
 
 # Parses a Tcl arg list of the form "-flag1 value1 -flag2 value2 ..."
 # (e.g. a stubbed dialog command's captured $args) into a Hash, so
@@ -247,10 +249,6 @@ tk_test "signal.break! in a create_widget command: callback does not raise" do |
   raise "button command did not fire" unless fired
 end
 
-# Widget doesn't exist yet (ctk-s34.6, blocked on this and Window landing
-# first) - these use raw path strings and app.command(:pack, path)
-# directly instead of a Widget's #pack, mirroring what test_winfo.rb
-# would do once Widget wraps this.
 tk_test "winfo.width/height returns the actual pixel size as Integers" do |app|
   app.show
   frame = app.create_widget("ttk::frame", width: 120, height: 80)
@@ -979,12 +977,12 @@ end
 # stays permanently registered but never actually matches any other
 # test's calls, including each other's.
 tk_test "CommandInterceptors: a single matching interceptor overrides raw_command" do |app|
-  Teek::CommandInterceptors.register("scale", "ctk-test-single") do |_app, _path, args, _kwargs|
-    args.first? == "ctk_intercept_marker_single" ? "intercepted-result" : nil
+  Teek::CommandInterceptors.register("scale", "test-interceptor-single") do |_app, _path, args, _kwargs|
+    args.first? == "intercept_marker_single" ? "intercepted-result" : nil
   end
 
   path = app.create_widget("scale")
-  result = app.command(path, "ctk_intercept_marker_single")
+  result = app.command(path, "intercept_marker_single")
   raise "expected the interceptor's result, got #{result.inspect}" unless result == "intercepted-result"
 end
 
@@ -995,20 +993,20 @@ tk_test "CommandInterceptors: a non-matching interceptor falls through to raw_co
 end
 
 tk_test "CommandInterceptors: two matching interceptors raise AmbiguousCommandError" do |app|
-  Teek::CommandInterceptors.register("scale", "ctk-test-ambiguous-a") do |_app, _path, args, _kwargs|
-    args.first? == "ctk_intercept_marker_ambiguous" ? "result-a" : nil
+  Teek::CommandInterceptors.register("scale", "test-interceptor-ambiguous-a") do |_app, _path, args, _kwargs|
+    args.first? == "intercept_marker_ambiguous" ? "result-a" : nil
   end
-  Teek::CommandInterceptors.register("scale", "ctk-test-ambiguous-b") do |_app, _path, args, _kwargs|
-    args.first? == "ctk_intercept_marker_ambiguous" ? "result-b" : nil
+  Teek::CommandInterceptors.register("scale", "test-interceptor-ambiguous-b") do |_app, _path, args, _kwargs|
+    args.first? == "intercept_marker_ambiguous" ? "result-b" : nil
   end
 
   path = app.create_widget("scale")
   begin
-    app.command(path, "ctk_intercept_marker_ambiguous")
+    app.command(path, "intercept_marker_ambiguous")
     raise "expected AmbiguousCommandError, got no exception"
   rescue ex : Teek::AmbiguousCommandError
     message = ex.message || ""
-    unless message.includes?("ctk-test-ambiguous-a") && message.includes?("ctk-test-ambiguous-b")
+    unless message.includes?("test-interceptor-ambiguous-a") && message.includes?("test-interceptor-ambiguous-b")
       raise "expected error message to mention both labels, got #{message.inspect}"
     end
   end
@@ -2200,4 +2198,25 @@ tk_test "a widget callback can spawn an Isolated context" do |app|
   app.command(".b_thr", "invoke")
 
   raise "expected 'from_callback', got #{callback_thread_result.inspect}" unless callback_thread_result == "from_callback"
+end
+
+# From ruby-teek's teek-ui/test/test_realizer.rb - Realizer's own specs
+# (spec/teek/ui/realizer_spec.cr) cover the create/link logic headlessly
+# against FakeApp; this confirms the same walk against a REAL Tk
+# interpreter actually creates and maps real widgets, not just records
+# what would have happened. Built directly against Realizer.new(app,
+# document) (WidgetDslHarness standing in for Session, which doesn't
+# exist yet) rather than through Teek::UI.app.
+tk_test "realizing a nested tree creates real, mapped widgets at hierarchical paths" do |app|
+  session = WidgetDslHarness.new
+  session.panel(:controls, &.button(:go, text: "Go"))
+
+  Teek::UI::Realizer.new(app, session.document).realize
+  app.show # a widget in a still-withdrawn root window never reports ismapped?
+  app.update
+
+  go_path = session.document.root.children.first.children.first.realized.try(&.path)
+  raise "expected .controls.go, got #{go_path.inspect}" unless go_path == ".controls.go"
+  raise "expected #{go_path} to exist" unless app.winfo.exists?(go_path)
+  raise "expected #{go_path} to be mapped (packed/visible), not just created" unless app.winfo.ismapped?(go_path)
 end
