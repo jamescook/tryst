@@ -35,12 +35,12 @@ session = Teek::UI.app(title: "Calculator") do |builder|
   service.on_change { |value| display.value = value }
 
   keypad = builder.grid(gap: 2) do |grid|
-    grid.cell(row: 0, col: 0, span: 4) do
+    grid.cell(row: 0, col: 0, colspan: 4, sticky: :ew, ipady: 8) do
       grid.text_box(bind: display, justify: :right, state: :readonly, font: "{TkDefaultFont} 24")
     end
 
     KEYS.each do |(label, row, col, span)|
-      grid.cell(row: row, col: col, span: span) do
+      grid.cell(row: row, col: col, colspan: span, sticky: :nsew) do
         grid.button(text: label, style: "Calc.TButton").on_action { service.press(label) }
       end
     end

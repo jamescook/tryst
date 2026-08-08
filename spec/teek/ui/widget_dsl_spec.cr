@@ -283,19 +283,58 @@ describe Teek::UI::WidgetDSL do
   it "cell tags the single widget it creates with row/col/span" do
     session = WidgetDslHarness.new
 
-    session.grid(:g) { |grid| grid.cell(row: 1, col: 2, span: 3) { grid.label(:l, text: "x") } }
+    session.grid(:g) { |grid| grid.cell(row: 1, col: 2, colspan: 3) { grid.label(:l, text: "x") } }
 
     label_node = session.document.root.children.first.children.first
-    label_node.cell_position.should eq(Teek::UI::CellPosition.new(row: 1, col: 2, span: 3))
+    label_node.cell_position.should eq(Teek::UI::CellPosition.new(row: 1, col: 2, colspan: 3))
   end
 
-  it "cell span defaults to 1" do
+  it "cell colspan and rowspan default to 1" do
     session = WidgetDslHarness.new
 
     session.grid(:g) { |grid| grid.cell(row: 0, col: 0) { grid.label(:l, text: "x") } }
 
-    label_node = session.document.root.children.first.children.first
-    label_node.cell_position.try(&.span).should eq(1)
+    cell = session.document.root.children.first.children.first.cell_position.as(Teek::UI::CellPosition)
+    cell.colspan.should eq(1)
+    cell.rowspan.should eq(1)
+  end
+
+  it "cell records a rowspan" do
+    session = WidgetDslHarness.new
+
+    session.grid(:g) { |grid| grid.cell(row: 0, col: 0, rowspan: 3) { grid.label(:l, text: "x") } }
+
+    cell = session.document.root.children.first.children.first.cell_position.as(Teek::UI::CellPosition)
+    cell.rowspan.should eq(3)
+    cell.colspan.should eq(1)
+  end
+
+  it "cell records per-cell layout overrides" do
+    session = WidgetDslHarness.new
+
+    session.grid(:g) do |grid|
+      grid.cell(row: 0, col: 0, sticky: :nsew, padx: 7, pady: 8, ipadx: 9, ipady: 10) { grid.label(:l, text: "x") }
+    end
+
+    cell = session.document.root.children.first.children.first.cell_position.as(Teek::UI::CellPosition)
+    cell.sticky.should eq("nsew")
+    cell.padx.should eq(7)
+    cell.pady.should eq(8)
+    cell.ipadx.should eq(9)
+    cell.ipady.should eq(10)
+  end
+
+  it "cell leaves the layout overrides nil when unasked for, so the grid's own defaults stand" do
+    session = WidgetDslHarness.new
+
+    session.grid(:g, gap: 4) { |grid| grid.cell(row: 0, col: 0) { grid.label(:l, text: "x") } }
+
+    cell = session.document.root.children.first.children.first.cell_position.as(Teek::UI::CellPosition)
+    cell.sticky.should be_nil
+    cell.padx.should be_nil
+    cell.pady.should be_nil
+    cell.ipadx.should be_nil
+    cell.ipady.should be_nil
   end
 
   it "cell coexists with an existing grow layout intent on the same widget" do
@@ -304,7 +343,7 @@ describe Teek::UI::WidgetDSL do
     session.grid(:g) { |grid| grid.cell(row: 0, col: 0) { grid.text_box(:t, grow: true) } }
 
     node = session.document.root.children.first.children.first
-    node.cell_position.should eq(Teek::UI::CellPosition.new(row: 0, col: 0, span: 1))
+    node.cell_position.should eq(Teek::UI::CellPosition.new(row: 0, col: 0, colspan: 1))
     node.layout.should eq({:grow => true} of Symbol => Teek::TclArgValue)
   end
 

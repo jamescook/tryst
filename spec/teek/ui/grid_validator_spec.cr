@@ -39,6 +39,72 @@ describe Teek::UI::GridValidator do
     errors.first.includes?(":b").should be_true
   end
 
+  it "a colspan overlapping the next cell along is reported" do
+    session = WidgetDslHarness.new
+    session.grid(:g) do |grid|
+      grid.cell(row: 0, col: 0, colspan: 2) { grid.label(:wide, text: "Wide") }
+      grid.cell(row: 0, col: 1) { grid.label(:squashed, text: "Squashed") }
+    end
+
+    grid_node = session.document.root.children.first
+    errors = [] of String
+    Teek::UI::GridValidator.call(grid_node, session.document.root, session.document, errors)
+
+    errors.size.should eq(1)
+    errors.first.includes?("row 0, col 1").should be_true
+    errors.first.includes?(":wide").should be_true
+    errors.first.includes?(":squashed").should be_true
+  end
+
+  it "a rowspan overlapping the cell below is reported" do
+    session = WidgetDslHarness.new
+    session.grid(:g) do |grid|
+      grid.cell(row: 0, col: 0, rowspan: 2) { grid.label(:tall, text: "Tall") }
+      grid.cell(row: 1, col: 0) { grid.label(:under, text: "Under") }
+    end
+
+    grid_node = session.document.root.children.first
+    errors = [] of String
+    Teek::UI::GridValidator.call(grid_node, session.document.root, session.document, errors)
+
+    errors.size.should eq(1)
+    errors.first.includes?("row 1, col 0").should be_true
+    errors.first.includes?(":tall").should be_true
+    errors.first.includes?(":under").should be_true
+  end
+
+  it "reports one error per colliding pair, not one per overlapped cell" do
+    session = WidgetDslHarness.new
+    session.grid(:g) do |grid|
+      grid.cell(row: 0, col: 0, colspan: 3) { grid.label(:banner, text: "Banner") }
+      grid.cell(row: 0, col: 0, colspan: 3) { grid.label(:other, text: "Other") }
+    end
+
+    grid_node = session.document.root.children.first
+    errors = [] of String
+    Teek::UI::GridValidator.call(grid_node, session.document.root, session.document, errors)
+
+    # Three cells overlap, but it's one mistake.
+    errors.size.should eq(1)
+  end
+
+  it "spans that tile without overlapping stay valid" do
+    session = WidgetDslHarness.new
+    session.grid(:g) do |grid|
+      grid.cell(row: 0, col: 0, colspan: 2) { grid.label(:top, text: "Top") }
+      grid.cell(row: 1, col: 0) { grid.label(:bottom_left, text: "BL") }
+      grid.cell(row: 1, col: 1) { grid.label(:bottom_right, text: "BR") }
+      grid.cell(row: 2, col: 0, rowspan: 2) { grid.label(:tall, text: "Tall") }
+      grid.cell(row: 2, col: 1) { grid.label(:side, text: "Side") }
+    end
+
+    grid_node = session.document.root.children.first
+    errors = [] of String
+    Teek::UI::GridValidator.call(grid_node, session.document.root, session.document, errors)
+
+    errors.should be_empty
+  end
+
   it "different grid cells don't collide" do
     session = WidgetDslHarness.new
     session.grid(:g) do |grid|

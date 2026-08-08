@@ -265,7 +265,7 @@ describe Teek::UI::Realizer do
 
   it "grid layout adds columnspan only when span > 1" do
     session = WidgetDslHarness.new
-    session.grid(:g) { |grid| grid.cell(row: 1, col: 0, span: 2) { grid.label(:wide, text: "Wide") } }
+    session.grid(:g) { |grid| grid.cell(row: 1, col: 0, colspan: 2) { grid.label(:wide, text: "Wide") } }
 
     app = FakeApp.new
     Teek::UI::Realizer.new(app, session.document).realize

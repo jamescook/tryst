@@ -282,13 +282,24 @@ module Teek
                                     "g.cell(row:, col:) { ... }")
           end
 
+          # The grid's own defaults, overridable per cell - a cell that
+          # says nothing gets exactly what it always got.
           opts = Hash(String, TclArgValue).new
           opts["row"] = cell.row
           opts["column"] = cell.col
-          opts["sticky"] = "ew"
-          opts["padx"] = gap
-          opts["pady"] = gap
-          opts["columnspan"] = cell.span if cell.span > 1
+          opts["sticky"] = cell.sticky || "ew"
+          opts["padx"] = cell.padx || gap
+          opts["pady"] = cell.pady || gap
+          opts["columnspan"] = cell.colspan if cell.colspan > 1
+          opts["rowspan"] = cell.rowspan if cell.rowspan > 1
+          # Internal padding has no grid-level default to fall back to -
+          # it's per cell or not at all.
+          if ipadx = cell.ipadx
+            opts["ipadx"] = ipadx
+          end
+          if ipady = cell.ipady
+            opts["ipady"] = ipady
+          end
 
           next unless realized = child.realized
 

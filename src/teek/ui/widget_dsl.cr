@@ -109,14 +109,23 @@ module Teek
 
       # Position the single widget declared in the block at (row, col) in
       # the enclosing ui.grid. Only valid directly inside a grid's block.
-      def cell(row : Int32, col : Int32, span : Int32 = 1, &block : self -> Nil) : Nil
-        place_cell(row, col, span) { block.call(self) }
+      #
+      # colspan/rowspan widen the cell across neighbouring columns/rows.
+      # sticky/padx/pady/ipadx/ipady override this one cell's placement;
+      # left alone, the grid's own defaults apply (see
+      # Realizer#arrange_grid).
+      def cell(row : Int32, col : Int32, colspan : Int32 = 1, rowspan : Int32 = 1,
+               sticky : (Symbol | String)? = nil, padx : Int32? = nil, pady : Int32? = nil,
+               ipadx : Int32? = nil, ipady : Int32? = nil, &block : self -> Nil) : Nil
+        place_cell(row, col, colspan, rowspan, sticky, padx, pady, ipadx, ipady) { block.call(self) }
       end
 
       # Raises ArgumentError if this cell's block builds anything other
       # than exactly one widget.
-      def cell(row : Int32, col : Int32, span : Int32 = 1) : Nil
-        place_cell(row, col, span) { }
+      def cell(row : Int32, col : Int32, colspan : Int32 = 1, rowspan : Int32 = 1,
+               sticky : (Symbol | String)? = nil, padx : Int32? = nil, pady : Int32? = nil,
+               ipadx : Int32? = nil, ipady : Int32? = nil) : Nil
+        place_cell(row, col, colspan, rowspan, sticky, padx, pady, ipadx, ipady) { }
       end
 
       # Mark which columns/rows of the enclosing ui.grid absorb leftover
@@ -301,7 +310,9 @@ module Teek
       # then requires it to have appended exactly one widget to the
       # enclosing grid (found via #current_grid!), and records that
       # widget's cell position on its own node.
-      private def place_cell(row : Int32, col : Int32, span : Int32, &block : -> Nil) : Nil
+      private def place_cell(row : Int32, col : Int32, colspan : Int32, rowspan : Int32,
+                             sticky : (Symbol | String)?, padx : Int32?, pady : Int32?,
+                             ipadx : Int32?, ipady : Int32?, &block : -> Nil) : Nil
         grid_node = current_grid!("cell")
         before = grid_node.children.size
         block.call
@@ -310,7 +321,9 @@ module Teek
           raise ArgumentError.new("cell needs exactly one widget declared in its block (got #{placed.size})")
         end
 
-        placed.first.cell_position = CellPosition.new(row: row, col: col, span: span)
+        placed.first.cell_position = CellPosition.new(
+          row: row, col: col, colspan: colspan, rowspan: rowspan,
+          sticky: sticky.try(&.to_s), padx: padx, pady: pady, ipadx: ipadx, ipady: ipady)
       end
 
       # @api private - shared by both #overlay overloads. Same shape as

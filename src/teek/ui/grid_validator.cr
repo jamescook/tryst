@@ -33,19 +33,31 @@ module Teek
       end
 
       private def self.check_cell_collisions(node : Node, errors : Array(String)) : Nil
-        groups = Hash({Int32, Int32}, Array(Node)).new { |hash, position| hash[position] = [] of Node }
+        # Occupancy is checked over every cell a widget covers, not just
+        # its top-left corner: a colspan/rowspan can land on a neighbour
+        # that sits at a different (row, col) entirely, which is invisible
+        # to a corner-only check and then fights over the cell at realize.
+        occupancy = Hash({Int32, Int32}, Array(Node)).new { |hash, position| hash[position] = [] of Node }
         node.children.each do |child|
-          if cell = child.cell_position
-            groups[{cell.row, cell.col}] << child
-          end
+          child.cell_position.try(&.each_occupied { |position| occupancy[position] << child })
         end
 
-        groups.each do |position, children|
+        # One error per colliding PAIR. Two widgets overlapping across
+        # three cells is one mistake, and reporting it three times buries
+        # the rest of the validation output.
+        reported = Set({UInt64, UInt64}).new
+        occupancy.keys.sort!.each do |position|
+          children = occupancy[position]
           next if children.size <= 1
 
           row, col = position
-          errors << "#{WidgetValidators.describe(node)} has more than one widget at row #{row}, col #{col}: " \
-                    "#{children.map { |child| WidgetValidators.describe(child) }.join(", ")}"
+          children.each_combination(2, reuse: true) do |(first, second)|
+            pair = {first.object_id, second.object_id}
+            next unless reported.add?(pair)
+
+            errors << "#{WidgetValidators.describe(node)} has more than one widget at row #{row}, col #{col}: " \
+                      "#{WidgetValidators.describe(first)}, #{WidgetValidators.describe(second)}"
+          end
         end
       end
 

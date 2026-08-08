@@ -11,7 +11,31 @@ module Teek
     # a nested Hash doesn't fit TclArgValue's closed union, same reasoning
     # as WidgetType#flow needing its own FlowConfig record instead of
     # Hash(Symbol, TclArgValue).
-    record CellPosition, row : Int32, col : Int32, span : Int32 = 1
+    # colspan/rowspan rather than ruby-teek's lone span: - a symmetric,
+    # self-documenting pair, where span:/rowspan: reads as though the two
+    # were different kinds of thing. The per-cell overrides below are all
+    # nilable on purpose: nil means "say nothing", so Realizer#arrange_grid
+    # falls back to the grid's own defaults (sticky ew, padx/pady from
+    # gap:) exactly as it did before any of them existed.
+    record CellPosition,
+      row : Int32,
+      col : Int32,
+      colspan : Int32 = 1,
+      rowspan : Int32 = 1,
+      sticky : String? = nil,
+      padx : Int32? = nil,
+      pady : Int32? = nil,
+      ipadx : Int32? = nil,
+      ipady : Int32? = nil do
+      # Every cell this widget occupies, which is what overlap detection
+      # needs - a spanning widget collides with anything under any part
+      # of it, not just at its own top-left corner.
+      def each_occupied(& : {Int32, Int32} -> Nil) : Nil
+        (row...row + rowspan).each do |occupied_row|
+          (col...col + colspan).each { |occupied_col| yield({occupied_row, occupied_col}) }
+        end
+      end
+    end
 
     # A single element of the retained-mode tree - a widget, layout
     # container, reactive var, or deferred build-time op (the categories
