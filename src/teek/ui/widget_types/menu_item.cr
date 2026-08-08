@@ -11,7 +11,7 @@ require "../menu_entry_addressing"
 # the hand-written MenuBuilder#item.
 Teek::UI::WidgetTypes.register(
   Teek::UI::WidgetType.new(
-    type: :menu_item, tk_command: "menu",
+    type: :menu_item, tk_command: "menu", takes_command: true,
     addressing: Proc(Teek::UI::Node, Teek::UI::AddressingStrategy).new { |node| Teek::UI::MenuEntryAddressing.new(node) }
   )
 )

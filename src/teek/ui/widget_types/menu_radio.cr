@@ -6,7 +6,7 @@ require "../menu_entry_addressing"
 # reachable only via the hand-written MenuBuilder#radio.
 Teek::UI::WidgetTypes.register(
   Teek::UI::WidgetType.new(
-    type: :menu_radio, tk_command: "menu",
+    type: :menu_radio, tk_command: "menu", takes_command: true,
     addressing: Proc(Teek::UI::Node, Teek::UI::AddressingStrategy).new { |node| Teek::UI::MenuEntryAddressing.new(node) }
   )
 )

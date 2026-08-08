@@ -41,7 +41,7 @@ session = Teek::UI.app(title: "Calculator") do |builder|
 
     KEYS.each do |(label, row, col, span)|
       grid.cell(row: row, col: col, span: span) do
-        grid.button(text: label, style: "Calc.TButton").on_click { service.press(label) }
+        grid.button(text: label, style: "Calc.TButton").on_action { service.press(label) }
       end
     end
 

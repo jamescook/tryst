@@ -122,7 +122,39 @@ module Teek
         end
       end
 
-      # Fires on a left click.
+      # Fires when the widget is activated, via Tk's own -command option.
+      # Prefer this to #on_click for anything meant to be pressed: -command
+      # also fires on keyboard activation of a focused widget (Space on a
+      # button), and treats a press dragged off the widget before release
+      # as a cancel, where a raw <Button-1> binding has already fired on
+      # the way down.
+      #
+      # Only for types whose Tk command actually takes -command (see
+      # WidgetType#takes_command?) - anything else raises, rather than
+      # quietly setting an option Tk will ignore.
+      def on_action(&block : Array(String), CallbackSignal -> Nil) : Handle
+        unless WidgetTypes.for_type(@node.type).try(&.takes_command?)
+          raise ArgumentError.new("#{@node.type} has no -command option to act on - " \
+                                  "use on_click for a literal <Button-1> binding")
+        end
+
+        # Before realize the handler rides along in the node's opts, which
+        # already carry Procs for exactly this (MenuBuilder#item has always
+        # passed its block this way) - App#command turns a Proc-valued
+        # option into a registered, widget-owned callback at create time.
+        # After realize there's a live widget to reconfigure instead.
+        if @node.realized
+          configure(command: block)
+        else
+          @node.opts[:command] = block
+        end
+        self
+      end
+
+      # Fires on a left click. A literal <Button-1> binding: it fires on
+      # the press, wherever the release lands, and never on a keyboard
+      # activation - see #on_action for the option most pressable widgets
+      # actually want.
       def on_click(&block : Array(String), CallbackSignal -> Nil) : Handle
         bind_event("<Button-1>", block)
         self

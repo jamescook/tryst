@@ -65,6 +65,7 @@ module Teek
         @natively_scrollable : Bool = false,
         @arranged : Bool = true,
         @scroll_default : Symbol = :auto_scroll,
+        @takes_command : Bool = false,
         @bind_option : Symbol? = nil,
         @flow : FlowConfig? = nil,
         arrange : Proc(Realizer, Node, Array(Node), Nil)? = nil,
@@ -87,6 +88,15 @@ module Teek
 
       def natively_scrollable? : Bool
         @natively_scrollable
+      end
+
+      # Whether this type's Tk command takes a -command option meaning
+      # "the user activated this" - what Handle#on_action wires itself to.
+      # Deliberately false for slider: ttk::scale does take -command, but
+      # it fires on every value change with the new value, which isn't an
+      # activation (and bind: already covers value changes).
+      def takes_command? : Bool
+        @takes_command
       end
 
       # The current value of this type's own Teek::UI global scroll-default

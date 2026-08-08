@@ -100,6 +100,57 @@ describe Teek::UI::Handle do
     app.calls.last.kwargs.should eq({"state" => :disabled} of String => Teek::TclArgValue)
   end
 
+  it "on_action stores the handler as a -command option before realize" do
+    node = Teek::UI::Node.new(type: :button, name: :go)
+    handle = Teek::UI::Handle.new(node)
+
+    result = handle.on_action { |_v, _s| }
+
+    result.should be(handle)
+    node.opts[:command].should be_a(Proc(Array(String), Teek::CallbackSignal, Nil))
+    # Not an event binding - that's on_click's mechanism, not this one.
+    node.events.should be_empty
+  end
+
+  it "on_action configures the live widget once already realized" do
+    app = FakeApp.new
+    node = Teek::UI::Node.new(type: :button, name: :go)
+    node.realized = Teek::UI::RealizedNode.new(app: app, path: ".win.go")
+    handle = Teek::UI::Handle.new(node)
+
+    handle.on_action { |_v, _s| }
+
+    call = app.calls.last
+    call.cmd.should eq(".win.go")
+    call.args.should eq([:configure] of Teek::TclArgValue)
+    call.kwargs.keys.should eq(["command"])
+    call.kwargs["command"].should be_a(Proc(Array(String), Teek::CallbackSignal, Nil))
+    app.binds.should be_empty
+  end
+
+  it "on_action is available on every type whose Tk command takes -command" do
+    {:button, :checkbox, :radio, :menu_item, :menu_checkbox, :menu_radio}.each do |type|
+      node = Teek::UI::Node.new(type: type, name: :thing)
+      Teek::UI::Handle.new(node).on_action { |_v, _s| }
+      node.opts[:command].should be_a(Proc(Array(String), Teek::CallbackSignal, Nil))
+    end
+  end
+
+  it "on_action refuses a type with no -command option rather than setting a dead one" do
+    node = Teek::UI::Node.new(type: :label, name: :caption)
+    handle = Teek::UI::Handle.new(node)
+
+    expect_raises(ArgumentError, /no -command option/) { handle.on_action { |_v, _s| } }
+    node.opts[:command]?.should be_nil
+  end
+
+  it "on_action refuses a slider - its -command is a value-change hook, not an activation" do
+    node = Teek::UI::Node.new(type: :slider, name: :speed)
+    handle = Teek::UI::Handle.new(node)
+
+    expect_raises(ArgumentError, /no -command option/) { handle.on_action { |_v, _s| } }
+  end
+
   it "on_click queues an event binding before realize" do
     node = Teek::UI::Node.new(type: :button, name: :go)
     handle = Teek::UI::Handle.new(node)
