@@ -2,7 +2,7 @@
 # ruby-teek already validated in its own Dockerfile.ci-test (tcl-dev/tk-dev
 # -> /usr/include/tcl8.6, default multiarch lib dir). Runs under Xvfb so Tk
 # init (which opens a main window) never pops a real window on the host -
-# same concern noted in ruby-teek about local test runs.
+# the same concern ruby-teek notes about local test runs.
 #
 # Uses the official Crystal image as a base rather than installing Crystal
 # via apt on plain ubuntu:25.04 - the third-party OBS apt repo for Crystal
