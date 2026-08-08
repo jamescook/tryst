@@ -323,6 +323,23 @@ module Teek
       self.window(window).withdraw
     end
 
+    # Show the busy cursor on a window while the block runs, and return
+    # whatever the block returned. Defaults to the root window (".").
+    # window accepts a Widget or a path String.
+    #
+    # Tk's busy cursor also swallows mouse events for the window and its
+    # children while held, which is the point - it's how you stop a user
+    # clicking into a half-finished operation. The cursor is forgotten
+    # again even if the block raises, so a failure can't leave the window
+    # wedged looking busy forever.
+    def busy(window = ".", &)
+      tcl_invoke("tk", "busy", "hold", window.to_s)
+      update_idletasks
+      yield
+    ensure
+      tcl_invoke("tk", "busy", "forget", window.to_s)
+    end
+
     # Enable the Tk debug console, toggled with the given keyboard
     # shortcut (default: F12). The console is a built-in interactive Tcl
     # shell, useful for inspecting variables and running Tcl commands at

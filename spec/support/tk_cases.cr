@@ -417,6 +417,64 @@ tk_test "set_appearance also accepts a raw Tk appearance name", darwin_only: tru
   end
 end
 
+# -- App#busy --
+
+# Whether Tk currently considers window busy. `tk busy status` answers
+# with a Tcl boolean, so it goes through tcl_to_bool rather than a string
+# comparison against "1".
+private def tk_busy?(app, window : String) : Bool
+  app.tcl_to_bool(app.tcl_invoke("tk", "busy", "status", window))
+end
+
+tk_test "App#busy holds the busy cursor for the block, then forgets it" do |app|
+  app.show
+  app.update
+
+  busy_during = false
+  app.busy { busy_during = tk_busy?(app, ".") }
+
+  raise "expected the window to be busy inside the block" unless busy_during
+  raise "expected the busy cursor to be forgotten after the block" if tk_busy?(app, ".")
+end
+
+tk_test "App#busy returns the block's value" do |app|
+  app.show
+  app.update
+
+  result = app.busy { 42 }
+  raise "expected 42, got #{result.inspect}" unless result == 42
+end
+
+tk_test "App#busy forgets the busy cursor even when the block raises" do |app|
+  app.show
+  app.update
+
+  raised = false
+  begin
+    app.busy { raise "boom" }
+  rescue ex
+    raised = true
+    raise "expected the block's own exception, got #{ex.message.inspect}" unless ex.message == "boom"
+  end
+
+  raise "expected the block's exception to propagate out of busy" unless raised
+  raise "expected the busy cursor to be forgotten after the exception" if tk_busy?(app, ".")
+end
+
+tk_test "App#busy applies to the window it was given, not just the root" do |app|
+  app.show
+  app.tcl_eval("toplevel .t_busy")
+  app.update
+
+  busy_during = false
+  app.busy(".t_busy") { busy_during = tk_busy?(app, ".t_busy") }
+
+  raise "expected .t_busy to be busy inside the block" unless busy_during
+  raise "expected .t_busy's busy cursor to be forgotten after the block" if tk_busy?(app, ".t_busy")
+
+  app.destroy(".t_busy")
+end
+
 tk_test "Window#on_close registers a WM_DELETE_WINDOW handler" do |app|
   app.tcl_eval("toplevel .t")
   app.update
