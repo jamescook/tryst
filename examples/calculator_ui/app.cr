@@ -48,22 +48,28 @@ session = Teek::UI.app(title: "Calculator") do |builder|
     # Equal-width columns.
     grid.stretch(columns: [0, 1, 2, 3])
   end
+
+  # The handful of things with no DSL spelling of their own. raw runs
+  # during realize, once there's a live interpreter - the DSL is sugar
+  # over teek, not a wall around it. Note what the block is handed: an
+  # AppContract exposing structured #command, and deliberately no
+  # tcl_eval, so there's no string interpolation to get wrong.
+  builder.raw do |app|
+    app.command(:wm, :resizable, ".", 0, 0)
+
+    # A larger button font, since the macOS aqua theme ignores vertical
+    # stretch - font size is what drives button height.
+    app.command("ttk::style", "configure", "Calc.TButton", font: "{TkDefaultFont} 18")
+
+    if grid_path = keypad.try(&.path)
+      4.times { |column| app.command(:grid, "columnconfigure", grid_path, column, minsize: 60) }
+    end
+
+    # A bare CLI-launched Tk window doesn't get foreground focus on macOS.
+    app.command(:wm, :attributes, ".", "-topmost", 1)
+    app.command(:raise, ".")
+    app.command(:focus, "-force", ".")
+  end
 end
-
-# Everything below needs a live interpreter, so it happens after realize.
-# The DSL is sugar over teek, not a wall around it - session.app is the
-# same Teek::App the single-file version drives directly.
-app = session.realize
-app.set_window_resizable(false, false)
-
-# A larger button font, since the macOS aqua theme ignores vertical
-# stretch - font size is what drives button height.
-app.tcl_eval("ttk::style configure Calc.TButton -font {{TkDefaultFont} 18}")
-if grid_path = keypad.try(&.path)
-  4.times { |column| app.command(:grid, "columnconfigure", grid_path, column, minsize: 60) }
-end
-
-# A bare CLI-launched Tk window doesn't get foreground focus on macOS.
-app.tcl_eval("wm attributes . -topmost 1; raise .; focus -force .")
 
 session.run
