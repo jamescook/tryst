@@ -323,6 +323,28 @@ module Teek
       self.window(window).withdraw
     end
 
+    # Pixel width of text in a given font. See Interp#text_width - this
+    # goes through Tk's C font API, not the slower Tcl `font measure`.
+    def text_width(font : String, text : String) : Int32
+      @interp.text_width(font, text)
+    end
+
+    # A font's :ascent, :descent and :linespace in pixels. See
+    # Interp#font_metrics.
+    def font_metrics(font : String) : {ascent: Int32, descent: Int32, linespace: Int32}
+      @interp.font_metrics(font)
+    end
+
+    # How much of text fits within max_pixels (-1 for unlimited), as
+    # :bytes and their :width in pixels - for truncation, ellipsis and
+    # line wrapping. See Interp#measure_chars for the flags.
+    def measure_chars(font : String, text : String, max_pixels : Int32,
+                      partial_ok : Bool = false, whole_words : Bool = false,
+                      at_least_one : Bool = false) : {bytes: Int32, width: Int32}
+      @interp.measure_chars(font, text, max_pixels,
+        partial_ok: partial_ok, whole_words: whole_words, at_least_one: at_least_one)
+    end
+
     # Show the busy cursor on a window while the block runs, and return
     # whatever the block returned. Defaults to the root window (".").
     # window accepts a Widget or a path String.

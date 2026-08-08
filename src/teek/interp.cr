@@ -103,12 +103,43 @@ lib LibTcl
 end
 
 lib LibTk
+  # Tk_Window and Tk_Font are both opaque pointers to Tk-internal structs
+  # (tk.h typedefs them off Tk_FakeWin/TkFont) - never dereferenced here,
+  # only handed back to Tk.
+  type Window = Void*
+  type Font = Void*
+
+  # Tk_FontMetrics (tk.h) - three ints, where linespace is defined as
+  # ascent + descent.
+  struct FontMetrics
+    ascent : LibC::Int
+    descent : LibC::Int
+    linespace : LibC::Int
+  end
+
+  # Flags passed to Tk_MeasureChars (tk.h).
+  TK_WHOLE_WORDS  = 1
+  TK_AT_LEAST_ONE = 2
+  TK_PARTIAL_OK   = 4
+
   fun init = Tk_Init(interp : LibTcl::Interp*) : LibC::Int
   fun get_num_main_windows = Tk_GetNumMainWindows : LibC::Int
 
   # See Interp#create_console.
   fun init_console_channels = Tk_InitConsoleChannels(interp : LibTcl::Interp*)
   fun create_console_window = Tk_CreateConsoleWindow(interp : LibTcl::Interp*) : LibC::Int
+
+  # Font measurement - see Interp#text_width and friends. Tk 8.6 spells
+  # every length here as int; Tcl 9 switched several to Tcl_Size, so these
+  # signatures are 8.6-specific (which is all this port targets).
+  fun main_window = Tk_MainWindow(interp : LibTcl::Interp*) : Window
+  fun get_font = Tk_GetFont(interp : LibTcl::Interp*, tkwin : Window, str : LibC::Char*) : Font
+  fun free_font = Tk_FreeFont(font : Font)
+  fun text_width = Tk_TextWidth(font : Font, str : LibC::Char*, num_bytes : LibC::Int) : LibC::Int
+  fun get_font_metrics = Tk_GetFontMetrics(font : Font, metrics : FontMetrics*)
+  fun measure_chars = Tk_MeasureChars(font : Font, source : LibC::Char*, num_bytes : LibC::Int,
+                                      max_pixels : LibC::Int, flags : LibC::Int,
+                                      length : LibC::Int*) : LibC::Int
 end
 
 module Teek
@@ -500,6 +531,71 @@ module Teek
 
     def delete : Nil
       LibTcl.delete_interp(@ptr)
+    end
+
+    # -- font measurement --
+    #
+    # These go straight to Tk's C font API instead of the Tcl-level
+    # `font measure`/`font metrics` commands, which is the point: no Tcl
+    # string formatting, parsing or result marshaling per measurement,
+    # which matters when laying out text a glyph at a time.
+
+    # Pixel width of text rendered in font. font is any Tk font
+    # description - a named font ("TkDefaultFont") or a spec
+    # ("Helvetica 12").
+    def text_width(font : String, text : String) : Int32
+      with_font(font) do |tkfont|
+        LibTk.text_width(tkfont, text, text.bytesize)
+      end
+    end
+
+    # A font's ascent and descent in pixels, plus the linespace Tk derives
+    # from them (their sum).
+    def font_metrics(font : String) : {ascent: Int32, descent: Int32, linespace: Int32}
+      with_font(font) do |tkfont|
+        LibTk.get_font_metrics(tkfont, out metrics)
+        {ascent: metrics.ascent, descent: metrics.descent, linespace: metrics.linespace}
+      end
+    end
+
+    # How much of text fits within max_pixels, for truncation, ellipsis or
+    # line wrapping: bytes is how many bytes fit, width their actual pixel
+    # width. max_pixels of -1 means unlimited.
+    #
+    # partial_ok stops at a character that only partly fits rather than
+    # before it; whole_words breaks on a word boundary instead of
+    # mid-word; at_least_one returns one character even when nothing fits,
+    # which is how you avoid an infinite loop in a wrapping routine.
+    def measure_chars(font : String, text : String, max_pixels : Int32,
+                      partial_ok : Bool = false, whole_words : Bool = false,
+                      at_least_one : Bool = false) : {bytes: Int32, width: Int32}
+      flags = 0
+      flags |= LibTk::TK_PARTIAL_OK if partial_ok
+      flags |= LibTk::TK_WHOLE_WORDS if whole_words
+      flags |= LibTk::TK_AT_LEAST_ONE if at_least_one
+
+      with_font(font) do |tkfont|
+        bytes = LibTk.measure_chars(tkfont, text, text.bytesize, max_pixels, flags, out width)
+        {bytes: bytes, width: width}
+      end
+    end
+
+    # Resolves a font description for the duration of the block. Tk_GetFont
+    # hands back a reference into a shared, interpreter-wide font cache, so
+    # the matching Tk_FreeFont runs in an ensure - a leaked reference keeps
+    # that cache entry alive for the life of the process.
+    private def with_font(font : String, &)
+      main_win = LibTk.main_window(@ptr)
+      raise TclError.new("Tk is not initialized (no main window)") if main_win.null?
+
+      tkfont = LibTk.get_font(@ptr, main_win, font)
+      raise TclError.new("font not found: #{font} - #{result}") if tkfont.null?
+
+      begin
+        yield tkfont
+      ensure
+        LibTk.free_font(tkfont)
+      end
     end
 
     private def result : String
