@@ -387,6 +387,71 @@ module Teek
       self.window(window).resizable
     end
 
+    # macOS window appearances accepted by #set_appearance. Crystal
+    # converts a symbol literal at the call site, so set_appearance(:dark)
+    # works and reads much like ruby-teek's own `app.appearance = :dark`.
+    enum Appearance
+      Light
+      Dark
+      Auto
+
+      # The name Tk's appearance command expects for this mode.
+      def to_tcl : String
+        case self
+        when Light then "aqua"
+        when Dark  then "darkaqua"
+        else            "auto"
+        end
+      end
+    end
+
+    @aqua : Bool?
+
+    # Whether Tk is running on macOS's Aqua windowing system. Memoized -
+    # the windowing system can't change for the life of the process.
+    # (ruby-teek writes this as `@aqua ||=`, which re-runs the Tcl call
+    # every time on non-macOS, where the answer is false.)
+    def aqua? : Bool
+      cached = @aqua
+      return cached unless cached.nil?
+      @aqua = tcl_eval("tk windowingsystem") == "aqua"
+    end
+
+    # A window's macOS appearance: "aqua", "darkaqua", or "auto". Returns
+    # nil on every other platform.
+    #
+    # On Tk 8.6 - all this port targets - the only way in is Tk's private
+    # tk::unsupported namespace; the supported `wm attributes -appearance`
+    # spelling arrived in Tk 9. Tk answers with the appearance a window had
+    # *before* the call, and with an empty string if the window has no
+    # NSWindow yet, so show and settle a window before trusting this.
+    def appearance(window = ".") : String?
+      return unless aqua?
+      tcl_invoke("tk::unsupported::MacWindowStyle", "appearance", window.to_s)
+    end
+
+    # Force a window's macOS appearance, opting it out of the system
+    # light/dark preference; :auto hands it back. A no-op on every other
+    # platform. Named set_appearance rather than appearance= to match this
+    # port's set_-prefix convention (see Window#set_title).
+    def set_appearance(mode : Appearance, window = ".") : Nil
+      set_appearance(mode.to_tcl, window)
+    end
+
+    # Raw-value overload, for an appearance name Appearance doesn't cover.
+    def set_appearance(mode : String, window = ".") : Nil
+      return unless aqua?
+      tcl_invoke("tk::unsupported::MacWindowStyle", "appearance", window.to_s, mode)
+    end
+
+    # Whether a window is currently being displayed in dark mode. Always
+    # false off macOS. Reflects the window's own forced appearance when
+    # #set_appearance pinned one, and the system preference otherwise.
+    def dark?(window = ".") : Bool
+      return false unless aqua?
+      tcl_to_bool(tcl_invoke("tk::unsupported::MacWindowStyle", "isdark", window.to_s))
+    end
+
     # Register a handler for the window manager's close button. Defaults
     # to the root window ("."). window accepts a Widget or a path String.
     # Prefer app.window(window).on_close { } for new code - this flat

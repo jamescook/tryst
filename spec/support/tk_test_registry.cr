@@ -27,13 +27,23 @@ end
 #    in this process - there's no Tk_Init here at all. Instead a real
 #    Crystal::Spec example is generated that asks the persistent worker
 #    (TkWorkerClient) to run this test by name and asserts on the result.
-def tk_test(name : String, &block : Teek::App -> Nil) : Nil
+#
+# darwin_only: true marks a case that only has meaningful behavior to
+# assert on macOS (currently the Aqua-only appearance/dark-mode API).
+# Off macOS it's reported as pending rather than dropped, so the suite
+# still says out loud that it didn't run - and the block is registered
+# either way, so it stays compiled and type-checked on every platform.
+def tk_test(name : String, *, darwin_only : Bool = false, &block : Teek::App -> Nil) : Nil
   TkTest::REGISTRY[name] = block
 
   {% unless flag?(:tk_worker_mode) %}
-    it name do
-      result = TkWorkerClient.run(name)
-      raise "#{name} failed: #{result.error}" unless result.success?
+    if darwin_only && !Teek.platform.darwin?
+      pending name
+    else
+      it name do
+        result = TkWorkerClient.run(name)
+        raise "#{name} failed: #{result.error}" unless result.success?
+      end
     end
   {% end %}
 end

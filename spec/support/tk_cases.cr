@@ -359,6 +359,64 @@ tk_test "Window#deiconify/#withdraw map/unmap the window" do |app|
   raise "expected root window to be unmapped after withdraw" if app.winfo.ismapped?(".")
 end
 
+# -- App#appearance / #set_appearance / #dark? (macOS Aqua only) --
+#
+# Tk reads a window's appearance off its NSView, falling back to the
+# application's - i.e. the system theme - when the window has no view yet
+# (TkMacOSXInDarkMode in tkMacOSXWm.c). So every case here shows and
+# settles the root window first; without that these would silently be
+# measuring whatever dark-mode setting the host machine happens to have.
+# Each one restores :auto afterwards, because the worker process is shared
+# and reset_tk_state! doesn't (and shouldn't) know about appearance - a
+# forced appearance left behind would leak into every later test.
+
+tk_test "set_appearance(:light) selects aqua, and dark? is false", darwin_only: true do |app|
+  app.show
+  app.update_idletasks
+
+  begin
+    app.set_appearance(:light)
+    raise "expected aqua, got #{app.appearance.inspect}" unless app.appearance == "aqua"
+    raise "dark? should be false in light mode" if app.dark?
+  ensure
+    app.set_appearance(:auto)
+  end
+end
+
+tk_test "set_appearance(:dark) selects darkaqua, and dark? is true", darwin_only: true do |app|
+  app.show
+  app.update_idletasks
+
+  begin
+    app.set_appearance(:dark)
+    raise "expected darkaqua, got #{app.appearance.inspect}" unless app.appearance == "darkaqua"
+    raise "dark? should be true in dark mode" unless app.dark?
+  ensure
+    app.set_appearance(:auto)
+  end
+end
+
+tk_test "set_appearance(:auto) hands the appearance back to system preferences", darwin_only: true do |app|
+  app.show
+  app.update_idletasks
+
+  app.set_appearance(:dark)
+  app.set_appearance(:auto)
+  raise "expected auto, got #{app.appearance.inspect}" unless app.appearance == "auto"
+end
+
+tk_test "set_appearance also accepts a raw Tk appearance name", darwin_only: true do |app|
+  app.show
+  app.update_idletasks
+
+  begin
+    app.set_appearance("darkaqua")
+    raise "expected darkaqua from the String overload, got #{app.appearance.inspect}" unless app.appearance == "darkaqua"
+  ensure
+    app.set_appearance(:auto)
+  end
+end
+
 tk_test "Window#on_close registers a WM_DELETE_WINDOW handler" do |app|
   app.tcl_eval("toplevel .t")
   app.update
