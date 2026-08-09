@@ -24,13 +24,13 @@ module Teek
           window.set_resizable(width, height)
         end
 
-        # Transient means the window manager treats this as a subordinate
-        # of its parent - it stays above it, and usually skips the
-        # taskbar. Opt out with transient: false for a genuinely
-        # independent second window.
-        app.command(:wm, :transient, path, parent_path) unless opts[:transient]? == false
         share_macos_menu(app, path, parent_path) if Teek.platform.darwin?
 
+        # Transient is applied by Handle#show, not here. On Aqua a
+        # transient window is mapped whenever its master is, so setting
+        # it on a window that starts withdrawn makes that window appear
+        # the moment the root does - which would defeat the point of
+        # declaring windows up front and revealing them individually.
         window.withdraw
       end
 

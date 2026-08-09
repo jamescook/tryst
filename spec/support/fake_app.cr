@@ -26,6 +26,7 @@ class FakeWindow
   getter titles = [] of String
   getter geometries = [] of String
   getter resizables = [] of ResizableCall
+  getter transients = [] of String
   getter withdrawals = 0
   getter deiconifies = 0
 
@@ -49,6 +50,10 @@ class FakeWindow
 
   def set_resizable(width : Bool, height : Bool) : Nil
     @resizables << ResizableCall.new(width, height)
+  end
+
+  def set_transient(master) : Nil # ameba:disable Naming/AccessorMethodName
+    @transients << master.to_s
   end
 
   def geometry : String

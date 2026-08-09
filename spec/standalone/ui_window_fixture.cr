@@ -56,12 +56,15 @@ raise "window: expected the title Tools, got #{title.inspect}" unless title == "
 resizable = app.command(:wm, :resizable, ".tools")
 raise "window: expected resizable 0 0, got #{resizable.inspect}" unless resizable == "0 0"
 
-# Case 4: transient to the root by default, opted out with transient: false.
-transient = app.command(:wm, :transient, ".tools")
-raise "window: expected .tools transient to ., got #{transient.inspect}" unless transient == "."
-free_transient = app.command(:wm, :transient, ".free")
-unless free_transient.empty?
-  raise "window: expected transient: false to leave .free independent, got #{free_transient.inspect}"
+# Case 4: not yet transient. #show applies that (Case 7a) - a window
+# that starts withdrawn must not be transient, because on macOS the
+# window manager maps a transient window whenever its master is mapped,
+# so app.show above would have put .tools on screen uninvited. Xvfb runs
+# no window manager and never exhibits that, which is why this one is
+# only meaningful on a real desktop.
+declared_transient = app.command(:wm, :transient, ".tools")
+unless declared_transient.empty?
+  raise "window: expected .tools not transient before show, got #{declared_transient.inspect}"
 end
 
 # Case 5: children realize inside the window, not the root.
@@ -85,6 +88,19 @@ tools.show
 app.update
 shown = app.command(:wm, :state, ".tools")
 raise "window: expected .tools normal after show, got #{shown}" unless shown == "normal"
+
+# Case 7a: #show is what makes it transient to the root, and
+# transient: false still opts out entirely.
+shown_transient = app.command(:wm, :transient, ".tools")
+raise "window: expected .tools transient to . after show, got #{shown_transient.inspect}" unless shown_transient == "."
+free.show
+app.update
+free_transient = app.command(:wm, :transient, ".free")
+unless free_transient.empty?
+  raise "window: expected transient: false to leave .free independent, got #{free_transient.inspect}"
+end
+free.hide
+app.update
 
 tools.hide
 app.update

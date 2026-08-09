@@ -55,6 +55,7 @@ module Teek
       abstract def set_title(value : String)    # ameba:disable Naming/AccessorMethodName
       abstract def set_geometry(value : String) # ameba:disable Naming/AccessorMethodName
       abstract def set_resizable(width : Bool, height : Bool)
+      abstract def set_transient(master) # ameba:disable Naming/AccessorMethodName
       abstract def geometry
       abstract def withdraw
       abstract def deiconify

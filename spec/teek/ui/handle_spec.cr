@@ -502,6 +502,51 @@ describe Teek::UI::Handle do
     app.windows.flat_map(&.geometries).should eq(["+242+40"])
   end
 
+  # Transient is established here rather than at realize: on macOS the
+  # window manager maps a transient window whenever its master is, so a
+  # never-shown window would appear as soon as the root did.
+  it "show makes the window transient to its parent" do
+    app = FakeApp.new
+    handle = window_handle(app)
+
+    handle.show
+
+    app.windows.flat_map(&.transients).should eq(["."])
+  end
+
+  # The master is derived from the window's own path, so a window nested
+  # under something other than the root is transient to THAT, not the
+  # root. Without this case a hardcoded "." would pass the one above.
+  it "show makes a nested window transient to the container it was declared in" do
+    app = FakeApp.new
+    handle = window_handle(app, path: ".outer.inner")
+
+    handle.show
+
+    app.windows.flat_map(&.transients).should eq([".outer"])
+  end
+
+  it "show leaves a transient: false window independent" do
+    app = FakeApp.new
+    handle = window_handle(app, {:transient => false} of Symbol => Teek::TclArgValue)
+
+    handle.show
+
+    app.windows.flat_map(&.transients).should be_empty
+  end
+
+  it "hide detaches the window from its master" do
+    app = FakeApp.new
+    handle = window_handle(app)
+
+    handle.show
+    handle.hide
+
+    # Attached on show, cleared on hide - otherwise deiconifying the
+    # master would drag the hidden window back on screen.
+    app.windows.flat_map(&.transients).should eq([".", ""])
+  end
+
   it "show grabs input only when the window was declared modal" do
     app = FakeApp.new
     window_handle(app).show

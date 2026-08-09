@@ -99,26 +99,19 @@ describe "the :window widget type" do
     window.resizables.should be_empty
   end
 
-  it "makes the window transient to its parent by default" do
+  # Deliberately NOT transient at realize. On macOS the window manager
+  # maps a transient window whenever its master is mapped, so a window
+  # that starts withdrawn would appear as soon as the root did - see
+  # Handle#apply_transient. Handle#show is what establishes it.
+  it "does not make the window transient at realize" do
     session = WidgetDslHarness.new
     session.window(:tools)
 
     app = FakeApp.new
     Teek::UI::Realizer.new(app, session.document).realize
 
-    transient = app.calls.find { |call| call.args.first? == :transient }.should_not be_nil
-    transient.cmd.should eq("wm")
-    transient.args.should eq([:transient, ".tools", "."] of Teek::TclArgValue)
-  end
-
-  it "transient: false opts out" do
-    session = WidgetDslHarness.new
-    session.window(:tools, transient: false)
-
-    app = FakeApp.new
-    Teek::UI::Realizer.new(app, session.document).realize
-
     app.calls.find { |call| call.args.first? == :transient }.should be_nil
+    app.windows.flat_map(&.transients).should be_empty
   end
 
   # A toplevel is placed by the window manager, so unlike every other

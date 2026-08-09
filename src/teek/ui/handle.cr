@@ -99,6 +99,7 @@ module Teek
       def show : Handle
         raise_unless_window!("show")
         position_near_parent
+        apply_transient
         window.deiconify
         app.command(:raise, realized.path)
         modal if @node.opts[:modal]?
@@ -112,7 +113,25 @@ module Teek
         raise_unless_window!("hide")
         grab_release
         window.withdraw
+        # Detached again, so deiconifying the master can't bring a hidden
+        # window back with it - see #apply_transient.
+        window.set_transient("") unless @node.opts[:transient]? == false
         self
+      end
+
+      # Makes the window a subordinate of its parent: the window manager
+      # keeps it above that parent, and usually skips the taskbar. Opt
+      # out at declaration with transient: false.
+      #
+      # Applied here rather than at realize because on Aqua a transient
+      # window is mapped whenever its master is - so a window that has
+      # never been shown would appear as soon as the root did. The master
+      # is the parent the realizer built it under, the same one
+      # #position_near_parent places it beside.
+      private def apply_transient : Nil
+        return if @node.opts[:transient]? == false
+
+        window.set_transient(toplevel_parent_path)
       end
 
       # Grab all input to this window and focus it - what makes a dialog
