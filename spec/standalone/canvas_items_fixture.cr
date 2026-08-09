@@ -39,6 +39,22 @@ raise "expected coords [10.0, 10.0, 50.0, 50.0], got #{item.coords}" unless item
   raise "expected a #{expected_type} item, got #{actual_type}" unless actual_type == expected_type
 end
 
+# Case 2b: #image, kept out of the table above because it needs a real
+# Tk image to point at rather than a self-contained option value.
+photo = Teek::Photo.new(app, width: 8, height: 8)
+photo_item = board.image(0, 0, image: photo.name, anchor: :nw)
+photo_item_type = app.tcl_eval("#{board.path} type #{photo_item.tag_or_id}")
+raise "expected an image item, got #{photo_item_type}" unless photo_item_type == "image"
+unless photo_item[:image] == photo.name
+  raise "expected the item to reference #{photo.name}, got #{photo_item[:image]}"
+end
+# The bounding box comes from the photo's own dimensions, so this is what
+# proves Tk actually resolved the name to that image rather than just
+# storing the string - an unresolvable one errors at create time.
+unless photo_item.bounds == [0.0, 0.0, 8.0, 8.0]
+  raise "expected the image item to be 8x8 at the origin, got #{photo_item.bounds}"
+end
+
 # Case 3: flat and nested coordinate arguments produce the same item.
 flat = board.line(10, 10, 50, 50)
 nested = board.line([10, 10], [50, 50])

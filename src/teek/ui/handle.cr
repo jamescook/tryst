@@ -265,6 +265,26 @@ module Teek
         create_canvas_item(:bitmap, coords, opts)
       end
 
+      # A Tk image anchored at [x, y] - which image via image:, named
+      # the way every other Tk image option names one:
+      #
+      # ```
+      # canvas.image(0, 0, image: photo.name, anchor: :nw)
+      # ```
+      #
+      # Takes the image's Tcl name rather than a Teek::Photo itself,
+      # since TclArgValue (what an option value has to be) has no Photo
+      # member - Photo#to_s does return the name, so .name and
+      # interpolation agree. Only valid on a ui.canvas handle.
+      #
+      # Has no counterpart in ruby-teek's teek-ui, whose Handle stops at
+      # #bitmap: without this there is no way to put a photo on a
+      # ui.canvas at all, which rules out anything drawing through
+      # Teek::Photo (a paint layer *is* a photo canvas item).
+      def image(*coords, **opts) : CanvasItem
+        create_canvas_item(:image, coords, opts)
+      end
+
       # A handle onto whatever items currently carry tag - zero, one, or
       # many (see CanvasItem, which addresses a tag and an id
       # identically). Doesn't create anything; a shape-creation method

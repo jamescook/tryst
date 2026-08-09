@@ -417,6 +417,23 @@ describe Teek::UI::Handle do
 
     handle.bitmap(10, 10, bitmap: "gray25")
     app.calls.last.args[1].should eq(:bitmap)
+
+    handle.image(10, 10, image: "teek_photo1")
+    app.calls.last.args[1].should eq(:image)
+  end
+
+  it "image passes the Tk image name straight through as an option" do
+    app = FakeApp.new
+    node = Teek::UI::Node.new(type: :canvas, name: :board)
+    node.realized = Teek::UI::RealizedNode.new(app: app, path: ".board")
+    handle = Teek::UI::Handle.new(node)
+
+    item = handle.image(0, 0, image: "teek_photo1", anchor: :nw)
+
+    app.calls.last.args.should eq([:create, :image, 0, 0] of Teek::TclArgValue)
+    app.calls.last.kwargs.should eq(
+      {"image" => "teek_photo1", "anchor" => :nw} of String => Teek::TclArgValue)
+    item.should be_a(Teek::UI::CanvasItem)
   end
 
   it "shape creation raises a clear error on a non-canvas handle" do
