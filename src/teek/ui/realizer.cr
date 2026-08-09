@@ -31,13 +31,13 @@ module Teek
     # row flow layout (#arrange_flow), grid layout (#arrange_grid), ui.
     # canvas overlay placement (#place_overlay), and menu_bar/context_menu's
     # own bespoke traversal (#create_menu_tree, driven by WidgetType's
-    # custom_create: hook) are ported here. Still deferred: scrollable's
-    # special-cased children (and the auto-scrollbar-wrapping :list/
-    # :text_area/:table/:tree/:canvas gets for free from being
-    # natively_scrollable - inert without it, a bare listbox/canvas for
-    # now), and the WidgetType hooks (custom_children/post_create) that
-    # would drive them - neither exists on WidgetType yet either (see
-    # widget_type.cr's own doc comment).
+    # custom_create: hook) are ported here, as is post_create: (:window's
+    # own wm setup). Still deferred: scrollable's special-cased children
+    # (and the auto-scrollbar-wrapping :list/:text_area/:table/:tree/
+    # :canvas gets for free from being natively_scrollable - inert
+    # without it, a bare listbox/canvas for now), along with the
+    # custom_children: hook that would drive them, which doesn't exist on
+    # WidgetType yet (see widget_type.cr's own doc comment).
     class Realizer
       # DSL-reserved opts keys - layout keywords plus other entries the
       # DSL stashes on node.opts for the realizer to pick up later - none
@@ -155,8 +155,9 @@ module Teek
       # raw_op have no realized path at all (and aren't WidgetTypes, so
       # there's nothing to register this against); everything else
       # reports it via its own WidgetType#arranged? - false for a type
-      # placed some other way entirely (deferred to a later phase - none
-      # of this task's own registered types set arranged: false).
+      # placed some other way entirely: :window (the window manager
+      # places a toplevel) and :menu_bar (attaches via its host's own
+      # -menu option).
       private def unarranged?(type : Symbol) : Bool
         return true if NON_WIDGET_TYPES.includes?(type)
 

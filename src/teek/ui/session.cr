@@ -19,11 +19,10 @@ module Teek
     # #run and #run_async, or directly) actually creates one and walks
     # the tree into it via Realizer.
     #
-    # Images are the one part of ruby-teek's Session not ported: its
-    # #realize also realizes an @images list before the tree, so a
-    # widget's image: is backed by the time it's created. There's no
-    # Image/Photo class here yet for that list to hold, so there is
-    # nothing to realize - it lands with #image itself.
+    # Vars and images are both realized ahead of the widget tree, so a
+    # widget's bind: or image: is already backed by the time it's
+    # created - in #realize, in #add for anything declared inside the
+    # block, and dropped again by #add's rollback.
     class Session
       include WidgetDSL
 
