@@ -102,6 +102,14 @@ class FakeApp
   # places a window relative to it.
   property next_geometry = "200x100+0+0"
 
+  # What #command hands back. Empty by default, since nearly every caller
+  # only cares that a call was recorded - set it where the code under
+  # test READS a result, e.g. Handle#on_tab_changed asking the notebook
+  # which tab is current. Deliberately not parsed per command: a fake
+  # that tried to answer plausibly for every Tk command would be a
+  # second, worse Tk.
+  property command_result = ""
+
   # **kwargs is deliberately left untyped (unlike *args) - matching
   # Teek::App's own real #command - a typed double-splat fails to
   # resolve ANY call passing zero matching keyword arguments (confirmed
@@ -131,7 +139,7 @@ class FakeApp
     # real App#command it's normally backed by), so returning nil here
     # would widen that to (String | Nil) the moment FakeApp is in the
     # same build - confirmed directly, a real compile error.
-    ""
+    @command_result
   end
 
   def bind(widget, event : String, *subs, &block : Array(String), Teek::CallbackSignal -> Nil) : String

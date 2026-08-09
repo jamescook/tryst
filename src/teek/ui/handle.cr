@@ -19,9 +19,8 @@ module Teek
     # Only the subset needed for a basic interactive app is ported here -
     # see this task's own bead for what's deferred: on_drag (CanvasItem's
     # own on_drag/#draggable are deferred right alongside this one - see
-    # canvas_item.cr's own doc comment), on_tab_changed, and
-    # #text_content - each needs a class/DSL surface not built yet
-    # (tabs and TextContent respectively). The window lifecycle
+    # canvas_item.cr's own doc comment) and #text_content, which needs a
+    # TextContent class not built yet. The window lifecycle
     # (show/hide/modal/grab_release/on_close) IS ported, alongside the
     # :window widget type it acts on; only its Screens/ModalStack
     # integration is still outstanding.
@@ -282,6 +281,31 @@ module Teek
         else
           @node.opts[:on_close] = block
         end
+        self
+      end
+
+      # Fires when the selected tab changes (Tk's
+      # <<NotebookTabChanged>>). The block is handed the newly selected
+      # tab's own name where it has one, and its plain zero-based index
+      # where it doesn't - preferring a name over a raw Tk index, the way
+      # every other lookup in the DSL does.
+      #
+      # Only valid on a ui.tabs handle. Raises ArgumentError otherwise.
+      def on_tab_changed(&block : Symbol | Int32 -> Nil) : Handle
+        unless type == :tabs
+          raise ArgumentError.new("#on_tab_changed only makes sense on a tabs container (got a :#{type})")
+        end
+
+        # Which tab is now current is asked of the notebook at fire time
+        # rather than carried by the event, so this resolves the index
+        # against the CURRENT children - a tab added later still reports
+        # correctly.
+        relay = Proc(Array(String), CallbackSignal, Nil).new do |_values, _signal|
+          index = app.command(realized.path, :index, :current).to_i
+          block.call(@node.children[index]?.try(&.name) || index)
+          nil
+        end
+        bind_event("<<NotebookTabChanged>>", relay)
         self
       end
 

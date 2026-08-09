@@ -405,8 +405,14 @@ tk_test "Window#set_minsize/#minsize round-trip, and (0, 0) clears it" do |app|
   w.set_minsize(320, 240)
   raise "expected {320, 240}, got #{w.minsize.inspect}" unless w.minsize == {320, 240}
 
+  # Only that the constraint is GONE, not that it reads back as (0, 0).
+  # What a cleared minimum reports is the window manager's call: with no
+  # WM (the Xvfb this suite normally runs under) Tk echoes 0 0 back, but
+  # a real one substitutes the window's own natural minimum instead -
+  # macOS reports {72, 15}. Asserting the zeros passes in Docker and
+  # fails on a developer's machine, which is the worst of both.
   w.set_minsize(0, 0)
-  raise "expected (0, 0) to clear the minimum, got #{w.minsize.inspect}" unless w.minsize == {0, 0}
+  raise "expected (0, 0) to clear the minimum, got #{w.minsize.inspect}" if w.minsize == {320, 240}
 end
 
 tk_test "Window#set_aspect/#aspect round-trip, and #clear_aspect removes it" do |app|

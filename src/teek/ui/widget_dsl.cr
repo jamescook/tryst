@@ -96,6 +96,49 @@ module Teek
         append_container(:window, name, to_opts_hash(opts))
       end
 
+      # A tabbed notebook. Declare its pages with #tab inside the block.
+      def tabs(name : Symbol? = nil, **opts, &block : self -> Nil) : Handle
+        append_container(:tabs, name, to_opts_hash(opts), &block)
+      end
+
+      def tabs(name : Symbol? = nil, **opts) : Handle
+        append_container(:tabs, name, to_opts_hash(opts))
+      end
+
+      # One page of a #tabs notebook. label is positional and required -
+      # it's the text on the tab itself, and a page with none is
+      # meaningless. Give a name too to address the page later, including
+      # as what #on_tab_changed reports when this one is selected.
+      #
+      # Only valid directly inside a ui.tabs block; raises ArgumentError
+      # anywhere else.
+      def tab(label : String, name : Symbol? = nil, **opts, &block : self -> Nil) : Handle
+        append_container(:tab, name, tab_opts(label, opts), &block)
+      end
+
+      def tab(label : String, name : Symbol? = nil, **opts) : Handle
+        append_container(:tab, name, tab_opts(label, opts))
+      end
+
+      # #tab's own opts, with the label folded in under the key :tab's
+      # post_create reads it from. Checks the enclosing container first,
+      # so the error names #tab rather than surfacing later as a
+      # validation failure.
+      private def tab_opts(label : String, opts) : Hash(Symbol, TclArgValue)
+        raise_unless_inside!(:tabs, "tab")
+        hash = to_opts_hash(opts)
+        hash[:tab_label] = label
+        hash
+      end
+
+      # Guards a DSL method that only makes sense directly inside one
+      # specific container type.
+      private def raise_unless_inside!(container : Symbol, method_name : String) : Nil
+        return if @stack.last.type == container
+
+        raise ArgumentError.new("##{method_name} can only be used directly inside ui.#{container}")
+      end
+
       def column(name : Symbol? = nil, **opts, &block : self -> Nil) : Handle
         append_container(:column, name, to_opts_hash(opts), &block)
       end
