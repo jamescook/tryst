@@ -62,7 +62,7 @@ module Teek
         @leaf : Bool = true,
         @natively_scrollable : Bool = false,
         @arranged : Bool = true,
-        @scroll_default : Symbol = :auto_scroll,
+        @scroll_default : ScrollDefault = :auto_scroll,
         @takes_command : Bool = false,
         @bind_option : Symbol? = nil,
         @flow : FlowConfig? = nil,
@@ -105,10 +105,8 @@ module Teek
       # reader (scroll_default:).
       def global_scroll_default : Bool
         case @scroll_default
-        when :auto_scroll_canvas
-          Teek::UI.auto_scroll_canvas
-        else
-          Teek::UI.auto_scroll
+        in ScrollDefault::AutoScroll       then Teek::UI.auto_scroll
+        in ScrollDefault::AutoScrollCanvas then Teek::UI.auto_scroll_canvas
         end
       end
 

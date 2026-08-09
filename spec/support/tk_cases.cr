@@ -1924,7 +1924,7 @@ end
 
 tk_test "every fires repeatedly" do |app|
   count = 0
-  app.every(30, on_error: nil) { count += 1 }
+  app.every(30, on_error: :ignore) { count += 1 }
 
   app.interp.wait_until(2.seconds) { count >= 3 }
   raise "expected at least 3 ticks, got #{count}" unless count >= 3
@@ -1932,7 +1932,7 @@ end
 
 tk_test "RepeatingTimer#cancel stops the timer" do |app|
   count = 0
-  timer = app.every(30, on_error: nil) { count += 1 }
+  timer = app.every(30, on_error: :ignore) { count += 1 }
 
   app.interp.wait_until(300.milliseconds) { count >= 2 }
   timer.cancel
@@ -1943,14 +1943,14 @@ tk_test "RepeatingTimer#cancel stops the timer" do |app|
 end
 
 tk_test "RepeatingTimer#cancelled? reflects state" do |app|
-  timer = app.every(30, on_error: nil) { }
+  timer = app.every(30, on_error: :ignore) { }
   raise "expected not cancelled" if timer.cancelled?
   timer.cancel
   raise "expected cancelled" unless timer.cancelled?
 end
 
 tk_test "double RepeatingTimer#cancel does not raise" do |app|
-  timer = app.every(30, on_error: nil) { }
+  timer = app.every(30, on_error: :ignore) { }
   timer.cancel
   timer.cancel
   raise "expected cancelled" unless timer.cancelled?
@@ -1958,7 +1958,7 @@ end
 
 tk_test "every with a zero interval raises ArgumentError" do |app|
   begin
-    app.every(0, on_error: nil) { }
+    app.every(0, on_error: :ignore) { }
     raise "expected ArgumentError, got no exception"
   rescue ArgumentError
   end
@@ -1966,7 +1966,7 @@ end
 
 tk_test "every with a negative interval raises ArgumentError" do |app|
   begin
-    app.every(-10, on_error: nil) { }
+    app.every(-10, on_error: :ignore) { }
     raise "expected ArgumentError, got no exception"
   rescue ArgumentError
   end
@@ -2096,11 +2096,11 @@ tk_test "an on_error proc that raises cancels the timer" do |app|
   raise "expected 'handler boom'" unless caught.message == "handler boom"
 end
 
-# on_error: nil
+# on_error: :ignore
 
-tk_test "on_error: nil silently cancels" do |app|
+tk_test "on_error: :ignore silently cancels" do |app|
   count = 0
-  timer = app.every(30, on_error: nil) do
+  timer = app.every(30, on_error: :ignore) do
     count += 1
     raise "quiet" if count == 2
   end
@@ -2113,9 +2113,9 @@ tk_test "on_error: nil silently cancels" do |app|
   raise "expected 'quiet'" unless timer.last_error.try(&.message) == "quiet"
 end
 
-tk_test "on_error: nil does not keep firing after an error" do |app|
+tk_test "on_error: :ignore does not keep firing after an error" do |app|
   count = 0
-  timer = app.every(30, on_error: nil) do
+  timer = app.every(30, on_error: :ignore) do
     count += 1
     raise "stop" if count == 1
   end
@@ -2129,7 +2129,7 @@ end
 # interval
 
 tk_test "RepeatingTimer#interval is readable and writable" do |app|
-  timer = app.every(30, on_error: nil) { }
+  timer = app.every(30, on_error: :ignore) { }
   raise "expected 30" unless timer.interval == 30
   timer.interval = 100
   raise "expected 100" unless timer.interval == 100
@@ -2137,7 +2137,7 @@ tk_test "RepeatingTimer#interval is readable and writable" do |app|
 end
 
 tk_test "RepeatingTimer#interval= rejects non-positive values" do |app|
-  timer = app.every(30, on_error: nil) { }
+  timer = app.every(30, on_error: :ignore) { }
   begin
     timer.interval = 0
     raise "expected ArgumentError for 0"
@@ -2154,13 +2154,13 @@ end
 # introspection
 
 tk_test "RepeatingTimer#late_ticks starts at zero" do |app|
-  timer = app.every(30, on_error: nil) { }
+  timer = app.every(30, on_error: :ignore) { }
   raise "expected 0" unless timer.late_ticks == 0
   timer.cancel
 end
 
 tk_test "RepeatingTimer#last_error is nil when there have been no errors" do |app|
-  timer = app.every(30, on_error: nil) { }
+  timer = app.every(30, on_error: :ignore) { }
   raise "expected nil" unless timer.last_error.nil?
   timer.cancel
 end

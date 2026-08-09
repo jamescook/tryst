@@ -39,6 +39,23 @@ cancelled_queued = session.every(100) { cancelled_queued_hits += 1 }
 cancelled_live = session.after(60_000) { cancelled_live_hits += 1 }
 session.after(20) { order << "second" }
 
+# Declared before realize with an on_error HANDLER rather than a policy,
+# so the queue has to carry which of the two it was given all the way to
+# the live app: a handler keeps the timer running past an error, both
+# policies stop it.
+handler_errors = [] of String
+handler_ticks = 0
+session.every(100, on_error: ->(ex : Exception) { handler_errors << (ex.message || ""); nil }) do
+  handler_ticks += 1
+  raise "tick #{handler_ticks} boom"
+end
+
+ignored_ticks = 0
+session.every(100, on_error: :ignore) do
+  ignored_ticks += 1
+  raise "quiet boom"
+end
+
 # Case 1: cancelling before realize is legal with no app at all, and
 # leaves the rest of the queue alone.
 cancelled_queued.cancel
@@ -101,6 +118,23 @@ spent = session.after(10) { spent_fired = true }
 raise "expected the spent timer to fire" unless app.interp.wait_until { app.update; spent_fired }
 spent.cancel
 raise "expected the spent timer to report cancelled" unless spent.cancelled?
+
+# Case 10: a queued timer given an on_error handler keeps ticking after
+# an error, and the handler receives each exception.
+unless app.interp.wait_until(3.seconds) { app.update; handler_errors.size >= 2 }
+  raise "expected the handler to see repeated errors, got #{handler_errors}"
+end
+unless handler_errors.first == "tick 1 boom"
+  raise "expected the handler to receive the tick's own exception, got #{handler_errors.first.inspect}"
+end
+
+# Case 11: a queued timer given the :ignore policy instead stops at its
+# first error. Tracer-gated for the "no further ticks" half - see header.
+raise "expected the :ignore timer to tick once" unless app.interp.wait_until(3.seconds) { app.update; ignored_ticks >= 1 }
+tracer_fired = false
+app.after(400) { tracer_fired = true }
+raise "tracer never fired" unless app.interp.wait_until { app.update; tracer_fired }
+raise "expected :ignore to stop after one tick, got #{ignored_ticks}" unless ignored_ticks == 1
 
 app.destroy
 puts "OK"

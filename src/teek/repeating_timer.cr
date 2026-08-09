@@ -22,14 +22,18 @@ module Teek
 
     @after_id : AfterHandle?
     @next_expected : Time::Instant?
+    @policy : ErrorPolicy
+    @handler : ErrorHandler?
 
-    # @api private
-    def initialize(@app : App, ms : Int32, on_error : (Symbol | Proc(Exception, Nil))?, &block : -> Nil)
+    # @api private - handler takes precedence over policy when present;
+    # App#every's two overloads set exactly one of them.
+    def initialize(@app : App, ms : Int32, policy : ErrorPolicy, handler : ErrorHandler?, &block : -> Nil)
       raise ArgumentError.new("interval must be positive, got #{ms}") if ms <= 0
 
       @interval = ms
       @block = block
-      @on_error = on_error
+      @policy = policy
+      @handler = handler
       @cancelled = false
       @after_id = nil
       @last_error = nil
@@ -71,8 +75,7 @@ module Teek
       schedule
     rescue ex
       @last_error = ex
-      case handler = @on_error
-      when Proc(Exception, Nil)
+      if handler = @handler
         begin
           handler.call(ex)
         rescue err
@@ -81,14 +84,19 @@ module Teek
           @app._pending_exception = err
           return
         end
+        # A handler that returns is the only way a timer survives an error.
         schedule
-      when :raise
+        return
+      end
+
+      case @policy
+      in ErrorPolicy::Raise
         @cancelled = true
         # Store on App so it raises from the next app.update call - don't
         # re-raise here, that would go through teek_crystal_callback_dispatch's
         # own rescue and surface as a generic Tcl error instead.
         @app._pending_exception = ex
-      when nil
+      in ErrorPolicy::Ignore
         @cancelled = true
       end
     end

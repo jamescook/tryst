@@ -6,6 +6,7 @@ require "./window"
 require "./widget"
 require "./command_interceptors"
 require "./after_handle"
+require "./error_policy"
 require "./repeating_timer"
 require "./clipboard"
 require "./dialogs"
@@ -282,21 +283,33 @@ module Teek
     end
 
     # Schedule a one-shot timer. Calls the block after ms milliseconds.
-    # on_error: :raise (default) - exception propagates to Tcl's
-    # background error handler; a Proc(Exception, Nil) - called with the
-    # exception, error is swallowed; nil - error is silently swallowed.
+    # on_error: :raise (default) propagates to Tcl's background error
+    # handler, :ignore swallows it.
     # Returns an AfterHandle - pass to #after_cancel to cancel.
-    def after(ms : Int32, on_error : (Symbol | Proc(Exception, Nil))? = :raise, &block : -> Nil) : AfterHandle
+    def after(ms : Int32, on_error : ErrorPolicy = :raise, &block : -> Nil) : AfterHandle
+      schedule_after(ms, on_error, nil, block)
+    end
+
+    # As above, but hands the exception to on_error instead of applying a
+    # policy - see ErrorHandler.
+    def after(ms : Int32, on_error : ErrorHandler, &block : -> Nil) : AfterHandle
+      schedule_after(ms, ErrorPolicy::Raise, on_error, block)
+    end
+
+    private def schedule_after(ms : Int32, policy : ErrorPolicy, handler : ErrorHandler?,
+                               block : Proc(Nil)) : AfterHandle
       cb_id = ""
       cb_id = register_callback do |_args, _signal|
         begin
           block.call
         rescue ex
-          case handler = on_error
-          when Proc(Exception, Nil)
-            handler.call(ex)
-          when :raise
-            raise ex
+          if on_error = handler
+            on_error.call(ex)
+          else
+            case policy
+            in ErrorPolicy::Raise  then raise ex
+            in ErrorPolicy::Ignore then nil
+            end
           end
         ensure
           unregister_callback(cb_id)
@@ -326,8 +339,15 @@ module Teek
     # @example Basic polling loop
     #   timer = app.every(50) { update_display }
     #   timer.cancel  # stop later
-    def every(ms : Int32, on_error : (Symbol | Proc(Exception, Nil))? = :raise, &block : -> Nil) : RepeatingTimer
-      RepeatingTimer.new(self, ms, on_error, &block)
+    def every(ms : Int32, on_error : ErrorPolicy = :raise, &block : -> Nil) : RepeatingTimer
+      RepeatingTimer.new(self, ms, on_error, nil, &block)
+    end
+
+    # As above, but hands each tick's exception to on_error instead of
+    # applying a policy. Only this form keeps the timer running after an
+    # error - see ErrorHandler.
+    def every(ms : Int32, on_error : ErrorHandler, &block : -> Nil) : RepeatingTimer
+      RepeatingTimer.new(self, ms, ErrorPolicy::Raise, on_error, &block)
     end
 
     # Cancel a pending #after or #after_idle timer.

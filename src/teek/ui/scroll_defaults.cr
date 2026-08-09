@@ -13,5 +13,13 @@ module Teek
     # since a canvas is as often fixed drawing as scrollable content,
     # unlike the other native types.
     class_property auto_scroll_canvas : Bool = false # ameba:disable Naming/QueryBoolMethods
+
+    # Which of the two globals above a widget type reads when neither the
+    # widget's own scroll: nor the app's scroll: says otherwise. Selected
+    # per type via WidgetType's scroll_default:.
+    enum ScrollDefault
+      AutoScroll
+      AutoScrollCanvas
+    end
   end
 end

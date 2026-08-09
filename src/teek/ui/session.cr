@@ -32,11 +32,20 @@ module Teek
       # A timer declared before realize, waiting for #flush_timers to
       # register it against the live app - see #every.
       private record QueuedTimer,
-        kind : Symbol,
+        kind : TimerKind,
         ms : Int32,
-        on_error : (Symbol | Proc(Exception, Nil))?,
+        policy : ErrorPolicy,
+        handler : ErrorHandler?,
         block : Proc(Nil),
         handle : TimerHandle
+
+      # Which of the two scheduling calls a queued timer replays as.
+      private enum TimerKind
+        # Repeats until cancelled - App#every.
+        Every
+        # Fires once - App#after.
+        After
+      end
 
       # The build-phase tree - constructible and traversable with no
       # interpreter, before or after realize.
@@ -198,14 +207,25 @@ module Teek
       # alongside the UI it drives instead of being pushed out into a
       # separate post-run_async step. See TimerHandle for why cancelling
       # works in both phases too.
-      def every(ms : Int32, on_error : (Symbol | Proc(Exception, Nil))? = :raise, &block : -> Nil) : TimerHandle
-        schedule(:every, ms, on_error, block)
+      def every(ms : Int32, on_error : ErrorPolicy = :raise, &block : -> Nil) : TimerHandle
+        schedule(:every, ms, on_error, nil, block)
+      end
+
+      # As above, but hands each tick's exception to on_error - the only
+      # form that keeps the timer running after an error.
+      def every(ms : Int32, on_error : ErrorHandler, &block : -> Nil) : TimerHandle
+        schedule(:every, ms, ErrorPolicy::Raise, on_error, block)
       end
 
       # Run a block once, ms milliseconds from now. Queues before
       # realize exactly like #every does.
-      def after(ms : Int32, on_error : (Symbol | Proc(Exception, Nil))? = :raise, &block : -> Nil) : TimerHandle
-        schedule(:after, ms, on_error, block)
+      def after(ms : Int32, on_error : ErrorPolicy = :raise, &block : -> Nil) : TimerHandle
+        schedule(:after, ms, on_error, nil, block)
+      end
+
+      # As above, with a handler instead of a policy.
+      def after(ms : Int32, on_error : ErrorHandler, &block : -> Nil) : TimerHandle
+        schedule(:after, ms, ErrorPolicy::Raise, on_error, block)
       end
 
       # Show the native "choose file to open" dialog.
@@ -397,13 +417,14 @@ module Teek
       # Registers the timer immediately if there's a live app, or queues
       # it for #flush_timers if we're still building. Either way the
       # caller gets a handle they can cancel.
-      private def schedule(kind : Symbol, ms : Int32, on_error : (Symbol | Proc(Exception, Nil))?,
+      private def schedule(kind : TimerKind, ms : Int32, policy : ErrorPolicy, handler : ErrorHandler?,
                            block : Proc(Nil)) : TimerHandle
         handle = TimerHandle.new
         if live_app = @app
-          bind_timer(handle, live_app, kind, ms, on_error, block)
+          bind_timer(handle, live_app, kind, ms, policy, handler, block)
         else
-          @timers << QueuedTimer.new(kind: kind, ms: ms, on_error: on_error, block: block, handle: handle)
+          @timers << QueuedTimer.new(kind: kind, ms: ms, policy: policy, handler: handler,
+            block: block, handle: handle)
         end
         handle
       end
@@ -420,18 +441,27 @@ module Teek
           # said they don't want it, so it never registers at all.
           next if timer.handle.cancelled?
 
-          bind_timer(timer.handle, app, timer.kind, timer.ms, timer.on_error, timer.block)
+          bind_timer(timer.handle, app, timer.kind, timer.ms, timer.policy, timer.handler, timer.block)
         end
         @timers.clear
       end
 
-      private def bind_timer(handle : TimerHandle, app : App, kind : Symbol, ms : Int32,
-                             on_error : (Symbol | Proc(Exception, Nil))?, block : Proc(Nil)) : Nil
-        if kind == :every
-          timer = app.every(ms, on_error) { block.call }
+      private def bind_timer(handle : TimerHandle, app : App, kind : TimerKind, ms : Int32,
+                             policy : ErrorPolicy, handler : ErrorHandler?, block : Proc(Nil)) : Nil
+        case kind
+        in TimerKind::Every
+          timer = if on_error = handler
+                    app.every(ms, on_error) { block.call }
+                  else
+                    app.every(ms, policy) { block.call }
+                  end
           handle.cancel_action = -> { timer.cancel }
-        else
-          after_handle = app.after(ms, on_error) { block.call }
+        in TimerKind::After
+          after_handle = if on_error = handler
+                           app.after(ms, on_error) { block.call }
+                         else
+                           app.after(ms, policy) { block.call }
+                         end
           handle.cancel_action = -> { app.after_cancel(after_handle); nil }
         end
       end
