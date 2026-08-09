@@ -34,7 +34,7 @@ module Teek
 
       # Every current option/value Tk reports for this widget right now.
       # Raises NotRealizedError before realize.
-      def option_dump : Hash(Symbol, String)
+      def option_dump : Hash(String, String)
         r = realized
         app = r.app || raise NotRealizedError.new
         OptionDumpParsing.parse(app, app.command(r.path, :configure))

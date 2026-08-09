@@ -15,14 +15,16 @@ module Teek
       # ordinary option, or a shorter 2-item {name aliased-name} for a
       # synonym (e.g. -bg pointing at -background) - those carry no value
       # of their own and are skipped.
-      # Returns option name (no leading -) => current value.
-      def self.parse(app : AppContract, raw : String) : Hash(Symbol, String)
-        dump = {} of Symbol => String
+      # Returns option name (no leading -) => current value. Keys are
+      # Strings because the key set is whatever Tk reports for the
+      # widget - open-ended, and not known at compile time.
+      def self.parse(app : AppContract, raw : String) : Hash(String, String)
+        dump = {} of String => String
         app.split_list(raw).each do |item|
           parts = app.split_list(item)
           next if parts.size < 5
 
-          dump[parts[0].lchop('-').to_sym] = parts[4]
+          dump[parts[0].lchop('-')] = parts[4]
         end
         dump
       end

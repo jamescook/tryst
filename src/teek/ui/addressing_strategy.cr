@@ -12,7 +12,7 @@ module Teek
     module AddressingStrategy
       abstract def virtual_path : String
       abstract def configure(**opts) : String
-      abstract def option_dump : Hash(Symbol, String)
+      abstract def option_dump : Hash(String, String)
     end
   end
 end

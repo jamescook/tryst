@@ -49,6 +49,18 @@ describe Teek::UI::Handle do
     expect_raises(Teek::UI::NotRealizedError) { handle.app }
   end
 
+  # Doubles as the compile guard on #options: Crystal only typechecks a
+  # method body once something calls it, so this call is what keeps the
+  # option-dump parser behind it compiling under plain `crystal spec`.
+  # The real-Tk coverage in tk_cases.cr builds as a separate binary and
+  # doesn't serve that purpose.
+  it "options raises before realize" do
+    node = Teek::UI::Node.new(type: :button, name: :save)
+    handle = Teek::UI::Handle.new(node)
+
+    expect_raises(Teek::UI::NotRealizedError) { handle.options }
+  end
+
   it "app returns the realized app once realized" do
     app = FakeApp.new
     node = Teek::UI::Node.new(type: :button, name: :save)

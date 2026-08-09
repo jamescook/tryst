@@ -38,7 +38,7 @@ module Teek
 
       # Every current option/value Tk reports for this entry right now.
       # Raises NotRealizedError before the parent menu is realized.
-      def option_dump : Hash(Symbol, String)
+      def option_dump : Hash(String, String)
         realized = menu
         app = realized.app || raise NotRealizedError.new
         OptionDumpParsing.parse(app, app.command(realized.path, :entryconfigure, current_index))

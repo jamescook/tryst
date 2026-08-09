@@ -68,9 +68,10 @@ module Teek
       end
 
       # What Tk currently thinks this widget's options are right now,
-      # straight from a bare configure.
+      # straight from a bare configure. Keyed by option name with no
+      # leading dash ("text", "state"), values as Tk reports them.
       # Raises NotRealizedError before realize.
-      def options : Hash(Symbol, String)
+      def options : Hash(String, String)
         @addressing.option_dump
       end
 
