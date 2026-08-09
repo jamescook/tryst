@@ -120,7 +120,7 @@ class ThreadingDemo
   private def setup_window : Nil
     @app.show
     @app.set_window_title("Concurrency Demo - File Hasher")
-    @app.command(:wm, "minsize", ".", 600, 400)
+    @app.window.set_minsize(600, 400)
     # A bare CLI-launched Tk window doesn't get foreground focus on macOS
     # without this - same fix applied in every other example here.
     @app.tcl_eval("wm attributes . -topmost 1; raise .; focus -force .")

@@ -388,7 +388,7 @@ class PaintDemo
     widget.bind("Enter") do
       destroy_tooltip
       @app.command(:toplevel, TOOLTIP_PATH, background: TOOLTIP_BACKGROUND)
-      @app.command(:wm, :overrideredirect, TOOLTIP_PATH, 1)
+      @app.window(TOOLTIP_PATH).set_overrideredirect(true)
       # Purely cosmetic platform hints - not every window manager knows
       # them, so a failure here shouldn't take the tooltip down with it.
       @app.tcl_eval("catch {wm attributes #{TOOLTIP_PATH} -type tooltip}")
