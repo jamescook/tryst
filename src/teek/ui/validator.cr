@@ -41,6 +41,24 @@ module Teek
         new(document, strict).validate!
       end
 
+      # Validate a single subtree instead of the whole document - what
+      # Session#add runs before realizing an addition.
+      #
+      # Rooted at the PARENT being added into, not at the new children:
+      # a grid cell added at a row/col an existing sibling already
+      # occupies is only visible to a check that can see both, and a
+      # children-only walk can't. Re-walking the siblings costs nothing
+      # (they're already known good, and it's one container).
+      #
+      # Skips #check_orphans, the one check that's inherently
+      # whole-document - reachability is measured from whatever root got
+      # walked, so a subtree walk would report every node outside it as
+      # an orphan. That also makes strict: meaningless here (orphans are
+      # the only thing it escalates), so this doesn't take it.
+      def self.validate_subtree!(document : Document, node : Node, parent : Node?) : Nil
+        new(document).validate_subtree!(node, parent)
+      end
+
       def initialize(@document : Document, @strict : Bool = false)
         @errors = [] of String
         @warnings = [] of String
@@ -50,7 +68,15 @@ module Teek
       def validate! : Nil
         walk(@document.root, nil)
         check_orphans
+        report!
+      end
 
+      def validate_subtree!(node : Node, parent : Node?) : Nil
+        walk(node, parent)
+        report!
+      end
+
+      private def report! : Nil
         @warnings.each { |message| STDERR.puts "teek-ui: #{message}" }
         raise ValidationError.new(@errors.join('\n')) unless @errors.empty?
       end

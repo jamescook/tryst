@@ -7,13 +7,20 @@ module Teek
     #
     # A grid's own contract: every direct child needs a cell
     # (g.cell(row:, col:) { }), and no two children can claim the same
-    # one. Realizer#arrange_grid still raises on a missing cell too (kept
-    # as a belt-and-suspenders backstop for the one path that skips
-    # validation entirely - a future Session#add's incremental realize),
-    # but this is the primary detection, so the mistake surfaces
-    # pre-realize, collected alongside every other problem, instead of
-    # crashing mid-realize. Composed into WidgetValidators via :grid's
-    # own WidgetType#validator (see widget_types/grid.cr).
+    # one. This is the primary detection either way a grid gets built, so
+    # the mistake surfaces pre-realize, collected alongside every other
+    # problem, instead of crashing mid-realize: the initial realize runs
+    # it via Validator.validate!, and Session#add runs the same checks
+    # over the parent it's adding into via Validator.validate_subtree!.
+    # Rooting that at the PARENT rather than the new children is what
+    # lets .check_cell_collisions below see an addition colliding with a
+    # sibling placed during the initial realize.
+    # Realizer#arrange_grid still raises on a missing cell as a
+    # belt-and-suspenders backstop for a path that reaches it with no
+    # validation at all (nothing in-tree does today - Handle#realize!'s
+    # on-demand lazy realize is the nearest candidate). Composed into
+    # WidgetValidators via :grid's own WidgetType#validator (see
+    # widget_types/grid.cr).
     module GridValidator
       # node is a :grid node - WidgetValidators only dispatches here for
       # that type.

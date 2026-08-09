@@ -63,4 +63,102 @@ describe Teek::UI::Session do
 
     expect_raises(Teek::UI::NotRealizedError) { session.app }
   end
+
+  # Every realize-only helper checks for a live app BEFORE touching one,
+  # so the guard itself is testable with no interpreter at all - the one
+  # part of the delegating surface that genuinely belongs in a headless
+  # spec. The forwarding those methods do once realized needs a real
+  # interpreter, and lives in session_realtk_spec.cr's fixtures.
+  describe "realize-only helpers before #realize" do
+    it "every one raises NotRealizedError rather than reaching for an app that doesn't exist" do
+      session = Teek::UI.app
+
+      expect_raises(Teek::UI::NotRealizedError) { session.debug_info }
+      expect_raises(Teek::UI::NotRealizedError) { session.find_by_path(".anything") }
+      expect_raises(Teek::UI::NotRealizedError) { session.clipboard }
+      expect_raises(Teek::UI::NotRealizedError) { session.busy { } }
+      expect_raises(Teek::UI::NotRealizedError) { session.toast("nope") }
+      expect_raises(Teek::UI::NotRealizedError) { session.open_file }
+      expect_raises(Teek::UI::NotRealizedError) { session.save_file }
+      expect_raises(Teek::UI::NotRealizedError) { session.message("Hi") }
+      expect_raises(Teek::UI::NotRealizedError) { session.choose_color }
+      expect_raises(Teek::UI::NotRealizedError) { session.choose_dir }
+      expect_raises(Teek::UI::NotRealizedError) { session.add(:whatever) { } }
+    end
+  end
+
+  # The event bus is pure Crystal - no Tk anywhere in it - so all of it
+  # is headless, realized session or not.
+  describe "#on/#emit/#off" do
+    it "delivers to every subscriber in subscription order, with no interpreter involved" do
+      session = Teek::UI.app
+      seen = [] of String
+
+      session.on(:saved) { |args| seen << "first:#{args.first}" }
+      session.on(:saved) { |args| seen << "second:#{args.first}" }
+      session.emit(:saved, "report.txt")
+
+      seen.should eq(["first:report.txt", "second:report.txt"])
+    end
+
+    it "carries multiple arguments through as one payload array" do
+      session = Teek::UI.app
+      seen = [] of Array(Teek::UI::EventValue)
+
+      session.on(:item_added) { |args| seen << args }
+      session.emit(:item_added, "Shirt", 25)
+
+      seen.should eq([["Shirt", 25] of Teek::UI::EventValue])
+    end
+
+    it "#off unsubscribes exactly the listener handed back by #on, leaving the others" do
+      session = Teek::UI.app
+      seen = [] of String
+
+      dropped = session.on(:saved) { |_args| seen << "dropped" }
+      session.on(:saved) { |_args| seen << "kept" }
+      session.off(:saved, dropped)
+      session.emit(:saved)
+
+      seen.should eq(["kept"])
+    end
+
+    it "emitting an event nobody subscribed to is a no-op, not an error" do
+      session = Teek::UI.app
+
+      session.emit(:nobody_listening, 1)
+    end
+  end
+
+  # #every/#after queue when called before realize (same queue-then-wire
+  # shape as an on_* event binding), which means the queueing itself, and
+  # cancelling a still-queued timer, are both testable with no app.
+  describe "#every/#after before #realize" do
+    it "queues rather than raising, and hands back a live handle to cancel with" do
+      session = Teek::UI.app
+
+      handle = session.every(50) { }
+
+      handle.cancelled?.should be_false
+    end
+
+    it "#cancel on a queued timer marks it cancelled without ever needing an app" do
+      session = Teek::UI.app
+      handle = session.after(50) { }
+
+      handle.cancel
+
+      handle.cancelled?.should be_true
+    end
+
+    it "#cancel is idempotent" do
+      session = Teek::UI.app
+      handle = session.every(50) { }
+
+      handle.cancel
+      handle.cancel
+
+      handle.cancelled?.should be_true
+    end
+  end
 end

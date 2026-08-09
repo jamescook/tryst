@@ -71,8 +71,8 @@ module Teek
       # parent that's realized already. Reuses the exact same create/link
       # machinery #realize uses for the initial tree, just entered at an
       # arbitrary node instead of the document root - for adding widgets
-      # to an already-running app (a future Session#add, not built yet)
-      # or realizing an on-demand lazy: true subtree.
+      # to an already-running app (Session#add) or realizing an on-demand
+      # lazy: true subtree.
       def realize_subtree(node : Node, parent_node : Node) : Nil
         parent_realized = parent_node.realized
         raise ArgumentError.new("parent_node must already be realized") unless parent_realized
@@ -275,9 +275,11 @@ module Teek
           cell = child.cell_position
           unless cell
             # GridValidator#check_missing_cell is the primary, pre-realize
-            # detection for this - this stays as a belt-and-suspenders
-            # backstop for the one path that skips validation entirely (a
-            # future Session#add's incremental realize).
+            # detection for this, on both paths that build a grid - the
+            # initial Validator.validate!, and Session#add's own
+            # Validator.validate_subtree!. This stays as a
+            # belt-and-suspenders backstop for a caller that reaches
+            # #realize_subtree with no validation at all.
             raise ArgumentError.new("#{describe(child)} is a direct child of a grid but was never placed with " \
                                     "g.cell(row:, col:) { ... }")
           end
