@@ -2,6 +2,15 @@ require "../../spec_helper"
 require "../../support/fake_app"
 require "../../../src/teek/ui/handle"
 
+# A realized :window handle, built directly rather than through a
+# Realizer so the #show/#hide cases below assert only what those methods
+# themselves do - the wm setup at realize is spec/teek/ui/window_spec.cr.
+private def window_handle(app, opts = {} of Symbol => Teek::TclArgValue, path = ".tools")
+  node = Teek::UI::Node.new(type: :window, name: :tools, opts: opts)
+  node.realized = Teek::UI::RealizedNode.new(app: app, path: path)
+  Teek::UI::Handle.new(node)
+end
+
 # Headless tests for Teek::UI::Handle, built against FakeApp
 # (spec/support/fake_app.cr) - no Tk interpreter needed, per the epic's
 # testing strategy. Reduced from ruby-teek's teek-ui/test/test_handle.rb
@@ -434,6 +443,89 @@ describe Teek::UI::Handle do
     app.calls.last.kwargs.should eq(
       {"image" => "teek_photo1", "anchor" => :nw} of String => Teek::TclArgValue)
     item.should be_a(Teek::UI::CanvasItem)
+  end
+
+  # -- window handles ------------------------------------------------------
+
+  it "show deiconifies the window and raises it to the front" do
+    app = FakeApp.new
+    handle = window_handle(app)
+
+    handle.show.should be(handle)
+
+    app.windows.select { |window| window.path == ".tools" }.sum(&.deiconifies).should eq(1)
+    app.calls.last.cmd.should eq("raise")
+    app.calls.last.args.should eq([".tools"] of Teek::TclArgValue)
+  end
+
+  it "show positions the window clear of the parent it is nested under" do
+    app = FakeApp.new
+    app.next_geometry = "200x100+30+40"
+    handle = window_handle(app)
+
+    handle.show
+
+    # Just past the parent's right edge, at the same top.
+    placed = app.windows.flat_map(&.geometries)
+    placed.should eq(["+242+40"])
+  end
+
+  it "show leaves an explicitly declared position alone" do
+    app = FakeApp.new
+    app.next_geometry = "200x100+30+40"
+    handle = window_handle(app, {:geometry => "50x200+910+300"} of Symbol => Teek::TclArgValue)
+
+    handle.show
+
+    app.windows.flat_map(&.geometries).should be_empty
+  end
+
+  it "show still auto-positions a geometry: that only gave a size" do
+    app = FakeApp.new
+    app.next_geometry = "200x100+30+40"
+    handle = window_handle(app, {:geometry => "50x200"} of Symbol => Teek::TclArgValue)
+
+    handle.show
+
+    app.windows.flat_map(&.geometries).should eq(["+242+40"])
+  end
+
+  it "show grabs input only when the window was declared modal" do
+    app = FakeApp.new
+    window_handle(app).show
+    app.windows.flat_map(&.modal_calls).should be_empty
+
+    modal_app = FakeApp.new
+    window_handle(modal_app, {:modal => true} of Symbol => Teek::TclArgValue).show
+    modal_app.windows.flat_map(&.modal_calls).size.should eq(1)
+  end
+
+  it "hide releases any grab and withdraws the window" do
+    app = FakeApp.new
+    handle = window_handle(app)
+
+    handle.hide.should be(handle)
+
+    app.windows.flat_map(&.grab_releases).size.should eq(1)
+    app.windows.sum(&.withdrawals).should eq(1)
+  end
+
+  it "show/hide/modal/grab_release raise a clear error on a non-window handle" do
+    app = FakeApp.new
+    node = Teek::UI::Node.new(type: :panel, name: :not_a_window)
+    node.realized = Teek::UI::RealizedNode.new(app: app, path: ".not_a_window")
+    handle = Teek::UI::Handle.new(node)
+
+    expect_raises(ArgumentError, /window/i) { handle.show }
+    expect_raises(ArgumentError, /window/i) { handle.hide }
+    expect_raises(ArgumentError, /window/i) { handle.modal }
+    expect_raises(ArgumentError, /window/i) { handle.grab_release }
+  end
+
+  it "show raises before realize" do
+    node = Teek::UI::Node.new(type: :window, name: :tools)
+
+    expect_raises(Teek::UI::NotRealizedError) { Teek::UI::Handle.new(node).show }
   end
 
   it "shape creation raises a clear error on a non-canvas handle" do

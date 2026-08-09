@@ -7,9 +7,10 @@ require "../../src/teek/ui"
 # create_menu_tree builds are already covered headlessly against FakeApp
 # (spec/teek/ui/realizer_spec.cr); this confirms Tk's own menu actually
 # behaves as expected - matching ruby-teek's teek-ui/test/
-# test_menu_realize.rb, minus its ui.window-hosted case (window isn't
-# ported yet) and its session.add-based rebuild case (Session#add isn't
-# ported yet either).
+# test_menu_realize.rb, minus its ui.window-hosted case (which lives in
+# spec/standalone/ui_window_fixture.cr instead, alongside the rest of
+# :window's own coverage) and its session.add-based menu rebuild case,
+# which is simply not covered here yet - Session#add itself does exist.
 
 new_fired = false
 handles = {} of Symbol => Teek::UI::Handle

@@ -88,6 +88,48 @@ module Teek
         self
       end
 
+      # Reveal a declared window (they're created withdrawn - see
+      # widget_types/window.cr): positions it just clear of the parent
+      # it's nested under, deiconifies, raises it to the front, and -
+      # only if it was declared modal: true - grabs input and focuses it
+      # via #modal. Only valid on a ui.window handle.
+      # Raises ArgumentError otherwise, NotRealizedError before realize.
+      def show : Handle
+        raise_unless_window!("show")
+        position_near_parent
+        window.deiconify
+        app.command(:raise, realized.path)
+        modal if @node.opts[:modal]?
+        self
+      end
+
+      # Hide the window again: releases any grab #show took (a no-op if
+      # it wasn't modal - grab_release is always safe) and withdraws it.
+      # Only valid on a ui.window handle.
+      def hide : Handle
+        raise_unless_window!("hide")
+        grab_release
+        window.withdraw
+        self
+      end
+
+      # Grab all input to this window and focus it - what makes a dialog
+      # modal. Release it with #grab_release when the dialog is done;
+      # #hide already does. Only valid on a ui.window handle.
+      def modal(global : Bool = false) : Handle
+        raise_unless_window!("modal")
+        window.modal(global: global)
+        self
+      end
+
+      # Release a grab previously taken by #modal. Safe whether or not
+      # one was ever held. Only valid on a ui.window handle.
+      def grab_release : Handle
+        raise_unless_window!("grab_release")
+        window.grab_release
+        self
+      end
+
       # Tears down this node's live widget (and everything under it),
       # releasing its callbacks via teek's existing <Destroy> cleanup,
       # and unlinks the node from the retained tree so it stops being
@@ -338,6 +380,59 @@ module Teek
         unless type == :canvas
           raise ArgumentError.new("##{method_name} only makes sense on a canvas (got a :#{type})")
         end
+      end
+
+      private def raise_unless_window!(method_name : String) : Nil
+        unless type == :window
+          raise ArgumentError.new("##{method_name} only makes sense on a window (got a :#{type})")
+        end
+      end
+
+      # This node's live Tk window. Whatever app is in play decides the
+      # concrete type (a real Teek::Window, or FakeWindow in a headless
+      # spec) - both answer WindowContract, which is all this uses.
+      private def window
+        app.window(realized.path)
+      end
+
+      # Place the window just clear of the parent it's nested under, so a
+      # second window doesn't open directly on top of the first.
+      private def position_near_parent : Nil
+        # Unless it was declared somewhere specific, which was a
+        # deliberate choice and outranks this. Ruby's version repositions
+        # unconditionally, which silently overrides the position half of
+        # its own geometry: option every time #show is called.
+        return if declared_position?
+
+        parent = parse_geometry(app.window(toplevel_parent_path).geometry.to_s)
+        return unless parent
+
+        width, _height, x, y = parent
+        window.set_geometry("+#{x + width + 12}+#{y}")
+      end
+
+      private def declared_position? : Bool
+        spec = @node.opts[:geometry]?
+        return false unless spec
+        !!spec.to_s.match(/[+-]\d+[+-]\d+\z/)
+      end
+
+      # Tk's "WxH+X+Y", to {width, height, x, y}. nil when there's no
+      # size part to offset from (a bare "+X+Y" is a legal geometry too),
+      # or when the window manager reports something unparseable.
+      private def parse_geometry(spec : String) : Tuple(Int32, Int32, Int32, Int32)?
+        match = spec.match(/\A(\d+)x(\d+)([+-]\d+)([+-]\d+)\z/)
+        return unless match
+
+        {match[1].to_i, match[2].to_i, match[3].to_i, match[4].to_i}
+      end
+
+      # The toplevel this window is nested under - its Tk path minus the
+      # last segment, or "." when there is no other segment left.
+      private def toplevel_parent_path : String
+        path = realized.path
+        last_dot = path.rindex('.')
+        last_dot && last_dot > 0 ? path[0...last_dot] : "."
       end
 
       # The actual teardown #destroy! defers or runs immediately - clears

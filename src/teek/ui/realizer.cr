@@ -105,6 +105,10 @@ module Teek
         unless NON_WIDGET_TYPES.includes?(node.type)
           @app.command(tk_command_for(node.type), [path] of TclArgValue, filtered_opts(node))
           node.realized = RealizedNode.new(app: @app, path: path)
+          # After node.realized, so the hook can reach the live path
+          # through a Handle if it needs to; before the children below,
+          # so a child is created into a parent that's fully set up.
+          registered.post_create(@app, node, path, parent_path) if registered
         end
 
         node.children.each { |child| create(child, path) unless child.lazy? }

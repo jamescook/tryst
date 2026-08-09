@@ -43,10 +43,11 @@ module Teek
     #   to drive. WidgetTypes.on_register (whose only purpose was
     #   replaying registrations for that codegen) is dropped for the same
     #   reason.
-    # - custom_children/post_create are both ->(realizer, ...) hooks for
-    #   widget types with bespoke realize behavior (scrollable, window,
-    #   ...) - add these back alongside whichever realizer support
-    #   actually calls them. custom_create IS ported (menu_bar/
+    # - custom_children is a ->(realizer, ...) hook for widget types with
+    #   bespoke child handling (scrollable) - add it back alongside
+    #   whichever realizer support actually calls it. post_create IS now
+    #   ported (:window's own wm setup needed it), as is custom_create
+    #   (menu_bar/
     #   context_menu's own bespoke Realizer#create_menu_tree traversal
     #   needed it), and addressing along with it (a menu entry has no Tk
     #   path of its own - see MenuEntryAddressing).
@@ -71,11 +72,13 @@ module Teek
         arrange : Proc(Realizer, Node, Array(Node), Nil)? = nil,
         @validator : ValidatorProc? = nil,
         custom_create : Proc(Realizer, Node, String, Nil)? = nil,
+        post_create : Proc(AppContract, Node, String, String, Nil)? = nil,
         @addressing : Proc(Node, AddressingStrategy) = Proc(Node, AddressingStrategy).new { |node| WidgetAddressing.new(node) },
       )
         flow = @flow
         @arrange = arrange || (flow ? Proc(Realizer, Node, Array(Node), Nil).new { |realizer, node, children| realizer.arrange_flow(node, children, flow) } : nil)
         @custom_create = custom_create
+        @post_create = post_create
       end
 
       def leaf? : Bool
@@ -135,6 +138,20 @@ module Teek
       # Runs this type's entire create/link replacement.
       def custom_create(realizer : Realizer, node : Node, parent_path : String) : Nil
         @custom_create.try(&.call(realizer, node, parent_path))
+      end
+
+      # Per-node setup that runs immediately after the generic widget
+      # creation call, while the realizer is still walking the tree -
+      # unlike custom_create, it ADDS to the normal handling instead of
+      # replacing it. Takes the app rather than the realizer, since what
+      # it does is drive Tk directly (:window's wm title/geometry/
+      # transient setup), not steer the walk.
+      def post_create? : Bool
+        !@post_create.nil?
+      end
+
+      def post_create(app : AppContract, node : Node, path : String, parent_path : String) : Nil
+        @post_create.try(&.call(app, node, path, parent_path))
       end
     end
   end

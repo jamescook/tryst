@@ -79,6 +79,23 @@ module Teek
         append_container(:panel, name, to_opts_hash(opts))
       end
 
+      # A separate toplevel window. Configure it with title:, geometry:
+      # ("WxH+X+Y", or just "+X+Y"), resizable: (one Bool for both axes,
+      # or [width, height]), transient: false to make it independent of
+      # its parent rather than subordinate to it, and modal: true to have
+      # #show grab input when it opens.
+      #
+      # Created withdrawn, so a build can declare every window the app
+      # will ever need without them all appearing at realize - reveal one
+      # with handle.show, hide it again with handle.hide.
+      def window(name : Symbol? = nil, **opts, &block : self -> Nil) : Handle
+        append_container(:window, name, to_opts_hash(opts), &block)
+      end
+
+      def window(name : Symbol? = nil, **opts) : Handle
+        append_container(:window, name, to_opts_hash(opts))
+      end
+
       def column(name : Symbol? = nil, **opts, &block : self -> Nil) : Handle
         append_container(:column, name, to_opts_hash(opts), &block)
       end
@@ -205,10 +222,9 @@ module Teek
         img
       end
 
-      # Node types a menu_bar is allowed to attach to - the root window
-      # itself. Ruby's own version also allows directly inside ui.window
-      # (a toplevel) - not ported here, since :window itself isn't yet.
-      MENU_BAR_HOSTS = [:root] of Symbol
+      # Node types a menu_bar is allowed to attach to - the root window,
+      # or any declared toplevel.
+      MENU_BAR_HOSTS = [:root, :window] of Symbol
 
       # A window's menu bar - the row of top-level dropdowns (File/Edit/
       # ...) along its top edge. Valid at the top level of a build.

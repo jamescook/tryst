@@ -18,12 +18,49 @@ class FakeWindow
   include Teek::UI::WindowContract
 
   record ModalCall, global : Bool
+  record ResizableCall, width : Bool, height : Bool
 
   getter path : String
   getter modal_calls = [] of ModalCall
   getter grab_releases = [] of Bool
+  getter titles = [] of String
+  getter geometries = [] of String
+  getter resizables = [] of ResizableCall
+  getter withdrawals = 0
+  getter deiconifies = 0
+
+  # What #geometry reports back - a real window's "WxH+X+Y". Settable so
+  # a spec can stage a parent's position for Handle#show, which places a
+  # window relative to it.
+  property reported_geometry = "200x100+0+0"
 
   def initialize(@path : String)
+  end
+
+  def set_title(value : String) : String # ameba:disable Naming/AccessorMethodName
+    @titles << value
+    value
+  end
+
+  def set_geometry(value : String) : String # ameba:disable Naming/AccessorMethodName
+    @geometries << value
+    value
+  end
+
+  def set_resizable(width : Bool, height : Bool) : Nil
+    @resizables << ResizableCall.new(width, height)
+  end
+
+  def geometry : String
+    @reported_geometry
+  end
+
+  def withdraw : Nil
+    @withdrawals += 1
+  end
+
+  def deiconify : Nil
+    @deiconifies += 1
   end
 
   def modal(global : Bool = false, & : -> Nil) : Nil
@@ -59,6 +96,11 @@ class FakeApp
   getter windows = [] of FakeWindow
   getter destroys = [] of String
   getter idles = [] of IdleCall
+
+  # What every FakeWindow this app hands out reports as its geometry -
+  # lets a spec stage a parent's size and position for Handle#show, which
+  # places a window relative to it.
+  property next_geometry = "200x100+0+0"
 
   # **kwargs is deliberately left untyped (unlike *args) - matching
   # Teek::App's own real #command - a typed double-splat fails to
@@ -111,8 +153,13 @@ class FakeApp
     nil
   end
 
+  # A fresh recorder per call, matching the real App#window (which also
+  # builds a new Teek::Window each time rather than caching one). A spec
+  # asserting on window calls therefore aggregates across #windows rather
+  # than holding one instance.
   def window(path = ".")
     win = FakeWindow.new(path.to_s)
+    win.reported_geometry = @next_geometry
     @windows << win
     win
   end

@@ -47,6 +47,17 @@ module Teek
       abstract def modal(global : Bool = false, &block : -> Nil)
       abstract def modal(global : Bool = false)
       abstract def grab_release
+      # The rest of what a :window's post_create and Handle#show/#hide
+      # drive (see widget_types/window.cr).
+      # Named to match Teek::Window's own set_title/set_geometry, which
+      # carry the same disable - this has to mirror the real method
+      # names exactly or it stops being a contract.
+      abstract def set_title(value : String)    # ameba:disable Naming/AccessorMethodName
+      abstract def set_geometry(value : String) # ameba:disable Naming/AccessorMethodName
+      abstract def set_resizable(width : Bool, height : Bool)
+      abstract def geometry
+      abstract def withdraw
+      abstract def deiconify
     end
   end
 end
