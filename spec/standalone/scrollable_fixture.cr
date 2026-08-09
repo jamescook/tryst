@@ -110,5 +110,43 @@ scroller = session[:scroller]
 raise "scrollable: expected :scroller to be found" unless scroller
 raise "scrollable: expected .scroller, got #{scroller.path}" unless scroller.path == ".scroller"
 
+# Case 10: Session#add into an ALREADY-REALIZED scrollable. This used to
+# raise outright - realize_subtree built the child under .scroller, whose
+# slots the scrollbar's grid already owns, so arranging it was "cannot
+# use geometry manager pack inside .scroller which already has slaves
+# managed by grid" - and left the half-built widget behind, since that
+# happens past Session#add's rollback boundary.
+region_before = app.split_list(app.command(canvas, :configure, "-scrollregion")).last
+session.add(:scroller) { |content| content.label(:added, text: "added after realize") }
+app.update
+
+added = "#{viewport}.added"
+raise "scrollable: expected the added widget at #{added}" unless app.winfo.exists?(added)
+if app.winfo.exists?(".scroller.added")
+  raise "scrollable: the added widget landed under the outer frame as well"
+end
+
+# Case 11: and it's packed inside the viewport, like content built during
+# the initial realize - not left unmanaged.
+manager = app.command(:winfo, :manager, added)
+raise "scrollable: expected the added widget packed, got #{manager.inspect}" unless manager == "pack"
+parent = app.command(:winfo, :parent, added)
+raise "scrollable: expected #{added} inside the viewport, got #{parent}" unless parent == viewport
+
+# Case 12: the scrollregion grew to take the new content in, which is the
+# viewport's own <Configure> still doing its job after realize.
+region_after = app.split_list(app.command(canvas, :configure, "-scrollregion")).last
+if app.split_list(region_after)[3].to_f <= app.split_list(region_before)[3].to_f
+  raise "scrollable: expected the scrollregion to grow, got #{region_before} then #{region_after}"
+end
+
+# Case 13: the wheel works over the newly added widget too - it joined
+# the same shared bindtag the content built at realize is on. Without
+# that, wheeling over exactly this widget would silently do nothing.
+raise "scrollable: expected to be back at the top" unless view_top(app, canvas) == 0.0
+app.interp.simulate_event(added, "<MouseWheel>", delta: -120)
+scrolled_added = app.interp.wait_until { app.update; view_top(app, canvas) > 0.0 }
+raise "scrollable: expected wheeling over the added widget to scroll" unless scrolled_added
+
 app.destroy
 puts "OK"

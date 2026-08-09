@@ -82,13 +82,29 @@ module Teek
         parent_realized = parent_node.realized
         raise ArgumentError.new("parent_node must already be realized") unless parent_realized
 
-        create(node, parent_realized.path)
+        # content_path, not path - the same string for every ordinary
+        # container, but a :scrollable's children belong in its embedded
+        # viewport, not under its own path (see RealizedNode).
+        create(node, parent_realized.content_path)
         # re-arrange ALL of parent_node's children (old + new), not just
         # the new one in isolation - flow positioning (a later phase)
         # depends on a child's index relative to every sibling, not just
         # itself.
         arrange_children(parent_node)
         link(node)
+        adopt_content_bindtag(node, parent_realized)
+      end
+
+      # Brings a subtree created after realize onto whatever shared
+      # bindtag its new parent's existing content already carries, so it
+      # behaves identically to a sibling built during the initial realize
+      # - for a :scrollable, that's the difference between the wheel
+      # working over the new content and silently doing nothing over it.
+      private def adopt_content_bindtag(node : Node, parent_realized : RealizedNode) : Nil
+        tag = parent_realized.content_bindtag
+        return unless tag
+
+        node.each { |descendant| descendant.realized.try { |realized| add_bindtag(realized.path, tag) } }
       end
 
       private def tk_command_for(type : Symbol) : String
@@ -242,7 +258,16 @@ module Teek
         end
 
         wire_scrollbars(path, canvas_path, x: x, y: y)
-        wire_wheel_scroll(canvas_path, viewport_path, node, x: x, y: y)
+        tag = wire_wheel_scroll(canvas_path, viewport_path, node, x: x, y: y)
+
+        # Replaces the provisional RealizedNode #create already set, now
+        # that the two things it couldn't know are settled: where this
+        # node's children actually go, and which bindtag they carry. Left
+        # to the end deliberately - the tag comes from #wire_wheel_scroll,
+        # which can only run once the children it tags exist. Nothing
+        # between here and there reads node.realized.
+        node.realized = RealizedNode.new(app: @app, path: path,
+          content_path: viewport_path, content_bindtag: tag)
       end
 
       # :scrollable's own arrangement (registered as its arrange:) -
@@ -355,13 +380,12 @@ module Teek
       # bindings (Button, Entry, ...) use, just scoped to this one
       # scrollable region instead of a widget class.
       #
-      # Only the content present at realize is tagged. Nothing re-tags a
-      # subtree added later - though that's moot today, since adding to a
-      # realized scrollable at all is currently broken upstream of here
-      # (#realize_subtree builds the child under the node's own path
-      # rather than the viewport, which grid already owns).
+      # Returns the tag, so the caller can record it on the node's own
+      # RealizedNode and content added later can join it too (see
+      # #adopt_content_bindtag) - nil when neither axis scrolls and there
+      # is no wheel handling to share.
       private def wire_wheel_scroll(canvas_path : String, viewport_path : String, node : Node,
-                                    x : Bool, y : Bool) : Nil
+                                    x : Bool, y : Bool) : String?
         return unless x || y
 
         tag = "TeekScrollRegion#{canvas_path.tr(".", "_")}"
@@ -375,6 +399,7 @@ module Teek
         # Shift+wheel is the conventional "scroll sideways" gesture, and
         # the only wheel most mice have.
         wire_wheel_axis(canvas_path, tag, "xview", "Shift-") if x
+        tag
       end
 
       # One axis's three wheel bindings: the real wheel event everywhere,

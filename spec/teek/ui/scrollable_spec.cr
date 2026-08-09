@@ -12,6 +12,24 @@ require "../../../src/teek/ui/validator"
 # actually scrolls) lives in spec/standalone/scrollable_fixture.cr.
 #
 # Mirrors ruby-teek's teek-ui/test/test_scrollable.rb.
+
+# Builds and realizes a scrollable holding one label, then appends a
+# second the way a Session#add block would and realizes just that
+# subtree - the exact path Session#add takes, minus the Session. A plain
+# top-level def rather than a method inside the describe below: Crystal
+# can't declare a def dynamically inside a block.
+private def add_label_after_realize(app : FakeApp, y : Bool = true) : Nil
+  session = WidgetDslHarness.new
+  session.scrollable(:scroller, y: y, &.label(:original, text: "first"))
+  Teek::UI::Realizer.new(app, session.document).realize
+
+  parent = session.document.find(:scroller).as(Teek::UI::Node)
+  added = session.document.create(type: :label, name: :added,
+    opts: {:text => "later"} of Symbol => Teek::TclArgValue)
+  parent.add_child(added)
+  Teek::UI::Realizer.new(app, session.document).realize_subtree(added, parent)
+end
+
 describe "ui.scrollable" do
   # The whole point of the type: children go in the viewport, NOT under
   # the scrollable's own path.
@@ -301,6 +319,88 @@ describe "ui.scrollable" do
       up = app.binds.find { |b| b.event == "<Shift-Button-4>" }.should_not be_nil
       up.block.call([] of String, Teek::CallbackSignal.new)
       app.calls.last.args.should eq(["xview", :scroll, -1, :units] of Teek::TclArgValue)
+    end
+  end
+
+  # Session#add drives Realizer#realize_subtree, which is what actually
+  # has to know a scrollable's children live in the viewport - the
+  # scrollable's own path is a frame whose slots the scrollbar's grid
+  # already owns, so building a child there is both the wrong parent and
+  # a geometry-manager conflict. Session itself can't be exercised
+  # headlessly (it always constructs a real Teek::App at realize), so
+  # these drive realize_subtree directly; spec/standalone/
+  # scrollable_fixture.cr covers the real Session#add against real Tk.
+  describe "adding content after realize" do
+    it "creates the new child in the viewport, not under the scrollable's own path" do
+      app = FakeApp.new
+      add_label_after_realize(app)
+
+      created = app.calls.select { |call| call.cmd == "ttk::label" }.map(&.args).last
+      created.should eq([".scroller.canvas.viewport.added"] of Teek::TclArgValue)
+    end
+
+    # The bug this guards: packing into .scroller, which the scrollbar
+    # already grids, is a hard Tcl error ("cannot use geometry manager
+    # pack inside .scroller which already has slaves managed by grid").
+    it "never packs the new child into the grid-managed outer frame" do
+      app = FakeApp.new
+      add_label_after_realize(app)
+
+      packed = app.calls.select { |call| call.cmd == "pack" }.flat_map(&.args)
+      packed.should_not contain(".scroller.added")
+      packed.should contain(".scroller.canvas.viewport.added")
+    end
+
+    it "puts the new child on the scroll region's bindtag, so the wheel works over it" do
+      app = FakeApp.new
+      add_label_after_realize(app)
+
+      tagged = app.calls.reverse_each.find { |call| call.cmd == "bindtags" && call.args.size == 2 }
+        .should_not be_nil
+      tagged.args.first.should eq(".scroller.canvas.viewport.added")
+      tagged.args[1].as(Array(Teek::TclArgValue)).last.should eq("TeekScrollRegion_scroller_canvas")
+    end
+
+    it "tags every descendant of the new subtree, not just its root" do
+      app = FakeApp.new
+      session = WidgetDslHarness.new
+      session.scrollable(:scroller)
+      Teek::UI::Realizer.new(app, session.document).realize
+
+      parent = session.document.find(:scroller).as(Teek::UI::Node)
+      branch = session.document.create(type: :panel, name: :branch)
+      leaf = session.document.create(type: :label, name: :leaf,
+        opts: {:text => "deep"} of Symbol => Teek::TclArgValue)
+      branch.add_child(leaf)
+      parent.add_child(branch)
+      Teek::UI::Realizer.new(app, session.document).realize_subtree(branch, parent)
+
+      tagged = app.calls.select { |call| call.cmd == "bindtags" && call.args.size == 2 }.map(&.args.first)
+      tagged.should contain(".scroller.canvas.viewport.branch")
+      tagged.should contain(".scroller.canvas.viewport.branch.leaf")
+    end
+
+    # Nothing to share when there's no wheel handling in the first place.
+    it "tags nothing when the scrollable doesn't scroll at all" do
+      app = FakeApp.new
+      add_label_after_realize(app, y: false)
+
+      app.calls.map(&.cmd).should_not contain("bindtags")
+    end
+
+    # The three paths only diverge for the scrolling cases - an ordinary
+    # container's children still go directly under it.
+    it "leaves an ordinary container's own path as where its children go" do
+      session = WidgetDslHarness.new
+      session.panel(:wrapper, &.label(:original, text: "first"))
+
+      app = FakeApp.new
+      Teek::UI::Realizer.new(app, session.document).realize
+
+      parent = session.document.find(:wrapper).as(Teek::UI::Node)
+      realized = parent.realized.should_not be_nil
+      realized.content_path.should eq(".wrapper")
+      realized.content_bindtag.should be_nil
     end
   end
 
