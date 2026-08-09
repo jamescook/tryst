@@ -147,7 +147,16 @@ class FakeApp
   end
 
   def bind(widget, event : String, subs : Enumerable, &block : Array(String), Teek::CallbackSignal -> Nil) : String
-    @binds << BindCall.new(widget.to_s, event, subs.to_a.map(&.to_s), block)
+    # Built element-wise rather than subs.to_a.map(&.to_s): a bind with
+    # NO subs at all reaches the splat overload above as an empty Tuple,
+    # whose #to_a is an Array(NoReturn) - #map over it then has no
+    # element type to infer a block return type from and fails to
+    # compile. The real App#bind is unaffected (it maps the Tuple
+    # directly, never through #to_a), so this was FakeApp-only, and
+    # invisible until the first zero-sub bind existed to call it.
+    sub_names = [] of String
+    subs.each { |sub| sub_names << sub.to_s }
+    @binds << BindCall.new(widget.to_s, event, sub_names, block)
     "" # see #command's own comment - same reasoning, App#bind returns String too
   end
 

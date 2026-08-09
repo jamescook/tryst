@@ -139,6 +139,27 @@ module Teek
         raise ArgumentError.new("##{method_name} can only be used directly inside ui.#{container}")
       end
 
+      # A scrolling region for ORDINARY widgets - a long column of them,
+      # a form taller than its window. Only needed for content Tk can't
+      # scroll on its own: a list/canvas (and later a text_area/table/
+      # tree) already attaches its own scrollbar with no wrapper at all,
+      # driven by its own scroll: - so wrapping one in a ui.scrollable
+      # would nest two scrolling regions, not improve the one.
+      #
+      # y: (default true) and x: (default false) pick which scrollbars it
+      # gets, and each auto-hides while its content fits. Wheel scrolling
+      # works anywhere over the region, including over a nested child.
+      #
+      # With x: false, content is held at the visible width rather than
+      # its natural one, so it never ends up narrower than the region.
+      def scrollable(name : Symbol? = nil, **opts, &block : self -> Nil) : Handle
+        append_container(:scrollable, name, to_opts_hash(opts), &block)
+      end
+
+      def scrollable(name : Symbol? = nil, **opts) : Handle
+        append_container(:scrollable, name, to_opts_hash(opts))
+      end
+
       def column(name : Symbol? = nil, **opts, &block : self -> Nil) : Handle
         append_container(:column, name, to_opts_hash(opts), &block)
       end

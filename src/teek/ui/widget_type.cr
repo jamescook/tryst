@@ -35,23 +35,19 @@ module Teek
     # descriptor: WidgetType.new(type: :divider, tk_command:
     # "ttk::separator") is a complete, working leaf widget.
     #
-    # Several fields ruby-teek's version carries aren't ported here yet -
-    # every one of them is realize-time metadata no currently-ported
-    # widget type needs, and each needs a class that doesn't exist yet:
-    # - dsl (the ->(mod) { define_method(...) } hook driving runtime
-    #   codegen) doesn't exist at all - this port uses hand-written
-    #   ui.<type> DSL methods instead, so there's nothing for a descriptor
-    #   to drive. WidgetTypes.on_register (whose only purpose was
-    #   replaying registrations for that codegen) is dropped for the same
-    #   reason.
-    # - custom_children is a ->(realizer, ...) hook for widget types with
-    #   bespoke child handling (scrollable) - add it back alongside
-    #   whichever realizer support actually calls it. post_create IS now
-    #   ported (:window's own wm setup needed it), as is custom_create
-    #   (menu_bar/
-    #   context_menu's own bespoke Realizer#create_menu_tree traversal
-    #   needed it), and addressing along with it (a menu entry has no Tk
-    #   path of its own - see MenuEntryAddressing).
+    # One field ruby-teek's version carries isn't ported here: dsl (the
+    # ->(mod) { define_method(...) } hook driving runtime codegen) doesn't
+    # exist at all - this port uses hand-written ui.<type> DSL methods
+    # instead, so there's nothing for a descriptor to drive.
+    # WidgetTypes.on_register (whose only purpose was replaying
+    # registrations for that codegen) is dropped for the same reason.
+    # Every other hook IS ported: post_create (:window's own wm setup
+    # needed it), custom_create (menu_bar/context_menu's own bespoke
+    # Realizer#create_menu_tree traversal needed it) and addressing along
+    # with it (a menu entry has no Tk path of its own - see
+    # MenuEntryAddressing), and custom_children (:scrollable's own
+    # canvas+viewport, which its children are created inside rather than
+    # directly under its path - see Realizer#create_scrollable).
     class WidgetType
       getter type : Symbol
       getter tk_command : String
@@ -73,12 +69,14 @@ module Teek
         arrange : Proc(Realizer, Node, Array(Node), Nil)? = nil,
         @validator : ValidatorProc? = nil,
         custom_create : Proc(Realizer, Node, String, Nil)? = nil,
+        custom_children : Proc(Realizer, Node, String, Nil)? = nil,
         post_create : Proc(AppContract, Node, String, String, Nil)? = nil,
         @addressing : Proc(Node, AddressingStrategy) = Proc(Node, AddressingStrategy).new { |node| WidgetAddressing.new(node) },
       )
         flow = @flow
         @arrange = arrange || (flow ? Proc(Realizer, Node, Array(Node), Nil).new { |realizer, node, children| realizer.arrange_flow(node, children, flow) } : nil)
         @custom_create = custom_create
+        @custom_children = custom_children
         @post_create = post_create
       end
 
@@ -139,6 +137,20 @@ module Teek
       # Runs this type's entire create/link replacement.
       def custom_create(realizer : Realizer, node : Node, parent_path : String) : Nil
         @custom_create.try(&.call(realizer, node, parent_path))
+      end
+
+      # Whether this type takes over creating its own children, replacing
+      # ONLY the realizer's generic "create every child under this node's
+      # path" step - everything else (the widget-creation call,
+      # post_create, the whole normal #link pass) still happens as usual.
+      # Much narrower than custom_create above, which replaces all of it.
+      def custom_children? : Bool
+        !@custom_children.nil?
+      end
+
+      # Runs this type's own child creation, in place of the generic loop.
+      def custom_children(realizer : Realizer, node : Node, path : String) : Nil
+        @custom_children.try(&.call(realizer, node, path))
       end
 
       # Per-node setup that runs immediately after the generic widget

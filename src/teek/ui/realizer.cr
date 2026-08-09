@@ -32,13 +32,13 @@ module Teek
     # canvas overlay placement (#place_overlay), and menu_bar/context_menu's
     # own bespoke traversal (#create_menu_tree, driven by WidgetType's
     # custom_create: hook) are ported here, as is post_create: (:window's
-    # own wm setup) and the auto-scrollbar wrapping a natively_scrollable
-    # type gets for free (#create_native_scrollable). Still deferred:
-    # ui.scrollable itself - the arbitrary-content case, which has no Tk
-    # protocol to hook a scrollbar into and so needs an embedded
-    # canvas/viewport plus its own wheel handling - along with the
-    # custom_children: hook that would drive it, which doesn't exist on
-    # WidgetType yet (see widget_type.cr's own doc comment).
+    # own wm setup). Both scrolling cases are covered too: the
+    # auto-scrollbar a natively_scrollable type gets for free
+    # (#create_native_scrollable), and ui.scrollable itself - the
+    # arbitrary-content case, which has no Tk protocol to hook a
+    # scrollbar into and so builds an embedded canvas/viewport plus its
+    # own wheel handling (#create_scrollable, driven by WidgetType's
+    # custom_children: hook).
     class Realizer
       # DSL-reserved opts keys - layout keywords plus other entries the
       # DSL stashes on node.opts for the realizer to pick up later - none
@@ -124,7 +124,14 @@ module Teek
           registered.post_create(@app, node, path, parent_path) if registered
         end
 
-        node.children.each { |child| create(child, path) unless child.lazy? }
+        # A type with bespoke child handling (:scrollable, whose children
+        # belong in an embedded viewport rather than under its own path)
+        # replaces just this step - see WidgetType#custom_children.
+        if registered && registered.custom_children?
+          registered.custom_children(self, node, path)
+        else
+          node.children.each { |child| create(child, path) unless child.lazy? }
+        end
       end
 
       # Whether this node is a type that scrolls on its own AND scrolling
@@ -179,6 +186,77 @@ module Teek
       private def scroll_axis?(node : Node, key : Symbol, default : Bool) : Bool
         value = node.opts[key]?
         value.is_a?(Bool) ? value : default
+      end
+
+      # A :scrollable's own widget (created just before this runs, by the
+      # generic step in #create) is a plain ttk::frame at path - this
+      # fills it in, taking over child creation instead of that generic
+      # node.children.each loop. There's no Tk protocol to hook a
+      # scrollbar into arbitrary widgets (unlike the native-scrollable
+      # case above, which is why this is the ONLY thing left for
+      # ui.scrollable to do - see #auto_scrollable?), so children are
+      # created inside an embedded frame instead - <path>.canvas.viewport,
+      # held in a canvas the scrollbar drives. The viewport's own size
+      # changes (as its content changes) keep the canvas's -scrollregion
+      # in sync; unless horizontal scrolling is on, the canvas's own size
+      # changes keep the viewport's width matched to it too, so content
+      # isn't left narrower than the visible area.
+      #
+      # Public for the same reason #arrange_flow/#create_menu_tree are
+      # (see either's own comment): a WidgetType's hook - custom_children:
+      # here - reaches this from outside the class.
+      def create_scrollable(node : Node, path : String) : Nil
+        x = scroll_axis?(node, :x, false)
+        y = scroll_axis?(node, :y, true)
+
+        canvas_path = "#{path}.canvas"
+        viewport_path = "#{canvas_path}.viewport"
+        @app.command("canvas", [canvas_path] of TclArgValue,
+          {"highlightthickness" => 0} of String => TclArgValue)
+        @app.command("ttk::frame", ([viewport_path] of TclArgValue), EMPTY_KWARGS)
+        window_id = @app.command(canvas_path, [:create, :window, 0, 0] of TclArgValue,
+          {"window" => viewport_path, "anchor" => "nw"} of String => TclArgValue)
+
+        node.children.each { |child| create(child, viewport_path) unless child.lazy? }
+
+        # The scrollable region is whatever the content currently adds up
+        # to, re-measured every time the viewport resizes.
+        @app.bind(viewport_path, "<Configure>") do |_values, _signal|
+          region = @app.command(canvas_path, ([:bbox, :all] of TclArgValue), EMPTY_KWARGS)
+          @app.command(canvas_path, [:configure] of TclArgValue,
+            {"scrollregion" => region} of String => TclArgValue)
+          nil
+        end
+
+        # With no horizontal scrolling, content should fill the visible
+        # width rather than hug its natural size - so the embedded window
+        # tracks the canvas's own width. With it on, leaving the width
+        # alone is the whole point: content wider than the canvas is what
+        # there is to scroll to.
+        unless x
+          @app.bind(canvas_path, "<Configure>", :width) do |values, _signal|
+            @app.command(canvas_path, [:itemconfigure, window_id] of TclArgValue,
+              {"width" => values[0]} of String => TclArgValue)
+            nil
+          end
+        end
+
+        wire_scrollbars(path, canvas_path, x: x, y: y)
+        wire_wheel_scroll(canvas_path, viewport_path, node, x: x, y: y)
+      end
+
+      # :scrollable's own arrangement (registered as its arrange:) -
+      # children live in the embedded viewport frame (see
+      # #create_scrollable), packed fill/expand so content stretches to
+      # the visible width instead of hugging its own natural size. Public
+      # for the same reason #create_scrollable is.
+      def arrange_scrollable_frame(_node : Node, children : Array(Node)) : Nil
+        children.each do |child|
+          next unless realized = child.realized
+
+          @app.command(:pack, [realized.arrange_path] of TclArgValue,
+            {"fill" => "both", "expand" => true} of String => TclArgValue)
+        end
       end
 
       private def wire_scrollbars(path : String, target_path : String, x : Bool, y : Bool) : Nil
@@ -253,6 +331,98 @@ module Teek
           apply.call(fractions[0], fractions[1]) if fractions.size >= 2
           nil
         end
+      end
+
+      # Tk's own Scrollbar class binds <MouseWheel> at this ratio (see
+      # scrlbar.tcl) - matched here so wheeling over a scrollable's
+      # content feels identical to wheeling over its scrollbar.
+      WHEEL_UNITS_PER_NOTCH = 40.0
+
+      # #wire_scrollbars only covers dragging the scrollbar itself - the
+      # canvas has no default wheel handling of its own (a bare canvas
+      # isn't a Scrollbar), and neither do the arbitrary widgets embedded
+      # in its viewport. Binding the wheel on the canvas alone wouldn't
+      # reach those either: Tk delivers pointer events to whichever widget
+      # is actually under the cursor, and a child inside the viewport
+      # intercepts them before the canvas ever sees them.
+      #
+      # The fix is the classic one - give the canvas, the viewport, and
+      # every widget already inside it (walked recursively, since content
+      # nests arbitrarily deep) a shared custom bindtag, and bind the
+      # handler once on that tag rather than on any single widget. Every
+      # widget carrying the tag then responds identically no matter which
+      # one the pointer is over - the same mechanism Tk's own class
+      # bindings (Button, Entry, ...) use, just scoped to this one
+      # scrollable region instead of a widget class.
+      #
+      # Only the content present at realize is tagged. Nothing re-tags a
+      # subtree added later - though that's moot today, since adding to a
+      # realized scrollable at all is currently broken upstream of here
+      # (#realize_subtree builds the child under the node's own path
+      # rather than the viewport, which grid already owns).
+      private def wire_wheel_scroll(canvas_path : String, viewport_path : String, node : Node,
+                                    x : Bool, y : Bool) : Nil
+        return unless x || y
+
+        tag = "TeekScrollRegion#{canvas_path.tr(".", "_")}"
+        add_bindtag(canvas_path, tag)
+        add_bindtag(viewport_path, tag)
+        node.children.each do |child|
+          child.each { |descendant| descendant.realized.try { |realized| add_bindtag(realized.path, tag) } }
+        end
+
+        wire_wheel_axis(canvas_path, tag, "yview", "") if y
+        # Shift+wheel is the conventional "scroll sideways" gesture, and
+        # the only wheel most mice have.
+        wire_wheel_axis(canvas_path, tag, "xview", "Shift-") if x
+      end
+
+      # One axis's three wheel bindings: the real wheel event everywhere,
+      # plus X11's own pair - Tk on X11 reports a wheel as button 4/5
+      # presses and never sends <MouseWheel> at all, so a binding on that
+      # alone would leave Linux unable to wheel-scroll entirely.
+      private def wire_wheel_axis(canvas_path : String, tag : String,
+                                  view_command : String, modifier : String) : Nil
+        @app.bind(tag, "<#{modifier}MouseWheel>", :mouse_wheel) do |values, _signal|
+          scroll_wheel(canvas_path, view_command, wheel_units(values[0]))
+        end
+        @app.bind(tag, "<#{modifier}Button-4>") { |_values, _signal| scroll_wheel(canvas_path, view_command, -1) }
+        @app.bind(tag, "<#{modifier}Button-5>") { |_values, _signal| scroll_wheel(canvas_path, view_command, 1) }
+      end
+
+      private def scroll_wheel(canvas_path : String, view_command : String, units : Int32) : Nil
+        @app.command(canvas_path, ([view_command, :scroll, units, :units] of TclArgValue), EMPTY_KWARGS)
+        nil
+      end
+
+      # Tk 9's own `scroll <number> units` accepts (and documents rounding
+      # for) a fractional number; Tcl 8.6's stricter integer parsing
+      # rejects "3.0" outright ("expected integer but got ..."), raised
+      # deep inside the widget's own command implementation from within
+      # this very callback. Rounding to a real Int32 here keeps the string
+      # Tcl sees free of a decimal point on every version.
+      #
+      # ties_away, not Crystal's default ties_even: it matches both Ruby's
+      # own Float#round (what ruby-teek does) and Tk 9's documented
+      # away-from-zero rounding - and more to the point, ties_even would
+      # turn a half-notch delta into zero units, i.e. a wheel event that
+      # visibly does nothing.
+      private def wheel_units(delta : String) : Int32
+        (delta.to_f / -WHEEL_UNITS_PER_NOTCH).round(mode: :ties_away).to_i
+      end
+
+      # Appends tag to path's bindtags, keeping the ones Tk already gave
+      # it (its own path, its widget class, its toplevel, "all") - a bare
+      # `bindtags <path> <tag>` would REPLACE them, silently costing the
+      # widget every class binding that makes it behave like itself.
+      private def add_bindtag(path : String, tag : String) : Nil
+        tags = Array(TclArgValue).new
+        @app.split_list(@app.command(:bindtags, ([path] of TclArgValue), EMPTY_KWARGS))
+          .each { |existing| tags << existing }
+        tags << tag
+        # One Array argument, not a pre-joined string - App#command turns
+        # a nested Array into a properly-escaped Tcl list itself.
+        @app.command(:bindtags, ([path, tags] of TclArgValue), EMPTY_KWARGS)
       end
 
       # node.opts, keyed by String (App#command's Hash overload) with
