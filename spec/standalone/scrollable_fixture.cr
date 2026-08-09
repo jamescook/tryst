@@ -148,5 +148,22 @@ app.interp.simulate_event(added, "<MouseWheel>", delta: -120)
 scrolled_added = app.interp.wait_until { app.update; view_top(app, canvas) > 0.0 }
 raise "scrollable: expected wheeling over the added widget to scroll" unless scrolled_added
 
+# Case 14: destroying the region releases every callback it registered,
+# the wheel handlers included. Those are bound to a bindtag, which is not
+# a window and never fires <Destroy> - they only get reclaimed because
+# the canvas is named as their owner. Every event binding in this app
+# belongs to the scrollable, so the count should not just shrink but go
+# to nothing.
+bindings_before = session.debug_info[:event_bindings]? || 0
+raise "scrollable: expected event bindings before destroy" unless bindings_before >= 5
+
+app.destroy(".scroller")
+app.update
+
+bindings_after = session.debug_info[:event_bindings]? || 0
+unless bindings_after.zero?
+  raise "scrollable: expected every binding released, #{bindings_before} became #{bindings_after}"
+end
+
 app.destroy
 puts "OK"

@@ -406,13 +406,24 @@ module Teek
       # plus X11's own pair - Tk on X11 reports a wheel as button 4/5
       # presses and never sends <MouseWheel> at all, so a binding on that
       # alone would leave Linux unable to wheel-scroll entirely.
+      #
+      # owner: is what keeps these from leaking. They're bound to a
+      # bindtag, which never fires <Destroy>, so without naming a real
+      # widget to hang their lifetime on they'd outlive the scrollable
+      # and every other one the app ever builds. The canvas is the honest
+      # owner: the tag is derived from its path and means nothing without
+      # it. See App#bind.
       private def wire_wheel_axis(canvas_path : String, tag : String,
                                   view_command : String, modifier : String) : Nil
-        @app.bind(tag, "<#{modifier}MouseWheel>", :mouse_wheel) do |values, _signal|
+        @app.bind(tag, "<#{modifier}MouseWheel>", :mouse_wheel, owner: canvas_path) do |values, _signal|
           scroll_wheel(canvas_path, view_command, wheel_units(values[0]))
         end
-        @app.bind(tag, "<#{modifier}Button-4>") { |_values, _signal| scroll_wheel(canvas_path, view_command, -1) }
-        @app.bind(tag, "<#{modifier}Button-5>") { |_values, _signal| scroll_wheel(canvas_path, view_command, 1) }
+        @app.bind(tag, "<#{modifier}Button-4>", owner: canvas_path) do |_values, _signal|
+          scroll_wheel(canvas_path, view_command, -1)
+        end
+        @app.bind(tag, "<#{modifier}Button-5>", owner: canvas_path) do |_values, _signal|
+          scroll_wheel(canvas_path, view_command, 1)
+        end
       end
 
       private def scroll_wheel(canvas_path : String, view_command : String, units : Int32) : Nil

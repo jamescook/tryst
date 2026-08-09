@@ -31,8 +31,8 @@ module Teek
     module AppContract
       abstract def command(cmd, *args : TclArgValue, **kwargs : TclArgValue)
       abstract def command(cmd, args : Array(TclArgValue), kwargs : Hash(String, TclArgValue))
-      abstract def bind(widget, event : String, *subs, &block : Array(String), CallbackSignal -> Nil)
-      abstract def bind(widget, event : String, subs : Enumerable, &block : Array(String), CallbackSignal -> Nil)
+      abstract def bind(widget, event : String, *subs, owner : String? = nil, &block : Array(String), CallbackSignal -> Nil)
+      abstract def bind(widget, event : String, subs : Enumerable, *, owner : String? = nil, &block : Array(String), CallbackSignal -> Nil)
       abstract def on_close(window, &block : Array(String), CallbackSignal -> Nil)
       abstract def popup_menu(menu, x : Int32, y : Int32, entry = nil)
       abstract def window(path)

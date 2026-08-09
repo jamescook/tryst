@@ -264,6 +264,33 @@ describe "ui.scrollable" do
       ])
     end
 
+    # A bindtag never fires <Destroy>, so without naming the canvas as
+    # the owner these callbacks would outlive every scrollable the app
+    # ever builds. See App#bind.
+    it "hangs the tag's callbacks on the canvas so destroying it releases them" do
+      session = WidgetDslHarness.new
+      session.scrollable(:scroller, x: true)
+
+      app = FakeApp.new
+      Teek::UI::Realizer.new(app, session.document).realize
+
+      wheel = app.binds.select { |b| b.widget == "TeekScrollRegion_scroller_canvas" }
+      wheel.size.should eq(6)
+      wheel.map(&.owner).uniq!.should eq([".scroller.canvas"])
+    end
+
+    # The control: a bind on a real widget needs no owner, since the
+    # widget IS the thing whose destroy releases it.
+    it "leaves owner unset for the binds that target a real widget" do
+      session = WidgetDslHarness.new
+      session.scrollable(:scroller)
+
+      app = FakeApp.new
+      Teek::UI::Realizer.new(app, session.document).realize
+
+      app.binds.select { |b| b.event == "<Configure>" }.map(&.owner).should eq([nil, nil])
+    end
+
     it "binds nothing at all when neither axis scrolls" do
       session = WidgetDslHarness.new
       session.scrollable(:scroller, y: false)

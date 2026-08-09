@@ -84,7 +84,8 @@ class FakeApp
   include Teek::UI::AppContract
 
   record CommandCall, cmd : String, args : Array(Teek::TclArgValue), kwargs : Hash(String, Teek::TclArgValue)
-  record BindCall, widget : String, event : String, subs : Array(String), block : Proc(Array(String), Teek::CallbackSignal, Nil)
+  record BindCall, widget : String, event : String, subs : Array(String),
+    block : Proc(Array(String), Teek::CallbackSignal, Nil), owner : String? = nil
   record OnCloseCall, window : String, block : Proc(Array(String), Teek::CallbackSignal, Nil)
   record PopupCall, menu : String, x : Int32, y : Int32, entry : String?
   record IdleCall, block : Proc(Nil)
@@ -142,11 +143,13 @@ class FakeApp
     @command_result
   end
 
-  def bind(widget, event : String, *subs, &block : Array(String), Teek::CallbackSignal -> Nil) : String
-    bind(widget, event, subs, &block)
+  def bind(widget, event : String, *subs, owner : String? = nil,
+           &block : Array(String), Teek::CallbackSignal -> Nil) : String
+    bind(widget, event, subs, owner: owner, &block)
   end
 
-  def bind(widget, event : String, subs : Enumerable, &block : Array(String), Teek::CallbackSignal -> Nil) : String
+  def bind(widget, event : String, subs : Enumerable, *, owner : String? = nil,
+           &block : Array(String), Teek::CallbackSignal -> Nil) : String
     # Built element-wise rather than subs.to_a.map(&.to_s): a bind with
     # NO subs at all reaches the splat overload above as an empty Tuple,
     # whose #to_a is an Array(NoReturn) - #map over it then has no
@@ -156,7 +159,7 @@ class FakeApp
     # invisible until the first zero-sub bind existed to call it.
     sub_names = [] of String
     subs.each { |sub| sub_names << sub.to_s }
-    @binds << BindCall.new(widget.to_s, event, sub_names, block)
+    @binds << BindCall.new(widget.to_s, event, sub_names, block, owner)
     "" # see #command's own comment - same reasoning, App#bind returns String too
   end
 

@@ -211,8 +211,25 @@ module Teek
     #   app.bind(".btn", "Enter") { |_values, _signal| highlight }
     # @example Raw Tcl expression (for codes not in BIND_SUBS)
     #   app.bind(".c", "Button-1", "%T") { |values, _signal| ... }
-    def bind(widget, event : String, *subs, &block : Array(String), CallbackSignal -> Nil) : String
-      bind(widget, event, subs, &block)
+    #
+    # owner: names the widget whose destruction releases this binding's
+    # callback, and defaults to widget itself - always right when widget
+    # IS a widget path. It matters only when binding to a BINDTAG, which
+    # is not a window and so never fires the <Destroy> that cleanup hangs
+    # off (see CallbackRegistry#forget_all_for_path): left alone, such a
+    # callback is tracked under a key nothing ever sweeps and lives as
+    # long as the process. Name the widget whose lifetime the tag
+    # actually follows - for a scroll region's shared wheel tag, the
+    # canvas being scrolled. This mirrors how every other non-window
+    # callback holder is already tracked (a menu entry under its menu, a
+    # text tag under its text widget, a canvas item under its canvas).
+    #
+    # Leave it nil for a genuine CLASS tag ("Entry", "Button"): those
+    # outlive every individual widget on purpose, so there is no owner to
+    # name and nothing to release.
+    def bind(widget, event : String, *subs, owner : String? = nil,
+             &block : Array(String), CallbackSignal -> Nil) : String
+      bind(widget, event, subs, owner: owner, &block)
     end
 
     # Same as the splat overload above, but for a subs list only known at
@@ -220,20 +237,38 @@ module Teek
     # Crystal has no way to splat a runtime-sized Array/Enumerable into a
     # plain *subs parameter the way Ruby's *binding.subs does. Mirrors
     # #tcl_invoke's own splat-args/Enumerable-args pair.
-    def bind(widget, event : String, subs : Enumerable, &block : Array(String), CallbackSignal -> Nil) : String
+    def bind(widget, event : String, subs : Enumerable, *, owner : String? = nil,
+             &block : Array(String), CallbackSignal -> Nil) : String
       event_str = event.starts_with?('<') ? event : "<#{event}>"
       cb = register_callback(&block)
-      callback_registry.reconcile({:bind, widget.to_s}) { |before| before.merge({event_str => cb}) }
+      callback_registry.reconcile({:bind, owner || widget.to_s}) do |before|
+        before.merge({bind_key(widget, event_str) => cb})
+      end
       tcl_subs = subs.map { |sub| sub.is_a?(Symbol) ? BIND_SUBS[sub] : sub.to_s }
       sub_str = tcl_subs.empty? ? "" : " " + tcl_subs.join(" ")
       tcl_eval("bind #{widget} #{event_str} {crystal_callback #{cb}#{sub_str}}")
     end
 
-    # Remove an event binding previously set with #bind.
-    def unbind(widget, event : String) : Nil
+    # Remove an event binding previously set with #bind. Pass the same
+    # owner: #bind was given, or this reconciles a different container
+    # and the callback is never released.
+    def unbind(widget, event : String, *, owner : String? = nil) : Nil
       event_str = event.starts_with?('<') ? event : "<#{event}>"
-      callback_registry.reconcile({:bind, widget.to_s}) { |before| before.reject { |key, _| key == event_str } }
+      key = bind_key(widget, event_str)
+      callback_registry.reconcile({:bind, owner || widget.to_s}) { |before| before.reject { |k, _| k == key } }
       tcl_eval("bind #{widget} #{event_str} {}")
+    end
+
+    # A binding's key within its registry container - the bind target as
+    # well as the event, not the event alone. With owner:, several
+    # targets share one container, and keying on the event by itself
+    # would let one target's rebind look like a replacement of another
+    # target's binding for the same event - releasing a callback id that
+    # a live Tcl binding still refers to. That's worse than the leak
+    # owner: exists to fix: a dangling id fails when the event fires,
+    # rather than just costing memory.
+    private def bind_key(widget, event_str : String) : String
+      "#{widget} #{event_str}"
     end
 
     # Evaluate *script* once per App instance under *name*, skipping it on

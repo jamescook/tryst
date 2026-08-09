@@ -1253,6 +1253,69 @@ tk_test "destroying a widget releases its bind callbacks" do |app|
   raise "destroy should release all bind callbacks owned by the widget" unless app.interp.callback_ids.size == baseline
 end
 
+# A bindtag isn't a window and never fires <Destroy>, so cleanup has
+# nothing to hang off unless the caller names a widget whose lifetime the
+# tag follows. Without owner:, these ids would live as long as the
+# process - the same reason a menu entry is tracked under its menu and a
+# text tag under its text widget.
+tk_test "destroying the owner releases callbacks bound to a bindtag" do |app|
+  app.tcl_eval("canvas .c_wheel1")
+
+  baseline = app.interp.callback_ids.size
+  app.bind("TeekScrollRegion_c_wheel1", "<MouseWheel>", owner: ".c_wheel1") { }
+  app.bind("TeekScrollRegion_c_wheel1", "<Button-4>", owner: ".c_wheel1") { }
+  raise "bind should register two callbacks" unless app.interp.callback_ids.size == baseline + 2
+
+  app.destroy(".c_wheel1")
+
+  unless app.interp.callback_ids.size == baseline
+    raise "destroying the owner should release the tag's callbacks"
+  end
+end
+
+# owner: makes several bind targets share one registry container, so a
+# binding's key has to carry the target as well as the event. Keyed on
+# the event alone, the tag's <MouseWheel> would look like a REPLACEMENT
+# of the canvas's own <MouseWheel> and release an id the live Tcl
+# binding still refers to - a dangling callback, worse than the leak
+# owner: exists to fix.
+tk_test "a bindtag and its owner can bind the same event independently" do |app|
+  app.tcl_eval("canvas .c_wheel2")
+
+  baseline = app.interp.callback_ids.size
+  app.bind(".c_wheel2", "<MouseWheel>") { }
+  app.bind("TeekScrollRegion_c_wheel2", "<MouseWheel>", owner: ".c_wheel2") { }
+
+  unless app.interp.callback_ids.size == baseline + 2
+    raise "the tag's binding replaced the owner's own binding for the same event"
+  end
+
+  app.destroy(".c_wheel2")
+  raise "destroying the owner should release both" unless app.interp.callback_ids.size == baseline
+end
+
+# A class tag deliberately outlives every individual widget, so there's
+# no owner to name and nothing to release - the one case where leaving
+# owner: nil for a non-widget target is correct rather than a leak.
+tk_test "a class-tag binding survives destroying a widget of that class" do |app|
+  app.tcl_eval("entry .e_bind10")
+  fired = 0
+  app.bind("Entry", "Key-y") { fired += 1 }
+
+  app.destroy(".e_bind10")
+
+  app.show
+  app.tcl_eval("entry .e_bind11")
+  app.tcl_eval("pack .e_bind11")
+  app.tcl_eval("focus -force .e_bind11")
+  app.update
+  app.tcl_eval("event generate .e_bind11 <Key-y>")
+  app.update
+
+  app.unbind("Entry", "Key-y")
+  raise "the class binding should still fire for a later widget" unless fired == 1
+end
+
 tk_test "destroying a widget releases bind callbacks on its descendants" do |app|
   app.tcl_eval("frame .f_bind4")
   app.tcl_eval("button .f_bind4.b -text hi")
