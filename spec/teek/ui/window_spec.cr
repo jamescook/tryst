@@ -136,6 +136,35 @@ describe "the :window widget type" do
     packed.should contain(".go")
   end
 
+  # Handle#on_close queues onto the node before realize; this is the
+  # other half - Realizer picking that up and wiring it to the window's
+  # own realized path, so the two spellings end up identical.
+  it "an on_close queued on the handle before realize is wired at realize" do
+    session = WidgetDslHarness.new
+    fired = false
+    session.window(:tools).on_close { |_values, _signal| fired = true }
+
+    app = FakeApp.new
+    Teek::UI::Realizer.new(app, session.document).realize
+
+    app.on_closes.map(&.window).should eq([".tools"])
+    app.on_closes.first.block.call([] of String, Teek::CallbackSignal.new)
+    fired.should be_true
+  end
+
+  it "on_close: as a build option wires the same way" do
+    session = WidgetDslHarness.new
+    fired = false
+    session.window(:tools, on_close: Proc(Array(String), Teek::CallbackSignal, Nil).new { |_v, _s| fired = true })
+
+    app = FakeApp.new
+    Teek::UI::Realizer.new(app, session.document).realize
+
+    app.on_closes.map(&.window).should eq([".tools"])
+    app.on_closes.first.block.call([] of String, Teek::CallbackSignal.new)
+    fired.should be_true
+  end
+
   it "a menu_bar may be declared inside a window, not just at the root" do
     session = WidgetDslHarness.new
 

@@ -19,10 +19,12 @@ module Teek
     # Only the subset needed for a basic interactive app is ported here -
     # see this task's own bead for what's deferred: on_drag (CanvasItem's
     # own on_drag/#draggable are deferred right alongside this one - see
-    # canvas_item.cr's own doc comment), on_tab_changed, on_close, window
-    # lifecycle (modal/release_focus/show/hide), and #text_content - each
-    # needs a class/DSL surface not built yet (the window widget type,
-    # TextContent, Screens/ModalStack respectively).
+    # canvas_item.cr's own doc comment), on_tab_changed, and
+    # #text_content - each needs a class/DSL surface not built yet
+    # (tabs and TextContent respectively). The window lifecycle
+    # (show/hide/modal/grab_release/on_close) IS ported, alongside the
+    # :window widget type it acts on; only its Screens/ModalStack
+    # integration is still outstanding.
     #
     # Resolves this node's own WidgetType#addressing strategy from the
     # registry, falling back to WidgetAddressing for an unregistered type
@@ -247,6 +249,39 @@ module Teek
       def on_key(spec : Symbol | String, &block : Array(String), CallbackSignal -> Nil) : Handle
         modifiers, keysym = Keysyms.resolve(spec)
         Keysyms.patterns_for(modifiers, keysym).each { |event| bind_event(event, block) }
+        self
+      end
+
+      # Fires when the window's close button is pressed (titlebar close
+      # box, Cmd-W, Alt-F4, ...). teek's own default - destroy the window
+      # - only applies while nothing else has claimed it, so the block
+      # decides whether the window actually closes at all: call #destroy!
+      # if that's what you want, or #hide to keep a palette window around
+      # for later.
+      #
+      # Wired straight away once realized, and queued onto the node
+      # otherwise (Realizer picks it up from there), so this reads the
+      # same either side of realize - the same before/after pair the
+      # other on_* methods here get. Declaring on_close: as a build
+      # option does the same thing; this is for setting or replacing one
+      # after the fact.
+      #
+      # Only valid on a ui.window handle - the root window's own close
+      # handler isn't a Handle's to set, since the root has no Handle;
+      # reach it through the app instead (session.app.on_close).
+      # Raises ArgumentError on any other type.
+      def on_close(&block : Array(String), CallbackSignal -> Nil) : Handle
+        raise_unless_window!("on_close")
+
+        if realized_node = @node.realized
+          # Not #app: that raises when a RealizedNode carries no app,
+          # which is exactly the App-free shape headless Document/Node
+          # coverage builds (see realized_node.cr).
+          realized_app = realized_node.app || raise NotRealizedError.new
+          realized_app.on_close(realized_node.path, &block)
+        else
+          @node.opts[:on_close] = block
+        end
         self
       end
 

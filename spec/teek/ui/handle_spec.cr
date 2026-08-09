@@ -522,6 +522,41 @@ describe Teek::UI::Handle do
     expect_raises(ArgumentError, /window/i) { handle.grab_release }
   end
 
+  it "on_close wires straight through once the window is realized" do
+    app = FakeApp.new
+    handle = window_handle(app)
+    fired = false
+
+    handle.on_close { |_values, _signal| fired = true }.should be(handle)
+
+    app.on_closes.map(&.window).should eq([".tools"])
+    app.on_closes.first.block.call([] of String, Teek::CallbackSignal.new)
+    fired.should be_true
+  end
+
+  # The other half - Realizer picking the queued block up - is covered
+  # end to end in spec/teek/ui/window_spec.cr.
+  it "on_close before realize queues onto the node instead" do
+    app = FakeApp.new
+    node = Teek::UI::Node.new(type: :window, name: :tools)
+    handle = Teek::UI::Handle.new(node)
+
+    handle.on_close { |_values, _signal| }
+
+    app.on_closes.should be_empty
+    node.opts[:on_close]?.should be_a(Proc(Array(String), Teek::CallbackSignal, Nil))
+  end
+
+  it "on_close raises a clear error on a non-window handle" do
+    app = FakeApp.new
+    node = Teek::UI::Node.new(type: :panel, name: :not_a_window)
+    node.realized = Teek::UI::RealizedNode.new(app: app, path: ".not_a_window")
+
+    expect_raises(ArgumentError, /window/i) do
+      Teek::UI::Handle.new(node).on_close { |_values, _signal| }
+    end
+  end
+
   it "show raises before realize" do
     node = Teek::UI::Node.new(type: :window, name: :tools)
 

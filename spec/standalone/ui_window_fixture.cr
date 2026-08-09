@@ -111,5 +111,44 @@ app.update
 raise "window: expected .free normal after show" unless app.command(:wm, :state, ".free") == "normal"
 raise "window: expected .tools still withdrawn" unless app.command(:wm, :state, ".tools") == "withdrawn"
 
+# Case 10: an on_close handler set after realize takes over from Tk's
+# own default. The window has to SURVIVE it - that's what lets a palette
+# window be dismissed and brought back rather than destroyed for good.
+closes = 0
+free.on_close do |_values, _signal|
+  closes += 1
+  free.hide
+end
+
+# Running the registered WM_DELETE_WINDOW script is what the window
+# manager itself does when the close box is pressed - no way to press a
+# real one under a WM-less Xvfb.
+close_script = app.command(:wm, :protocol, ".free", "WM_DELETE_WINDOW")
+raise "window: expected a WM_DELETE_WINDOW handler on .free" if close_script.empty?
+app.tcl_eval(close_script)
+app.update
+
+raise "window: expected the close handler to fire once, got #{closes}" unless closes == 1
+raise "window: expected .free to survive its own close handler" unless app.winfo.exists?(".free")
+unless app.command(:wm, :state, ".free") == "withdrawn"
+  raise "window: expected the handler's hide to have withdrawn .free"
+end
+
+# Case 11: setting another replaces it rather than stacking - Tk keeps
+# one WM_DELETE_WINDOW script per window - and the callback the previous
+# one held is released rather than leaked.
+before_replace = app.interp.callback_ids.size
+replacements = 0
+free.on_close { |_values, _signal| replacements += 1 }
+after_replace = app.interp.callback_ids.size
+unless after_replace == before_replace
+  raise "window: expected replacing on_close to release the old callback, #{before_replace} -> #{after_replace}"
+end
+
+app.tcl_eval(app.command(:wm, :protocol, ".free", "WM_DELETE_WINDOW"))
+app.update
+raise "window: expected the replacement to fire, got #{replacements}" unless replacements == 1
+raise "window: expected the replaced handler not to fire again, got #{closes}" unless closes == 1
+
 app.destroy
 puts "OK"
