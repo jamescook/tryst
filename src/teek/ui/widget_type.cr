@@ -56,6 +56,17 @@ module Teek
       getter validator : ValidatorProc?
       getter addressing : Proc(Node, AddressingStrategy)
 
+      getter? leaf : Bool
+      getter? natively_scrollable : Bool
+      getter? arranged : Bool
+
+      # Whether this type's Tk command takes a -command option meaning
+      # "the user activated this" - what Handle#on_action wires itself to.
+      # Deliberately false for slider: ttk::scale does take -command, but
+      # it fires on every value change with the new value, which isn't an
+      # activation (and bind: already covers value changes).
+      getter? takes_command : Bool
+
       def initialize(
         @type : Symbol,
         @tk_command : String,
@@ -80,25 +91,8 @@ module Teek
         @post_create = post_create
       end
 
-      def leaf? : Bool
-        @leaf
-      end
-
       def container? : Bool
         !@leaf
-      end
-
-      def natively_scrollable? : Bool
-        @natively_scrollable
-      end
-
-      # Whether this type's Tk command takes a -command option meaning
-      # "the user activated this" - what Handle#on_action wires itself to.
-      # Deliberately false for slider: ttk::scale does take -command, but
-      # it fires on every value change with the new value, which isn't an
-      # activation (and bind: already covers value changes).
-      def takes_command? : Bool
-        @takes_command
       end
 
       # The current value of this type's own Teek::UI global scroll-default
@@ -108,10 +102,6 @@ module Teek
         in ScrollDefault::AutoScroll       then Teek::UI.auto_scroll
         in ScrollDefault::AutoScrollCanvas then Teek::UI.auto_scroll_canvas
         end
-      end
-
-      def arranged? : Bool
-        @arranged
       end
 
       # Whether this type replaces the generic pack arrangement.

@@ -192,7 +192,8 @@ module Teek
       def logical_path : String
         return "." if type == :root
 
-        prefix = (parent.nil? || parent.try(&.type) == :root) ? "." : "#{parent.try(&.logical_path)}."
+        owner = parent
+        prefix = (owner.nil? || owner.type == :root) ? "." : "#{owner.logical_path}."
         "#{prefix}#{name || key}"
       end
 

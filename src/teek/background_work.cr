@@ -132,28 +132,12 @@ module Teek
     # is one process-wide setting regardless of task type, matching
     # ruby-teek's Teek::BackgroundWork.poll_ms exactly, including the
     # bare (no type argument) Teek::BackgroundWork.poll_ms = call syntax.
-    @@poll_ms = 16
+    class_property poll_ms : Int32 = 16
 
     # When true, only the latest progress value per poll cycle is
     # delivered (default true) - prevents UI choking when the worker
     # yields faster than the UI polls.
-    @@drop_intermediate = true
-
-    def self.poll_ms : Int32
-      @@poll_ms
-    end
-
-    def self.poll_ms=(value : Int32) : Int32
-      @@poll_ms = value
-    end
-
-    def self.drop_intermediate : Bool
-      @@drop_intermediate
-    end
-
-    def self.drop_intermediate=(value : Bool) : Bool
-      @@drop_intermediate = value
-    end
+    class_property drop_intermediate : Bool = true # ameba:disable Naming/QueryBoolMethods
 
     # Crystal doesn't support a generic (parameterized) alias, and a
     # class-level alias can't see its own enclosing generic class's type

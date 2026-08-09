@@ -130,12 +130,6 @@ module Teek
       @widgets = {} of String => WidgetInfo
       @track_widgets = track_widgets
       @_pending_exception = nil
-      # Assigned last, deliberately: passing self to another object's
-      # constructor before every ivar is assigned permanently marks any
-      # not-yet-assigned ivar as nilable (Crystal can't guarantee nothing
-      # observed it as nil during the escape) - so this must come after
-      # every other ivar above, not before.
-      @callback_registry = CallbackRegistry(App).new(self)
       setup_widget_tracking if track_widgets
       setup_destroy_cleanup
       hide
@@ -499,17 +493,11 @@ module Teek
       end
     end
 
-    @aqua : Bool?
-
     # Whether Tk is running on macOS's Aqua windowing system. Memoized -
-    # the windowing system can't change for the life of the process.
-    # (ruby-teek writes this as `@aqua ||=`, which re-runs the Tcl call
-    # every time on non-macOS, where the answer is false.)
-    def aqua? : Bool
-      cached = @aqua
-      return cached unless cached.nil?
-      @aqua = tcl_eval("tk windowingsystem") == "aqua"
-    end
+    # the windowing system can't change for the life of the process, and
+    # the block form caches false as readily as true (a plain `||=` would
+    # re-run the Tcl call every time on non-macOS).
+    getter? aqua : Bool { tcl_eval("tk windowingsystem") == "aqua" }
 
     # A window's macOS appearance: "aqua", "darkaqua", or "auto". Returns
     # nil on every other platform.
@@ -592,12 +580,10 @@ module Teek
       Window.new(self, path)
     end
 
-    # @callback_registry reads as nilable to Crystal (self escaped into
-    # its own constructor before it was assigned - see #initialize) even
-    # though it's always set by the time any other method runs.
-    def callback_registry : CallbackRegistry(App)
-      @callback_registry.not_nil! # ameba:disable Lint/NotNil
-    end
+    # Built on first use. Constructing it takes self, so building it
+    # lazily keeps self from escaping mid-construction - which would mark
+    # every ivar not yet assigned at that point as nilable for good.
+    getter callback_registry : CallbackRegistry(App) { CallbackRegistry(App).new(self) }
 
     # Enter the Tk event loop. Blocks until the application exits.
     #
@@ -655,24 +641,14 @@ module Teek
     end
 
     # Typed wrapper around Tk's `winfo` command family (width, exists?,
-    # ...) - see Winfo. Lazily constructed on first access rather than in
-    # #initialize (unlike @callback_registry) specifically to avoid that
-    # same self-escapes-before-assignment nilability wrinkle - by the time
-    # any method other than #initialize itself runs, self is always fully
-    # constructed already.
-    @winfo : Winfo?
-
-    def winfo : Winfo
-      @winfo ||= Winfo.new(self)
-    end
+    # ...) - see Winfo. Built on first use: constructing it takes self,
+    # and doing that inside #initialize would mark every ivar not yet
+    # assigned at that point as nilable for good.
+    getter winfo : Winfo { Winfo.new(self) }
 
     # Typed wrapper around Tk's `clipboard` command family - see
-    # Clipboard. Lazily constructed on first access, same reasoning as #winfo.
-    @clipboard : Clipboard?
-
-    def clipboard : Clipboard
-      @clipboard ||= Clipboard.new(self)
-    end
+    # Clipboard. Built on first use, same reasoning as #winfo.
+    getter clipboard : Clipboard { Clipboard.new(self) }
 
     # Build and evaluate a Tcl command from Crystal values. Positional args
     # are converted: Symbols pass bare, Procs become callbacks (bind-shaped

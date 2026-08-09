@@ -46,9 +46,6 @@ module Teek
     end
   end
 
-  @@platform : Platform?
-
-  def self.platform : Platform
-    @@platform ||= Platform.new
-  end
+  # The one Platform instance for this process, built on first use.
+  class_getter platform : Platform { Platform.new }
 end

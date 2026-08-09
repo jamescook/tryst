@@ -52,9 +52,7 @@ module Teek
       @after_id = nil
     end
 
-    def cancelled? : Bool
-      @cancelled
-    end
+    getter? cancelled : Bool
 
     # Change the interval. Takes effect on the next tick.
     def interval=(ms : Int32) : Int32

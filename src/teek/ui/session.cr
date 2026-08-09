@@ -53,6 +53,11 @@ module Teek
 
       @app : App?
 
+      # The one toast label and its dismissal timer, both created on
+      # first #toast rather than at build time.
+      @toast_path : String?
+      @toast_timer : AfterHandle?
+
       def initialize(@title : String? = nil, @scroll : Bool? = nil, @track_widgets : Bool = true)
         @document = Document.new
         @stack = [@document.root]
@@ -60,8 +65,6 @@ module Teek
         @in_add = false
         @bus = EventBus(EventValue).new
         @timers = [] of QueuedTimer
-        @toast_path = nil.as(String?)
-        @toast_timer = nil.as(AfterHandle?)
       end
 
       # The underlying app - the DSL's escape hatch. Anything the DSL
