@@ -85,10 +85,12 @@ module Teek
 
         app = Teek::App.new(title: @title, track_widgets: @track_widgets)
         begin
-          # Vars realize first, so a widget bound to one (bind:) displays
-          # its initial value from the moment it's created rather than
-          # starting blank.
+          # Vars and images realize first, so a widget bound to one
+          # (bind:) displays its initial value from the moment it's
+          # created rather than starting blank, and one naming an image
+          # finds it already loaded rather than missing.
           @vars.each(&.realize(app))
+          @images.each(&.realize(app))
           Realizer.new(app, @document, default_scroll: @scroll).realize
           flush_timers(app)
         rescue ex
@@ -322,6 +324,7 @@ module Teek
 
         before = parent_node.children.size
         vars_before = @vars.size
+        images_before = @images.size
         push_stack(parent_node)
         @in_add = true
         begin
@@ -339,18 +342,20 @@ module Teek
           # realize_subtree below starts creating real widgets we're in
           # the same territory as a mid-realize failure during the
           # initial #realize, which Realizer governs.
-          rollback_add(parent_node, before, vars_before)
+          rollback_add(parent_node, before, vars_before, images_before)
           raise ex
         ensure
           @in_add = false
           pop_stack
         end
 
-        # A var declared inside the block has to be real before the new
-        # widget subtree realizes, exactly like the initial #realize
-        # orders them - a widget referencing one via bind: assumes it's
-        # already backed by the time IT gets created (see Var#realize).
+        # A var or image declared inside the block has to be real before
+        # the new widget subtree realizes, exactly like the initial
+        # #realize orders them - a widget referencing one via bind: or
+        # image: assumes it's already backed by the time IT gets created
+        # (see Var#realize / Image#realize).
         @vars[vars_before..].each(&.realize(live_app))
+        @images[images_before..].each(&.realize(live_app))
 
         realizer = Realizer.new(live_app, @document, default_scroll: @scroll)
         # A lazy: true child built in this block stays unrealized here
@@ -377,12 +382,17 @@ module Teek
       # name index the same way Handle#destroy! does, so those names stop
       # resolving and can be reused, then unlinks the new children from
       # the parent so nothing later iterates them.
-      private def rollback_add(parent_node : Node, before : Int32, vars_before : Int32) : Nil
+      private def rollback_add(parent_node : Node, before : Int32,
+                               vars_before : Int32, images_before : Int32) : Nil
         parent_node.children[before..].each do |child|
           child.each { |descendant| @document.unregister(descendant) }
           parent_node.remove_child(child)
         end
+        # Safe to drop these outright, names and all: rollback runs
+        # before the realize loop below, so nothing here ever reached the
+        # interpreter and a later declaration may reuse the same name.
         @vars.delete_at(vars_before..) if @vars.size > vars_before
+        @images.delete_at(images_before..) if @images.size > images_before
       end
 
       # Registers the timer immediately if there's a live app, or queues

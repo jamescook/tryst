@@ -10,7 +10,7 @@ require "../../support/widget_dsl_harness"
 # lighter stand-in for a real Session (src/teek/ui/session.cr now
 # exists, but this harness stays useful for keeping these specs
 # headless - see the harness's own doc comment). Not yet ported:
-# bind:/var:/image:, and every widget type/DSL method outside grid/
+# bind:/var:, and every widget type/DSL method outside grid/
 # column/row/spacer/panel/button/label/checkbox/radio/text_box/list
 # (tabs/split/scrollable/component/canvas/overlay/menu/slider/...).
 describe Teek::UI::WidgetDSL do
@@ -111,6 +111,35 @@ describe Teek::UI::WidgetDSL do
 
     first.name.should eq("::teek_ui_var_1")
     second.name.should eq("::teek_ui_var_2")
+  end
+
+  it "image allocates a Tcl image name and returns an Image" do
+    session = WidgetDslHarness.new
+
+    img = session.image("logo.png")
+
+    img.should be_a(Teek::UI::Image)
+    img.name.should eq("teek_ui_image_1")
+  end
+
+  it "image's allocated name increments across successive declarations" do
+    session = WidgetDslHarness.new
+
+    first = session.image("one.png")
+    second = session.image("two.gif")
+
+    first.name.should eq("teek_ui_image_1")
+    second.name.should eq("teek_ui_image_2")
+  end
+
+  it "an image's name is usable as a widget option before realize" do
+    session = WidgetDslHarness.new
+
+    img = session.image("logo.png")
+    session.button(:go, image: img.name)
+
+    root_child = session.document.root.children.first
+    root_child.opts.should eq({:image => "teek_ui_image_1"} of Symbol => Teek::TclArgValue)
   end
 
   it "bind: on a bind_option-supporting type sets that type's own Tk option to the var's name" do
@@ -585,5 +614,12 @@ describe Teek::UI::WidgetDSL do
     session.build_open = false
 
     expect_raises(Teek::UI::ClosedBuilderError) { session.button(:go) }
+  end
+
+  it "a closed builder raises on image too, which allocates rather than appends" do
+    session = WidgetDslHarness.new
+    session.build_open = false
+
+    expect_raises(Teek::UI::ClosedBuilderError) { session.image("logo.png") }
   end
 end

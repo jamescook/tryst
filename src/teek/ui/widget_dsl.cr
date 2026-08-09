@@ -5,6 +5,7 @@ require "./errors"
 require "./handle"
 require "./overlay_anchors"
 require "./var"
+require "./image"
 require "./menu_builder"
 
 module Teek
@@ -21,13 +22,13 @@ module Teek
     # before the initial realize and again for the duration of an #add
     # block, false otherwise).
     #
-    # @vars defaults to an empty array here (like @stack below), so
-    # Session needs no separate initialization for it - Session#realize
-    # reads it directly to realize every declared Var before the widget
-    # tree itself realizes. One piece of ruby-teek's state contract still
-    # isn't ported: @scope_stack (Scope isolation - #component, a later
-    # phase; current_scope below always returns Scope::TOP_LEVEL until it
-    # exists) and @images (#image, needs a Photo-backed Image class).
+    # @vars and @images default to empty arrays here (like @stack below),
+    # so Session needs no separate initialization for them -
+    # Session#realize reads both directly to realize every declared Var
+    # and Image before the widget tree itself realizes. One piece of
+    # ruby-teek's state contract still isn't ported: @scope_stack (Scope
+    # isolation - #component, a later phase; current_scope below always
+    # returns Scope::TOP_LEVEL until it exists).
     #
     # Only the generic leaf/container append machinery and the widget
     # types built up across the teek-ui epic's phases are ported here -
@@ -38,6 +39,7 @@ module Teek
       @document : Document
       @stack = [] of Node
       @vars = [] of Var
+      @images = [] of Image
 
       abstract def build_open? : Bool
 
@@ -176,6 +178,31 @@ module Teek
         v = Var.new("::teek_ui_var_#{@vars.size + 1}", initial)
         @vars << v
         v
+      end
+
+      # Declare an image loaded from a file - any format Tk's own
+      # `image create photo -file` accepts (PNG, GIF, ...). Its Tcl image
+      # name is allocated now (no interpreter needed - it's just a
+      # string), so a widget can name it as an image: option straight
+      # away; the backing Teek::Photo and the file load itself only
+      # happen at realize (Session#realize runs Image#realize on every
+      # declared Image before the widget tree itself realizes).
+      #
+      # Pass it along as image: img.name - see Image on why an Image
+      # can't be an option value directly the way ruby-teek's can.
+      #
+      # The remaining arguments are forwarded to Teek::Photo.new. Ruby
+      # forwards an opts Hash; they're spelled out here because Crystal
+      # can't splat one into a method with named parameters.
+      def image(path : String, width : Int32? = nil, height : Int32? = nil,
+                format : String? = nil, palette : String? = nil,
+                gamma : Float64? = nil) : Image
+        raise_if_closed!
+        img = Image.new("teek_ui_image_#{@images.size + 1}", path,
+          width: width, height: height, format: format,
+          palette: palette, gamma: gamma)
+        @images << img
+        img
       end
 
       # Node types a menu_bar is allowed to attach to - the root window
