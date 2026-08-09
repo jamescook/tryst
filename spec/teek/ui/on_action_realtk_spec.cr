@@ -10,6 +10,6 @@ require "../../support/tk_subprocess"
 # handle_spec.cr covers the build-phase side against FakeApp.
 describe "Teek::UI::Handle#on_action" do
   it "fires on completed clicks and keyboard activation, not on a bare press (plus post-realize wiring and callback release)" do
-    assert_tk_subprocess("spec/support/on_action_fixture.cr")
+    assert_tk_subprocess("spec/standalone/on_action_fixture.cr")
   end
 end

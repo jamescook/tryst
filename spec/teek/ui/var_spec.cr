@@ -8,7 +8,7 @@ require "../../../src/teek/ui/var"
 # no FakeApp-substitutable seam (it holds @app as the concrete Teek::App,
 # see var.cr's own doc comment for why), so its real value/coercion/
 # change-trace behavior is only ever exercised against real Tk instead -
-# see spec/support/reactive_vars_fixture.cr, mirroring ruby's
+# see spec/standalone/reactive_vars_fixture.cr, mirroring ruby's
 # test_reactive_vars.rb.
 describe Teek::UI::Var do
   it "name is the allocated Tcl variable name" do

@@ -9,7 +9,7 @@ require "../support/tk_subprocess"
 # tear down every other spec's Tk app.
 describe "Interp#mainloop" do
   it "returns once the window is destroyed by a scheduled timer" do
-    assert_tk_subprocess("spec/support/mainloop_destroy_fixture.cr")
+    assert_tk_subprocess("spec/standalone/mainloop_destroy_fixture.cr")
   end
 
   # ruby-teek's test_mainloop_blocking_mode_lets_background_threads_run

@@ -10,6 +10,6 @@ require "../../support/tk_subprocess"
 # (FakeApp-backed) coverage of everything else Handle does.
 describe "Teek::UI::Handle#destroy!" do
   it "defers correctly (auto-detect/forced sync/forced defer/double-call/ancestor-then-descendant/callback release/parent unlink)" do
-    assert_tk_subprocess("spec/support/handle_destroy_fixture.cr")
+    assert_tk_subprocess("spec/standalone/handle_destroy_fixture.cr")
   end
 end

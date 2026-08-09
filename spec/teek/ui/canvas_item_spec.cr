@@ -10,7 +10,7 @@ require "../../../src/teek/ui/handle"
 # ruby-teek's teek-ui/test/test_canvas_items.rb that don't need a real
 # Tk canvas actually creating/manipulating an item - that behavior is
 # covered instead by the real-Tk subprocess fixture
-# (spec/support/canvas_items_fixture.cr / canvas_items_realtk_spec.cr).
+# (spec/standalone/canvas_items_fixture.cr / canvas_items_realtk_spec.cr).
 describe Teek::UI::CanvasItem do
   it "virtual_path marks past the real Tk path" do
     item = Teek::UI::CanvasItem.new(FakeApp.new, ".board", "I3")

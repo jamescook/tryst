@@ -9,6 +9,6 @@ require "../../support/tk_subprocess"
 # needs its own subprocess rather than the shared tk_worker.
 describe "Realizer#arrange_grid" do
   it "places cells at their own row/column, honors colspan:/rowspan: and per-cell overrides, and applies stretch: weight against real Tk" do
-    assert_tk_subprocess("spec/support/grid_fixture.cr")
+    assert_tk_subprocess("spec/standalone/grid_fixture.cr")
   end
 end

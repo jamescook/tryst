@@ -1,11 +1,11 @@
 require "../spec_helper"
 
-# See spec/support/app_core_fixture.cr for why this runs as a subprocess
+# See spec/standalone/app_core_fixture.cr for why this runs as a subprocess
 # rather than constructing Teek::App directly in this spec.
 describe Teek::App do
   it "bootstraps and delegates tcl_eval/tcl_invoke/destroy/callbacks/update correctly" do
     process = Process.new(
-      "crystal", ["run", "spec/support/app_core_fixture.cr"],
+      "crystal", ["run", "spec/standalone/app_core_fixture.cr"],
       output: Process::Redirect::Pipe,
       error: Process::Redirect::Pipe,
     )

@@ -9,10 +9,10 @@ require "../../support/tk_subprocess"
 # all) lives in spec/teek/ui/session_spec.cr instead.
 describe "Teek::UI::Session#realize" do
   it "creates real widgets, is idempotent, and run_async maps the window" do
-    assert_tk_subprocess("spec/support/session_realize_fixture.cr")
+    assert_tk_subprocess("spec/standalone/session_realize_fixture.cr")
   end
 
   it "on error, destroys the half-built app and leaves the session exactly as if #realize had never been called" do
-    assert_tk_subprocess("spec/support/session_realize_error_fixture.cr")
+    assert_tk_subprocess("spec/standalone/session_realize_error_fixture.cr")
   end
 end

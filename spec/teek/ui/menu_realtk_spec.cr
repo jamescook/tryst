@@ -12,6 +12,6 @@ require "../../support/tk_subprocess"
 # its own subprocess rather than the shared tk_worker.
 describe "menu_bar/context_menu" do
   it "realizes and behaves correctly against real Tk" do
-    assert_tk_subprocess("spec/support/menu_fixture.cr")
+    assert_tk_subprocess("spec/standalone/menu_fixture.cr")
   end
 end

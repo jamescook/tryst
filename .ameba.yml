@@ -1,0 +1,19 @@
+# Ameba runs on its defaults for everything except the one rule below.
+
+# spec/standalone/ holds standalone test programs, not spec files - each is
+# run as its own `crystal run` process by assert_tk_subprocess (Tcl/Tk's
+# interpreter is a one-shot singleton per process, so anything constructing
+# its own Teek::App needs a fresh one). They must NOT be named *_spec.cr:
+# `crystal spec` globs that pattern and would try to run them in-process.
+#
+# Ameba's own default list already exempts spec/support/**, spec/fixtures/**
+# and spec/data/** for the same reason. IgnoredPaths REPLACES that default
+# rather than adding to it, so the defaults are repeated here verbatim
+# alongside spec/standalone/**.
+Lint/SpecFilename:
+  IgnoredPaths:
+    - spec/support/**
+    - spec/fixtures/**
+    - spec/data/**
+    - spec/**/spec_helper.cr
+    - spec/standalone/**

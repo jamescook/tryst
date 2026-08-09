@@ -9,6 +9,6 @@ require "../../support/tk_subprocess"
 # needs its own subprocess rather than the shared tk_worker.
 describe "Var" do
   it "stays in sync with its bound widgets in both directions, fires on_change, and coerces types, against real Tk" do
-    assert_tk_subprocess("spec/support/reactive_vars_fixture.cr")
+    assert_tk_subprocess("spec/standalone/reactive_vars_fixture.cr")
   end
 end

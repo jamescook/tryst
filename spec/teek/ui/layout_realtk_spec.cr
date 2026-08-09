@@ -9,6 +9,6 @@ require "../../support/tk_subprocess"
 # needs its own subprocess rather than the shared tk_worker.
 describe "Realizer#arrange_flow" do
   it "lays out column/row gap, align: :stretch, pad:, and spacer correctly against real Tk" do
-    assert_tk_subprocess("spec/support/layout_fixture.cr")
+    assert_tk_subprocess("spec/standalone/layout_fixture.cr")
   end
 end

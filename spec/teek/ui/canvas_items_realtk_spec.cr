@@ -11,6 +11,6 @@ require "../../support/tk_subprocess"
 # subprocess rather than the shared tk_worker.
 describe "Handle canvas shapes / CanvasItem" do
   it "creates real canvas items and manipulates them correctly against real Tk" do
-    assert_tk_subprocess("spec/support/canvas_items_fixture.cr")
+    assert_tk_subprocess("spec/standalone/canvas_items_fixture.cr")
   end
 end

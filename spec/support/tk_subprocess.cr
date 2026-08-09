@@ -1,6 +1,6 @@
 require "spec"
 
-# Runs a fixture .cr file (see spec/support/*_fixture.cr) as a genuinely
+# Runs a fixture .cr file (see spec/standalone/*_fixture.cr) as a genuinely
 # fresh `crystal run` subprocess and fails the current spec example
 # (Crystal Spec's own `fail`) unless it exits successfully within
 # `timeout` - the same Process.new/capture/fail shape spec/teek/app_spec.cr

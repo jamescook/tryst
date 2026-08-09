@@ -10,6 +10,6 @@ require "../../support/tk_subprocess"
 # rather than the shared tk_worker.
 describe "Realizer#place_overlay" do
   it "places overlaid widgets at their anchor's relx/rely/anchor, tracking canvas resizes, against real Tk" do
-    assert_tk_subprocess("spec/support/overlay_fixture.cr")
+    assert_tk_subprocess("spec/standalone/overlay_fixture.cr")
   end
 end
