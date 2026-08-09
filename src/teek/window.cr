@@ -6,6 +6,12 @@ module Teek
   # App's own window_title/set_window_title/show/hide convenience methods
   # delegate here internally.
   #
+  # ruby-teek also has a Teek::Wm shim (lib/teek/wm.rb) wrapping the same
+  # handful of subcommands as window: keyword arguments instead. Not
+  # ported: it's a second spelling of what this class already is, nothing
+  # in ruby-teek's own samples or gemba calls it, and a new subcommand
+  # would have to be written twice. Reach these through app.window(path).
+  #
   # @see https://www.tcl-lang.org/man/tcl9.0/TkCmd/wm.htm wm
   # @see https://www.tcl-lang.org/man/tcl9.0/TkCmd/grab.htm grab
   class Window
@@ -62,6 +68,100 @@ module Teek
     # Hide the window without destroying it.
     def withdraw : Nil
       @app.tcl_invoke("wm", "withdraw", @path)
+    end
+
+    # Shrink the window to its icon. The counterpart to #deiconify.
+    def iconify : Nil
+      @app.tcl_invoke("wm", "iconify", @path)
+    end
+
+    # How the window manager is currently showing this window - "normal",
+    # "withdrawn", "iconic", "icon", or (Windows only) "zoomed". Left as
+    # a String rather than an enum: the set is platform-dependent, and
+    # every caller compares against one specific value anyway.
+    def state : String
+      @app.tcl_invoke("wm", "state", @path)
+    end
+
+    # The smallest size the window manager will let the user drag this
+    # window to, as {width, height} in pixels.
+    def minsize : Tuple(Int32, Int32)
+      parts = @app.tcl_invoke("wm", "minsize", @path).split
+      {parts[0].to_i, parts[1].to_i}
+    end
+
+    # Sets the minimum size. (0, 0) clears the constraint.
+    def set_minsize(width : Int32, height : Int32) : Nil
+      @app.tcl_invoke("wm", "minsize", @path, width.to_s, height.to_s)
+    end
+
+    # The width/height ratio range the window manager will hold this
+    # window within, as {min_numer, min_denom, max_numer, max_denom}, or
+    # nil when no aspect constraint is set.
+    def aspect : Tuple(Int32, Int32, Int32, Int32)?
+      parts = @app.tcl_invoke("wm", "aspect", @path).split
+      return if parts.size < 4
+
+      {parts[0].to_i, parts[1].to_i, parts[2].to_i, parts[3].to_i}
+    end
+
+    # Constrains the window's width/height ratio to between
+    # min_numer/min_denom and max_numer/max_denom.
+    def set_aspect(min_numer : Int32, min_denom : Int32,
+                   max_numer : Int32, max_denom : Int32) : Nil
+      @app.tcl_invoke("wm", "aspect", @path,
+        min_numer.to_s, min_denom.to_s, max_numer.to_s, max_denom.to_s)
+    end
+
+    # Removes an aspect constraint set by #set_aspect. Tk spells this as
+    # the same subcommand with four EMPTY arguments rather than a
+    # separate one, which is not guessable from the getter/setter pair -
+    # hence its own method instead of nilable #set_aspect arguments.
+    def clear_aspect : Nil
+      @app.tcl_invoke("wm", "aspect", @path, "", "", "", "")
+    end
+
+    # One window-manager attribute, e.g. attribute("-fullscreen"). Give
+    # name with its leading dash, the way Tcl spells it.
+    #
+    # Returns the raw Tcl string: which attributes exist is
+    # platform-dependent, and their values are heterogeneous (-fullscreen
+    # is a boolean, -alpha a float, -type a name), so there's no single
+    # typed return to give. Coerce at the call site - Teek.tcl_to_bool
+    # for the boolean ones.
+    def attribute(name : String) : String
+      @app.tcl_invoke("wm", "attributes", @path, name)
+    end
+
+    # Sets one window-manager attribute. A Bool is converted to Tk's own
+    # 0/1 spelling; anything else is stringified as-is.
+    def set_attribute(name : String, value : String | Bool | Int32 | Float64) : Nil
+      tcl_value = value.is_a?(Bool) ? @app.bool_to_tcl(value) : value.to_s
+      @app.tcl_invoke("wm", "attributes", @path, name, tcl_value)
+    end
+
+    # The window this one is a transient of (a subordinate the window
+    # manager keeps above its master, usually skipping the taskbar), or
+    # nil when it isn't transient to anything.
+    def transient : String?
+      master = @app.tcl_invoke("wm", "transient", @path)
+      master.empty? ? nil : master
+    end
+
+    # Makes this window transient to master (a path String or a Window).
+    def set_transient(master) : Nil # ameba:disable Naming/AccessorMethodName
+      @app.tcl_invoke("wm", "transient", @path, master.to_s)
+    end
+
+    # Whether the window manager has been told to skip this window
+    # entirely - no titlebar, no border, no decoration. What a tooltip or
+    # a custom-drawn popup wants.
+    def overrideredirect? : Bool
+      @app.tcl_to_bool(@app.tcl_invoke("wm", "overrideredirect", @path))
+    end
+
+    def set_overrideredirect(value : Bool) : Nil # ameba:disable Naming/AccessorMethodName
+      @app.tcl_invoke("wm", "overrideredirect", @path, @app.bool_to_tcl(value))
     end
 
     # -- composite behaviors --

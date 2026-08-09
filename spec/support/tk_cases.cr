@@ -359,6 +359,129 @@ tk_test "Window#deiconify/#withdraw map/unmap the window" do |app|
   raise "expected root window to be unmapped after withdraw" if app.winfo.ismapped?(".")
 end
 
+# Every setter below goes through App#tcl_invoke, which hands Tcl an
+# argument vector directly - the value is never re-parsed, so it can't be
+# broken up by a space or resplit by a stray brace. #set_title is the one
+# wm subcommand taking free text, so it's where that's provable.
+tk_test "a Window setter's value survives spaces and an unbalanced brace" do |app|
+  w = app.window
+  nasty = "a {unbalanced brace and spaces"
+  w.set_title(nasty)
+  raise "expected #{nasty.inspect} to round-trip, got #{w.title.inspect}" unless w.title == nasty
+end
+
+tk_test "Window#state reports how the window manager is showing the window" do |app|
+  w = app.window
+  w.deiconify
+  app.update
+  raise "expected state normal after deiconify, got #{w.state.inspect}" unless w.state == "normal"
+
+  w.withdraw
+  app.update
+  raise "expected state withdrawn after withdraw, got #{w.state.inspect}" unless w.state == "withdrawn"
+end
+
+# Only that the call is well-formed and leaves the window usable.
+# Iconifying is the window MANAGER's job - under the bare Xvfb this suite
+# runs on there isn't one, so Tk sets no icon state and the window stays
+# mapped (confirmed directly: state is still "normal" afterwards). There
+# is nothing environment-independent to assert about the effect, and
+# asserting the no-WM behaviour would just pin down the wrong thing.
+tk_test "Window#iconify is well-formed, and #deiconify leaves the window mapped" do |app|
+  w = app.window
+  w.deiconify
+  app.update
+
+  w.iconify
+  app.update
+
+  w.deiconify
+  app.update
+  raise "expected deiconify to leave the window mapped" unless app.winfo.ismapped?(".")
+end
+
+tk_test "Window#set_minsize/#minsize round-trip, and (0, 0) clears it" do |app|
+  w = app.window
+  w.set_minsize(320, 240)
+  raise "expected {320, 240}, got #{w.minsize.inspect}" unless w.minsize == {320, 240}
+
+  w.set_minsize(0, 0)
+  raise "expected (0, 0) to clear the minimum, got #{w.minsize.inspect}" unless w.minsize == {0, 0}
+end
+
+tk_test "Window#set_aspect/#aspect round-trip, and #clear_aspect removes it" do |app|
+  w = app.window
+  raise "expected no aspect constraint initially, got #{w.aspect.inspect}" unless w.aspect.nil?
+
+  w.set_aspect(1, 2, 3, 4)
+  raise "expected {1, 2, 3, 4}, got #{w.aspect.inspect}" unless w.aspect == {1, 2, 3, 4}
+
+  w.clear_aspect
+  raise "expected clear_aspect to remove it, got #{w.aspect.inspect}" unless w.aspect.nil?
+end
+
+# -alpha rather than -topmost/-fullscreen: those two are requests to the
+# window manager, so under the bare Xvfb this suite runs on they read
+# back as never having been applied (confirmed directly - both stay "0").
+# -alpha is stored by Tk itself, so it actually round-trips here.
+#
+# That leaves set_attribute's Float64 and Int32 branches covered; its Bool
+# branch shares the same App#bool_to_tcl coercion that
+# #set_overrideredirect below round-trips for real.
+tk_test "Window#set_attribute/#attribute round-trip a window manager attribute" do |app|
+  app.tcl_eval("toplevel .t")
+  app.update
+  w = app.window(".t")
+
+  w.set_attribute("-alpha", 0.5)
+  raise "expected -alpha 0.5, got #{w.attribute("-alpha").inspect}" unless w.attribute("-alpha") == "0.5"
+
+  w.set_attribute("-alpha", 1)
+  raise "expected -alpha 1.0, got #{w.attribute("-alpha").inspect}" unless w.attribute("-alpha") == "1.0"
+
+  app.destroy(".t")
+end
+
+tk_test "Window#set_transient/#transient round-trip, nil when not transient" do |app|
+  app.tcl_eval("toplevel .t")
+  app.update
+  w = app.window(".t")
+
+  raise "expected a fresh toplevel not to be transient, got #{w.transient.inspect}" unless w.transient.nil?
+
+  w.set_transient(".")
+  raise "expected transient to be '.', got #{w.transient.inspect}" unless w.transient == "."
+
+  app.destroy(".t")
+end
+
+tk_test "Window#set_transient also accepts another Window" do |app|
+  app.tcl_eval("toplevel .t")
+  app.update
+  w = app.window(".t")
+
+  w.set_transient(app.window)
+  raise "expected transient to be '.', got #{w.transient.inspect}" unless w.transient == "."
+
+  app.destroy(".t")
+end
+
+tk_test "Window#set_overrideredirect/#overrideredirect? round-trip" do |app|
+  app.tcl_eval("toplevel .t")
+  app.update
+  w = app.window(".t")
+
+  raise "expected a fresh toplevel to be decorated" if w.overrideredirect?
+
+  w.set_overrideredirect(true)
+  raise "expected overrideredirect to be set" unless w.overrideredirect?
+
+  w.set_overrideredirect(false)
+  raise "expected overrideredirect to be cleared" if w.overrideredirect?
+
+  app.destroy(".t")
+end
+
 # -- App#appearance / #set_appearance / #dark? (macOS Aqua only) --
 #
 # Tk reads a window's appearance off its NSView, falling back to the
