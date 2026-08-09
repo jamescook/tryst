@@ -1,5 +1,6 @@
 require "./widget_validators"
 require "./widget_addressing"
+require "./scroll_defaults"
 
 module Teek
   module UI

@@ -32,11 +32,12 @@ module Teek
     # canvas overlay placement (#place_overlay), and menu_bar/context_menu's
     # own bespoke traversal (#create_menu_tree, driven by WidgetType's
     # custom_create: hook) are ported here, as is post_create: (:window's
-    # own wm setup). Still deferred: scrollable's special-cased children
-    # (and the auto-scrollbar-wrapping :list/:text_area/:table/:tree/
-    # :canvas gets for free from being natively_scrollable - inert
-    # without it, a bare listbox/canvas for now), along with the
-    # custom_children: hook that would drive them, which doesn't exist on
+    # own wm setup) and the auto-scrollbar wrapping a natively_scrollable
+    # type gets for free (#create_native_scrollable). Still deferred:
+    # ui.scrollable itself - the arbitrary-content case, which has no Tk
+    # protocol to hook a scrollbar into and so needs an embedded
+    # canvas/viewport plus its own wheel handling - along with the
+    # custom_children: hook that would drive it, which doesn't exist on
     # WidgetType yet (see widget_type.cr's own doc comment).
     class Realizer
       # DSL-reserved opts keys - layout keywords plus other entries the
@@ -51,6 +52,10 @@ module Teek
         :title, :geometry, :resizable, :transient, :modal,
         :x, :y, :scroll, :tab_label, :pane_weight,
       ]
+
+      # For App#command's Hash overload, where the call has no options of
+      # its own - the same shape CanvasItem keeps for the same reason.
+      private EMPTY_KWARGS = {} of String => TclArgValue
 
       # Node types with no Tk representation of their own - skipped by
       # create's widget-creation step, and (for :raw_op) by every
@@ -103,6 +108,14 @@ module Teek
         path = NON_WIDGET_TYPES.includes?(node.type) ? parent_path : allocate_path(node, parent_path)
 
         unless NON_WIDGET_TYPES.includes?(node.type)
+          # Creates its own children, into the wrapper's inner widget
+          # rather than the wrapper - hence returning rather than falling
+          # through to the loop below.
+          if auto_scrollable?(node)
+            create_native_scrollable(node, path)
+            return
+          end
+
           @app.command(tk_command_for(node.type), [path] of TclArgValue, filtered_opts(node))
           node.realized = RealizedNode.new(app: @app, path: path)
           # After node.realized, so the hook can reach the live path
@@ -112,6 +125,134 @@ module Teek
         end
 
         node.children.each { |child| create(child, path) unless child.lazy? }
+      end
+
+      # Whether this node is a type that scrolls on its own AND scrolling
+      # is actually wanted for it.
+      private def auto_scrollable?(node : Node) : Bool
+        natively_scrollable?(node.type) && resolve_scroll(node)
+      end
+
+      # A registered type's own natively_scrollable? - false for anything
+      # unregistered.
+      private def natively_scrollable?(type : Symbol) : Bool
+        WidgetTypes.for_type(type).try(&.natively_scrollable?) || false
+      end
+
+      # Most specific wins: this node's own scroll:, then the app-wide
+      # override Teek::UI.app(scroll:) passed in, then the type's own
+      # global default (:canvas reads Teek::UI.auto_scroll_canvas, false
+      # by default; everything else Teek::UI.auto_scroll, true).
+      private def resolve_scroll(node : Node) : Bool
+        opt = node.opts[:scroll]?
+        return opt if opt.is_a?(Bool)
+
+        default = @default_scroll
+        return default unless default.nil?
+
+        registered = WidgetTypes.for_type(node.type)
+        registered ? registered.global_scroll_default : Teek::UI.auto_scroll
+      end
+
+      # Wraps a natively-scrollable widget in a frame-plus-scrollbar,
+      # without disturbing what the node's own path means to everything
+      # else: path becomes an invisible wrapper frame, the real widget
+      # lives at <path>.widget, and node.realized points at the REAL
+      # widget so a Handle's #configure/#path/events keep acting on it
+      # unchanged. Only arrange_path is the wrapper - that's the widget's
+      # actual Tk parent now, and what the surrounding layout has to
+      # place in the widget's stead. See RealizedNode.
+      private def create_native_scrollable(node : Node, path : String) : Nil
+        widget_path = "#{path}.widget"
+
+        @app.command("ttk::frame", ([path] of TclArgValue), EMPTY_KWARGS)
+        @app.command(tk_command_for(node.type), [widget_path] of TclArgValue, filtered_opts(node))
+        node.realized = RealizedNode.new(app: @app, path: widget_path, arrange_path: path)
+
+        wire_scrollbars(path, widget_path, x: scroll_axis?(node, :x, false), y: scroll_axis?(node, :y, true))
+
+        node.children.each { |child| create(child, widget_path) unless child.lazy? }
+      end
+
+      # x:/y: pick which scrollbars a scrollable gets - vertical only by
+      # default, which is what almost every list/log wants.
+      private def scroll_axis?(node : Node, key : Symbol, default : Bool) : Bool
+        value = node.opts[key]?
+        value.is_a?(Bool) ? value : default
+      end
+
+      private def wire_scrollbars(path : String, target_path : String, x : Bool, y : Bool) : Nil
+        if y
+          vertical = "#{path}.vsb"
+          @app.command("ttk::scrollbar", [vertical] of TclArgValue,
+            {"orient" => "vertical", "command" => "#{target_path} yview"} of String => TclArgValue)
+          @app.command(:grid, [vertical] of TclArgValue,
+            {"row" => 0, "column" => 1, "sticky" => "ns"} of String => TclArgValue)
+          auto_hide_scrollbar(target_path, vertical, "yscrollcommand", "yview")
+        end
+
+        if x
+          horizontal = "#{path}.hsb"
+          @app.command("ttk::scrollbar", [horizontal] of TclArgValue,
+            {"orient" => "horizontal", "command" => "#{target_path} xview"} of String => TclArgValue)
+          @app.command(:grid, [horizontal] of TclArgValue,
+            {"row" => 1, "column" => 0, "sticky" => "ew"} of String => TclArgValue)
+          auto_hide_scrollbar(target_path, horizontal, "xscrollcommand", "xview")
+        end
+
+        # The widget itself takes all the slack; the scrollbars sit in
+        # the spare row/column and stay their natural thickness.
+        @app.command(:grid, [target_path] of TclArgValue,
+          {"row" => 0, "column" => 0, "sticky" => "nsew"} of String => TclArgValue)
+        @app.command(:grid, [:columnconfigure, path, 0] of TclArgValue, {"weight" => 1} of String => TclArgValue)
+        @app.command(:grid, [:rowconfigure, path, 0] of TclArgValue, {"weight" => 1} of String => TclArgValue)
+      end
+
+      # Hide the scrollbar whenever the content fits, show it when it
+      # doesn't. `grid remove` un-maps but remembers the widget's grid
+      # options, so re-showing it is a bare `grid <path>` with nothing to
+      # re-derive.
+      #
+      # The after_idle pass is not redundant: Tk only re-invokes
+      # -yscrollcommand when the reported fraction actually CHANGES, so a
+      # widget that starts empty ("0.0 1.0", nothing to scroll) and gains
+      # a few rows that still fit ("0.0 1.0" again) never fires it, and
+      # the eagerly-gridded scrollbar would sit there forever. Querying
+      # the real fraction once, after every widget in this build has had
+      # its first geometry pass, covers that.
+      private def auto_hide_scrollbar(target_path : String, scrollbar_path : String,
+                                      option : String, view_command : String) : Nil
+        shown = true
+
+        apply = Proc(String, String, Nil).new do |first, last|
+          fits = first.to_f <= 0.0 && last.to_f >= 1.0
+          if fits && shown
+            @app.command(:grid, ([:remove, scrollbar_path] of TclArgValue), EMPTY_KWARGS)
+            shown = false
+          elsif !fits && !shown
+            @app.command(:grid, ([scrollbar_path] of TclArgValue), EMPTY_KWARGS)
+            shown = true
+          end
+          nil
+        end
+
+        # Tk appends the two fractions to -yscrollcommand/-xscrollcommand
+        # when it calls it, so they arrive as the callback's own values.
+        relay = Proc(Array(String), CallbackSignal, Nil).new do |values, _signal|
+          first, last = values[0], values[1]
+          @app.command(scrollbar_path, ([:set, first, last] of TclArgValue), EMPTY_KWARGS)
+          apply.call(first, last)
+        end
+        @app.command(target_path, [:configure] of TclArgValue, {option => relay} of String => TclArgValue)
+
+        @app.after_idle do
+          # Ruby queries yview here whichever axis this is, so a
+          # horizontal scrollbar's initial state is decided by the
+          # VERTICAL fraction; this asks the axis it actually belongs to.
+          fractions = @app.split_list(@app.command(target_path, ([view_command] of TclArgValue), EMPTY_KWARGS))
+          apply.call(fractions[0], fractions[1]) if fractions.size >= 2
+          nil
+        end
       end
 
       # node.opts, keyed by String (App#command's Hash overload) with
