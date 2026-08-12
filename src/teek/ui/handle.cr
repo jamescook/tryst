@@ -493,7 +493,7 @@ module Teek
       private def declared_position? : Bool
         spec = @node.opts[:geometry]?
         return false unless spec
-        !!spec.to_s.match(/[+-]\d+[+-]\d+\z/)
+        spec.to_s.matches?(/[+-]\d+[+-]\d+\z/)
       end
 
       # Tk's "WxH+X+Y", to {width, height, x, y}. nil when there's no

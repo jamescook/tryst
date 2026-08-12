@@ -37,20 +37,27 @@ module Teek
       # resizable: true/false for both axes, or resizable: [width, height]
       # to set them separately.
       def self.resizable_pair(value : TclArgValue) : Tuple(Bool, Bool)
-        return {truthy?(value[0]?), truthy?(value[1]?)} if value.is_a?(Array)
+        if value.is_a?(Array)
+          unless value.size == 2
+            raise ArgumentError.new("resizable: as a list needs exactly [width, height] " \
+                                    "(got #{value.size} element(s): #{value.inspect})")
+          end
+          return {resizable_axis(value[0]), resizable_axis(value[1])}
+        end
 
-        both = truthy?(value)
+        both = resizable_axis(value)
         {both, both}
       end
 
-      # Tk spells a boolean several ways, and an opts value arrives as
-      # whatever the caller wrote - Bool is the expected one, Int32 the
-      # other form Tk itself uses.
-      def self.truthy?(value) : Bool
+      # One axis of resizable:. Bool is the expected spelling, Int32 the
+      # other form Tk itself uses. Anything else is a mistake in the
+      # build rather than a value to guess at.
+      def self.resizable_axis(value : TclArgValue) : Bool
         case value
         when Bool  then value
         when Int32 then !value.zero?
-        else            true
+        else
+          raise ArgumentError.new("resizable: expects true/false or 1/0 (got #{value.inspect})")
         end
       end
 

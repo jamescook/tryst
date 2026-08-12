@@ -88,6 +88,30 @@ describe "the :window widget type" do
     window.resizables.map { |call| {call.width, call.height} }.should eq([{true, false}])
   end
 
+  # A window that silently came up resizable because resizable: "no" was
+  # read as truthy is a much harder thing to notice than an error here.
+  it "resizable rejects a value that is neither a Bool nor 1/0" do
+    session = WidgetDslHarness.new
+    session.window(:tools, resizable: "no")
+
+    app = FakeApp.new
+
+    expect_raises(ArgumentError, /resizable: expects true\/false or 1\/0/) do
+      Teek::UI::Realizer.new(app, session.document).realize
+    end
+  end
+
+  it "resizable rejects a pair that isn't exactly two axes" do
+    session = WidgetDslHarness.new
+    session.window(:tools, resizable: [true])
+
+    app = FakeApp.new
+
+    expect_raises(ArgumentError, /needs exactly \[width, height\]/) do
+      Teek::UI::Realizer.new(app, session.document).realize
+    end
+  end
+
   it "leaves resizable alone when it wasn't declared" do
     session = WidgetDslHarness.new
     session.window(:tools)

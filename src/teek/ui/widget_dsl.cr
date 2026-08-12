@@ -542,9 +542,19 @@ module Teek
       # Returns {cleaned opts, layout (or nil), lazy}.
       private def extract_dsl_opts(opts : Hash(Symbol, TclArgValue)) : {Hash(Symbol, TclArgValue), Hash(Symbol, TclArgValue)?, Bool}
         layout = opts.has_key?(:grow) ? {:grow => opts[:grow]} of Symbol => TclArgValue : nil
-        lazy = opts.fetch(:lazy, false)
         cleaned = opts.reject { |key, _| key == :grow || key == :lazy }
-        {cleaned, layout, !!lazy}
+        {cleaned, layout, lazy_flag(opts)}
+      end
+
+      # lazy: is read on this side and never handed to Tk, so it is true
+      # or false and nothing else. Absent means false.
+      private def lazy_flag(opts : Hash(Symbol, TclArgValue)) : Bool
+        case value = opts[:lazy]?
+        when Nil  then false
+        when Bool then value
+        else
+          raise ArgumentError.new("lazy: expects true or false (got #{value.inspect})")
+        end
       end
 
       private def append_leaf(type : Symbol, name : Symbol?, opts : Hash(Symbol, TclArgValue), bind : Var? = nil) : Handle

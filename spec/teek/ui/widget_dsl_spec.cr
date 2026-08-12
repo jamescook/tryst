@@ -609,6 +609,16 @@ describe Teek::UI::WidgetDSL do
     session.document.root.children.first.lazy?.should be_false
   end
 
+  # 0 and "false" both read as "not lazy" to anyone writing them, so
+  # accepting them as lazy would be a silent misread of the build.
+  it "lazy: rejects anything that isn't a Bool" do
+    session = WidgetDslHarness.new
+
+    expect_raises(ArgumentError, /lazy: expects true or false/) do
+      session.panel(:picker, lazy: 0)
+    end
+  end
+
   it "a closed builder raises on any tree-mutating call" do
     session = WidgetDslHarness.new
     session.build_open = false
