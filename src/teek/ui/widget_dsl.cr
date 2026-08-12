@@ -7,6 +7,7 @@ require "./overlay_anchors"
 require "./var"
 require "./image"
 require "./menu_builder"
+require "./structural_types"
 
 module Teek
   module UI
@@ -286,10 +287,6 @@ module Teek
         img
       end
 
-      # Node types a menu_bar is allowed to attach to - the root window,
-      # or any declared toplevel.
-      MENU_BAR_HOSTS = [:root, :window] of Symbol
-
       # A window's menu bar - the row of top-level dropdowns (File/Edit/
       # ...) along its top edge. Valid at the top level of a build.
       # Raises ArgumentError if declared anywhere else.
@@ -385,17 +382,26 @@ module Teek
       end
 
       # @api private - shared by both #menu_bar overloads. Raises unless
-      # declared at the top level of a build (see MENU_BAR_HOSTS).
+      # declared somewhere that can host a menu bar.
       private def build_menu_bar_node(name : Symbol?, opts) : Node
         raise_if_closed!
         parent = @stack.last
-        unless MENU_BAR_HOSTS.includes?(parent.type)
+        unless hosts_menu_bar?(parent.type)
           raise ArgumentError.new("menu_bar can only be declared at the top level of a build")
         end
 
         node = @document.create(type: :menu_bar, name: name, opts: to_opts_hash(opts), scope: current_scope)
         parent.add_child(node)
         node
+      end
+
+      # A menu bar attaches through a toplevel's -menu option, so it can
+      # only be declared inside something that has one: the root window,
+      # or any registered type saying so with hosts_menu_bar:.
+      private def hosts_menu_bar?(type : Symbol) : Bool
+        return true if type == :root
+
+        WidgetTypes.for_type(type).try(&.hosts_menu_bar?) || false
       end
 
       # @api private - shared by #menu_bar/#context_menu's own block

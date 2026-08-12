@@ -67,6 +67,12 @@ module Teek
       # activation (and bind: already covers value changes).
       getter? takes_command : Bool
 
+      # Whether a menu_bar may be declared directly inside this type. True
+      # for a toplevel, which is what a menu bar attaches to via its -menu
+      # option. The root window hosts one too, but it is a structural node
+      # rather than a registered type - see StructuralTypes.
+      getter? hosts_menu_bar : Bool
+
       def initialize(
         @type : Symbol,
         @tk_command : String,
@@ -75,6 +81,7 @@ module Teek
         @arranged : Bool = true,
         @scroll_default : ScrollDefault = :auto_scroll,
         @takes_command : Bool = false,
+        @hosts_menu_bar : Bool = false,
         @bind_option : Symbol? = nil,
         @flow : FlowConfig? = nil,
         arrange : Proc(Realizer, Node, Array(Node), Nil)? = nil,

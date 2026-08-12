@@ -83,6 +83,7 @@ end
 Teek::UI::WidgetTypes.register(
   Teek::UI::WidgetType.new(
     type: :window, tk_command: "toplevel", leaf: false, arranged: false,
+    hosts_menu_bar: true,
     post_create: ->Teek::UI::WindowRealize.post_create(Teek::UI::AppContract, Teek::UI::Node, String, String)
   )
 )

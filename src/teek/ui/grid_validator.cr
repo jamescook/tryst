@@ -68,12 +68,11 @@ module Teek
         end
       end
 
-      # :raw_op has no widget of its own at all (mirrors
-      # Realizer::NON_WIDGET_TYPES); every other type reports whether it
-      # needs a cell via its own WidgetType#arranged? (mirrors
-      # Realizer#unarranged?) - true (needs a cell) for anything
-      # unregistered, since every type a grid can hold is
-      # WidgetType-registered.
+      # :raw_op has no widget of its own at all (see StructuralTypes);
+      # every other type reports whether it needs a cell via its own
+      # WidgetType#arranged? (mirrors Realizer#unarranged?) - true (needs
+      # a cell) for anything unregistered, since every type a grid can
+      # hold is WidgetType-registered.
       private def self.needs_cell?(type : Symbol) : Bool
         return false if type == :raw_op
 

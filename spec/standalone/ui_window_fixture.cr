@@ -71,7 +71,7 @@ end
 raise "window: expected .tools.pick to exist" unless app.winfo.exists?(".tools.pick")
 
 # Case 6: a menu_bar declared inside a window attaches to THAT window,
-# not the root - the case MENU_BAR_HOSTS gaining :window unblocks.
+# not the root - what :window's hosts_menu_bar: allows.
 tools_menu = app.command(".tools", :cget, "-menu")
 raise "window: expected .tools to own a menu, got #{tools_menu.inspect}" if tools_menu.empty?
 unless tools_menu == ".tools.tools_menu"

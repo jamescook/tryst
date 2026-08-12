@@ -9,8 +9,8 @@ require "../../../src/teek/ui/document"
 # mirroring the WidgetDslHarness-vs-Session split this codebase already
 # uses elsewhere to keep builder-level specs headless. Reduced from
 # ruby-teek's teek-ui/test/test_menu_dsl.rb to what MenuBuilder itself
-# does; WidgetDSL#menu_bar/#context_menu's own node creation and
-# MENU_BAR_HOSTS enforcement are covered in widget_dsl_spec.cr instead.
+# does; WidgetDSL#menu_bar/#context_menu's own node creation and its
+# host enforcement are covered in widget_dsl_spec.cr instead.
 #
 # One deliberate deviation from ruby's shape, throughout: ruby's #checkbox/
 # #radio stash bind:'s raw Var object directly on node.opts[:bind] (opts

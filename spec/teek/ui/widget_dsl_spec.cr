@@ -13,6 +13,24 @@ require "../../support/widget_dsl_harness"
 # bind:/var:, and every widget type/DSL method outside grid/
 # column/row/spacer/panel/button/label/checkbox/radio/text_box/list
 # (tabs/split/scrollable/component/canvas/overlay/menu/slider/...).
+
+# A type registered the way a shard outside this library would, saying it
+# can host a menu bar. Getting one into a build takes a declaration method
+# of its own: WidgetDSL's append_container is private, which in Crystal
+# still means reachable without a receiver from a type that includes it.
+Teek::UI::WidgetTypes.register(
+  Teek::UI::WidgetType.new(
+    type: :__test_menu_host__, tk_command: "toplevel",
+    leaf: false, arranged: false, hosts_menu_bar: true
+  )
+)
+
+class MenuHostHarness < WidgetDslHarness
+  def menu_host(name : Symbol? = nil, **opts, & : MenuHostHarness -> Nil) : Teek::UI::Handle
+    append_container(:__test_menu_host__, name, to_opts_hash(opts)) { |dsl| yield dsl }
+  end
+end
+
 describe Teek::UI::WidgetDSL do
   # Crystal has no Ruby-style #send-by-symbol, so each leaf method gets
   # its own case instead of one loop over LEAF_WIDGET_TYPES like ruby's
@@ -488,6 +506,27 @@ describe Teek::UI::WidgetDSL do
     expect_raises(ArgumentError, /menu_bar/) do
       session.panel(:p) { |panel| panel.menu_bar(&.menu(label: "File")) }
     end
+  end
+
+  it "menu_bar can be declared inside a window" do
+    session = WidgetDslHarness.new
+
+    session.window(:tools) { |window| window.menu_bar(:wmb, &.menu(label: "File")) }
+
+    window_node = session.document.root.children.first
+    window_node.children.map(&.type).should eq([:menu_bar])
+  end
+
+  # The host question is the type's own to answer, so a type registered
+  # from outside this library can answer it too - it isn't a list of
+  # :root/:window that only this library can edit.
+  it "menu_bar can be declared inside any type registered as a host" do
+    session = MenuHostHarness.new
+
+    session.menu_host(:dialog, &.menu_bar(:dmb, &.menu(label: "File")))
+
+    host_node = session.document.root.children.first
+    host_node.children.map(&.type).should eq([:menu_bar])
   end
 
   it "menu_bar works with no block, a childless node" do

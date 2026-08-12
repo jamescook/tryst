@@ -4,6 +4,7 @@ require "./widget_types"
 require "./realized_node"
 require "./app_contract"
 require "./overlay_anchors"
+require "./structural_types"
 
 module Teek
   module UI
@@ -56,12 +57,6 @@ module Teek
       # For App#command's Hash overload, where the call has no options of
       # its own - the same shape CanvasItem keeps for the same reason.
       private EMPTY_KWARGS = {} of String => TclArgValue
-
-      # Node types with no Tk representation of their own - skipped by
-      # create's widget-creation step, and (for :raw_op) by every
-      # container's arrangement step too, since they have no realized
-      # path.
-      NON_WIDGET_TYPES = [:root, :raw_op]
 
       def initialize(@app : AppContract, @document : Document, @default_scroll : Bool? = nil)
       end
@@ -121,9 +116,10 @@ module Teek
           return
         end
 
-        path = NON_WIDGET_TYPES.includes?(node.type) ? parent_path : allocate_path(node, parent_path)
+        structural = StructuralTypes.includes?(node.type)
+        path = structural ? parent_path : allocate_path(node, parent_path)
 
-        unless NON_WIDGET_TYPES.includes?(node.type)
+        unless structural
           # Creates its own children, into the wrapper's inner widget
           # rather than the wrapper - hence returning rather than falling
           # through to the loop below.
@@ -498,15 +494,14 @@ module Teek
         @app.on_close(realized.path, &block)
       end
 
-      # Whether a geometry manager should skip this child entirely: root/
-      # raw_op have no realized path at all (and aren't WidgetTypes, so
-      # there's nothing to register this against); everything else
+      # Whether a geometry manager should skip this child entirely: a
+      # structural node has no realized path to place; everything else
       # reports it via its own WidgetType#arranged? - false for a type
       # placed some other way entirely: :window (the window manager
       # places a toplevel) and :menu_bar (attaches via its host's own
       # -menu option).
       private def unarranged?(type : Symbol) : Bool
-        return true if NON_WIDGET_TYPES.includes?(type)
+        return true if StructuralTypes.includes?(type)
 
         registered = WidgetTypes.for_type(type)
         registered ? !registered.arranged? : false
