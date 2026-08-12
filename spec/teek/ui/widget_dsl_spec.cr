@@ -930,4 +930,77 @@ describe Teek::UI::WidgetDSL do
 
     expect_raises(Teek::UI::ClosedBuilderError) { session.image("logo.png") }
   end
+
+  # Every one of these is stripped before Tk sees it and read by exactly
+  # one part of the DSL, so on any other type it can only be a mistake -
+  # and, left unchecked, an invisible one: the option rides along on the
+  # node, gets stripped at realize, and the widget comes out missing what
+  # it asked for with nothing raised anywhere.
+  describe "an option reserved for one type, passed to another" do
+    # The case that prompted all of this: text: is a group's caption, so
+    # title: is the word a reader reaches for, and it used to be swallowed
+    # whole - leaving an untitled group and no way to notice.
+    it "rejects title: on a group, naming the type that does take it" do
+      session = WidgetDslHarness.new
+
+      error = expect_raises(ArgumentError) { session.group(:settings, title: "Settings") }
+      error.message.should eq("#group doesn't support title: (only #window does)")
+    end
+
+    it "rejects each of the window-only options elsewhere" do
+      expect_raises(ArgumentError, /doesn't support geometry:/) { WidgetDslHarness.new.panel(:p, geometry: "10x10") }
+      expect_raises(ArgumentError, /doesn't support resizable:/) { WidgetDslHarness.new.panel(:p, resizable: true) }
+      expect_raises(ArgumentError, /doesn't support transient:/) { WidgetDslHarness.new.panel(:p, transient: false) }
+      expect_raises(ArgumentError, /doesn't support modal:/) { WidgetDslHarness.new.label(:l, modal: true) }
+    end
+
+    it "rejects the tabs/split options outside the container that reads them" do
+      expect_raises(ArgumentError, /doesn't support tab_label: \(only #tab does\)/) do
+        WidgetDslHarness.new.panel(:p, tab_label: "Nope")
+      end
+      expect_raises(ArgumentError, /doesn't support pane_weight: \(only #pane does\)/) do
+        WidgetDslHarness.new.panel(:p, pane_weight: 2)
+      end
+    end
+
+    # scroll: was already rejected before this (see scrollable_spec.cr);
+    # x:/y: are the axes, and belong to ui.scrollable as well as to the
+    # types that scroll themselves.
+    it "rejects the scroll axes on a type that can't scroll" do
+      error = expect_raises(ArgumentError) { WidgetDslHarness.new.button(:go, x: true) }
+      error.message.should match(/#button doesn't support x:/)
+      # the list is derived from the registry, so it names ui.scrollable
+      # alongside every natively scrollable type rather than a stale copy
+      error.message.should match(/scrollable/)
+      error.message.should match(/text_area/)
+
+      expect_raises(ArgumentError, /doesn't support y:/) { WidgetDslHarness.new.label(:l, y: false) }
+    end
+
+    it "still lets each option through on the type that reads it" do
+      session = WidgetDslHarness.new
+      session.window(:w, title: "T", geometry: "10x10", resizable: true, transient: false, modal: true)
+      session.tabs(:t, &.tab("Page", :p))
+      session.split(:s, &.pane(:left, weight: 2))
+      session.list(:items, scroll: false)
+      session.tree(:hierarchy, x: true, y: true)
+      session.scrollable(:region, x: true, y: false)
+
+      session.document.find(:w).should_not be_nil
+      session.document.find(:p).try(&.opts.[](:tab_label)).should eq("Page")
+      session.document.find(:left).try(&.opts.[](:pane_weight)).should eq(2)
+      session.document.find(:region).try(&.opts.[](:x)).should be_true
+    end
+
+    # A tripwire, deliberately: adding a reserved option to the Realizer
+    # fails this, and the cases above are where the new one needs a home.
+    # Skipping that step is how a key ends up silently doing nothing on
+    # every type but the one that reads it.
+    it "accounts for every option the realizer reserves" do
+      Teek::UI::Realizer::RESERVED_OPTIONS.should eq(Set{
+        :title, :geometry, :resizable, :transient, :modal,
+        :x, :y, :scroll, :tab_label, :pane_weight,
+      })
+    end
+  end
 end

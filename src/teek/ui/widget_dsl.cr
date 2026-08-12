@@ -647,11 +647,64 @@ module Teek
         Scope::TOP_LEVEL
       end
 
+      # The options this DSL reads itself rather than handing to Tk (see
+      # Realizer::RESERVED_OPTIONS, which strips every one of them before
+      # a widget-creation call). Each belongs to one part of the DSL and
+      # does nothing whatsoever anywhere else, so passing one to a type
+      # that never reads it can only be a mistake - and a silent one if
+      # it's left alone: the option rides along on the node, gets stripped
+      # at realize, and leaves a widget missing whatever it asked for with
+      # nothing raised anywhere to say so. Rejected at the declaration
+      # instead, while the caller is still looking at the line that got it
+      # wrong.
+      private def validate_reserved_opts!(type : Symbol, opts : Hash(Symbol, TclArgValue)) : Nil
+        opts.each_key do |key|
+          owner = RESERVED_OPT_OWNERS[key]?
+          next unless owner && owner != type
+
+          raise ArgumentError.new("##{type} doesn't support #{key}: (only ##{owner} does)")
+        end
+
+        validate_scroll!(type, opts)
+        validate_scroll_axes!(type, opts)
+      end
+
+      # The reserved options belonging to one specific type. The rest
+      # (scroll:/x:/y:) belong to a whole capability rather than a single
+      # type, and are checked against the registry below instead.
+      private RESERVED_OPT_OWNERS = {
+        :title       => :window,
+        :geometry    => :window,
+        :resizable   => :window,
+        :transient   => :window,
+        :modal       => :window,
+        :tab_label   => :tab,
+        :pane_weight => :pane,
+      }
+
       private def validate_scroll!(type : Symbol, opts : Hash(Symbol, TclArgValue)) : Nil
         return unless opts.has_key?(:scroll)
         return if natively_scrollable_for?(type)
 
         raise ArgumentError.new("##{type} doesn't support scroll: (only #{scrollable_type_names.join('/')} do)")
+      end
+
+      # x:/y: choose which scrollbars something gets, so they mean
+      # something on a type that scrolls itself AND on ui.scrollable
+      # (which is nothing but a pair of scrollbars) - unlike scroll:,
+      # which is only the native types' own switch.
+      private def validate_scroll_axes!(type : Symbol, opts : Hash(Symbol, TclArgValue)) : Nil
+        key = {:x, :y}.find { |axis| opts.has_key?(axis) }
+        return unless key
+        return if natively_scrollable_for?(type) || type == :scrollable
+
+        raise ArgumentError.new("##{type} doesn't support #{key}: (only #{scroll_axis_type_names.join('/')} do)")
+      end
+
+      # The full set of types x:/y: actually work on, for the error
+      # message above.
+      private def scroll_axis_type_names : Array(Symbol)
+        (scrollable_type_names << :scrollable).sort!
       end
 
       # A registered type's own natively_scrollable? - false for anything
@@ -736,7 +789,7 @@ module Teek
 
       private def build_leaf_node(type : Symbol, name : Symbol?, opts : Hash(Symbol, TclArgValue), bind : Var? = nil) : Node
         raise_if_closed!
-        validate_scroll!(type, opts)
+        validate_reserved_opts!(type, opts)
         opts = resolve_bind(type, opts, bind)
         opts, intents = extract_dsl_opts(opts)
         node = @document.create(type: type, name: name, opts: opts, scope: current_scope)
@@ -796,7 +849,7 @@ module Teek
       private def build_container_node(type : Symbol, name : Symbol?, opts : Hash(Symbol, TclArgValue),
                                        close_handler : CloseHandler? = nil) : Node
         raise_if_closed!
-        validate_scroll!(type, opts)
+        validate_reserved_opts!(type, opts)
         opts, intents = extract_dsl_opts(opts)
         node = @document.create(type: type, name: name, opts: opts, scope: current_scope)
         apply_dsl_intents(node, intents)

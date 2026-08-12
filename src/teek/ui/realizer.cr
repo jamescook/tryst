@@ -45,9 +45,15 @@ module Teek
       # they never reach a widget-creation call as a bogus -option. Every
       # entry is one a type's own realize step consumes out of node.opts:
       # :window's wm setup (title/geometry/resizable/transient/modal),
-      # :scroll (#resolve_scroll), :x/:y (an overlay's placement),
-      # :tab_label (a page's label), and :pane_weight (how much of a
-      # split's leftover space one pane takes).
+      # :scroll (#resolve_scroll) and :x/:y (#scroll_axis?, which
+      # scrollbars a scrolling widget gets), :tab_label (a page's label),
+      # and :pane_weight (how much of a split's leftover space one pane
+      # takes).
+      #
+      # Which types may legitimately carry each of these is enforced at the
+      # declaration - see WidgetDSL#validate_reserved_opts!. Adding a key
+      # here means teaching that check about it too, or it becomes an
+      # option that silently does nothing on every type but one.
       #
       # An intent with a typed Node slot is not listed here - it never
       # entered opts to begin with. See WidgetDSL#extract_dsl_opts.
