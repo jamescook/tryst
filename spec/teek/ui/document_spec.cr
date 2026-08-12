@@ -198,6 +198,30 @@ describe Teek::UI::Document do
     visited.should eq([document.root, a, b, c])
   end
 
+  it "nodes collects the whole tree in the same order each_node yields it" do
+    document = Teek::UI::Document.new
+    a = document.create(type: :button, name: :a)
+    b = document.create(type: :column, name: :b)
+    c = document.create(type: :button, name: :c)
+    document.root.add_child(a)
+    document.root.add_child(b)
+    b.add_child(c)
+
+    document.nodes.should eq([document.root, a, b, c])
+  end
+
+  # Unlike #nodes, this covers named nodes that were never attached to
+  # the tree - the case Validator's orphan check exists for.
+  it "named_nodes pairs every registered name with its node, attached or not" do
+    document = Teek::UI::Document.new
+    attached = document.create(type: :button, name: :save)
+    orphan = document.create(type: :button, name: :stray)
+    document.root.add_child(attached)
+
+    document.named_nodes.sort_by { |(name, _node)| name.to_s }
+      .should eq([{:save, attached}, {:stray, orphan}])
+  end
+
   it "claim_path_segment returns the bare segment the first time" do
     document = Teek::UI::Document.new
 

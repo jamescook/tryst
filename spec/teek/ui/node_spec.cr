@@ -87,11 +87,40 @@ describe Teek::UI::Node do
     visited.should eq([root, a, b, c])
   end
 
-  it "each without a block returns every node as an Array" do
+  it "to_a collects every node as an Array" do
     root = Teek::UI::Node.new(type: :column)
     root.add_child(Teek::UI::Node.new(type: :button, name: :a))
 
-    root.each.map(&.type).should eq([:column, :button])
+    root.to_a.map(&.type).should eq([:column, :button])
+  end
+
+  it "find returns the first node the block accepts" do
+    root = Teek::UI::Node.new(type: :column)
+    a = root.add_child(Teek::UI::Node.new(type: :button, name: :a))
+    root.add_child(Teek::UI::Node.new(type: :button, name: :b))
+
+    root.find { |node| node.type == :button }.should be(a)
+  end
+
+  # The whole reason #find exists rather than to_a.find - a lookup on a
+  # big tree shouldn't walk past the node it already has.
+  it "find stops walking as soon as it matches" do
+    root = Teek::UI::Node.new(type: :column)
+    branch = root.add_child(Teek::UI::Node.new(type: :column, name: :branch))
+    branch.add_child(Teek::UI::Node.new(type: :button, name: :wanted))
+    root.add_child(Teek::UI::Node.new(type: :button, name: :never_reached))
+
+    visited = [] of Symbol?
+    root.find { |node| visited << node.name; node.name == :wanted }
+
+    visited.should eq([nil, :branch, :wanted])
+  end
+
+  it "find returns nil when nothing matches" do
+    root = Teek::UI::Node.new(type: :column)
+    root.add_child(Teek::UI::Node.new(type: :button, name: :a))
+
+    root.find { |node| node.type == :canvas }.should be_nil
   end
 
   it "add_child sets the child's parent" do

@@ -163,16 +163,28 @@ module Teek
         children.each(&.each(&block))
       end
 
-      # Depth-first, pre-order traversal of this node and its descendants,
-      # as an Array rather than yielded one at a time. Ruby's #each returns
-      # an Enumerator with no block; Crystal has no lazy-enumerator
-      # equivalent as ergonomic as Ruby's here, so callers that want every
-      # node at once (Document#each_node's no-block form) get an Array
-      # instead.
-      def each : Array(Node)
+      # This node and its descendants collected into an Array, in the same
+      # depth-first pre-order #each yields them. Eager, not an Iterator -
+      # a build tree is small enough that materializing it costs nothing
+      # worth avoiding, and #find is there when the walk can stop early.
+      def to_a : Array(Node)
         nodes = [] of Node
         each { |node| nodes << node }
         nodes
+      end
+
+      # The first node in this subtree the block accepts, searching the
+      # same depth-first pre-order as #each and stopping there. #each
+      # can't do this itself: it recurses through a captured block, and
+      # Crystal won't let a captured block return from its caller.
+      def find(&block : Node -> Bool) : Node?
+        return self if block.call(self)
+
+        children.each do |child|
+          found = child.find(&block)
+          return found if found
+        end
+        nil
       end
 
       # This node's address, computed purely from the retained tree

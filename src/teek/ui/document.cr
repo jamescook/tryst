@@ -91,8 +91,9 @@ module Teek
         root.each(&block)
       end
 
-      def each_node : Array(Node)
-        root.each
+      # The whole tree as an Array, in the order #each_node yields it.
+      def nodes : Array(Node)
+        root.to_a
       end
 
       # Every named node, regardless of whether it's actually attached
@@ -102,7 +103,8 @@ module Teek
         @index.each { |(_scope, name), node| block.call(name, node) }
       end
 
-      def each_named_node : Array({Symbol, Node})
+      # Every named node as an Array of {name, node} pairs.
+      def named_nodes : Array({Symbol, Node})
         @index.map { |(_scope, name), node| {name, node} }
       end
 
@@ -115,7 +117,7 @@ module Teek
       # addressing strategy's synthesized virtual path (a menu entry has
       # no real Tk path at all).
       def find_by_path(path : String) : Node?
-        each_node.find { |node| node.realized.try(&.path) == path }
+        root.find { |node| node.realized.try(&.path) == path }
       end
 
       # @api private - called by Realizer#allocate_path, which gets a
