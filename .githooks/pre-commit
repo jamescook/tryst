@@ -17,7 +17,49 @@ else
   exit 1
 fi
 
-# --- 2. Refuse compiled executables -----------------------------------
+# --- 2. Typecheck every example ---------------------------------------
+# Nothing else does: `crystal spec` never touches examples/, and ameba
+# above only lints it - so an example could stop COMPILING and nothing
+# would notice until someone ran that one file. A src change is the usual
+# culprit, which is why this runs unconditionally rather than only when
+# an example is staged.
+#
+# Deliberately ONLY "does it compile". Not run (they open native modal
+# dialogs and block on mainloop - they are manual harnesses by nature),
+# and not realized either.
+#
+# --no-codegen matters twice: it is much faster, and it emits NO binary,
+# so this can't leave behind the very stray executable step 3 exists to
+# refuse. Every .cr under examples/ is checked, entry point or not - the
+# library-ish ones (a service, a buffer) typecheck standalone too, so
+# there's no list to keep in sync.
+# This is the first step here to need `crystal` itself on PATH, and a git
+# hook does not always inherit a login shell's - a GUI git client is the
+# usual way to get a stripped one. Say so outright rather than letting
+# every example "fail to compile" with a command-not-found.
+if ! command -v crystal >/dev/null 2>&1; then
+  echo "pre-commit: 'crystal' is not on PATH, so examples/ can't be typechecked." >&2
+  echo "Commit from a shell where 'crystal -v' works, or add it to the hook's PATH." >&2
+  exit 1
+fi
+
+example_failures=""
+for f in $(find examples -name '*.cr' | sort); do
+  if ! out=$(crystal build --no-codegen "$f" 2>&1); then
+    example_failures="$example_failures
+--- $f
+$out"
+  fi
+done
+
+if [ -n "$example_failures" ]; then
+  echo "pre-commit: example(s) failed to compile:" >&2
+  printf '%s\n' "$example_failures" >&2
+  echo "An example that doesn't compile is dead documentation - fix it or delete it." >&2
+  exit 1
+fi
+
+# --- 3. Refuse compiled executables -----------------------------------
 # Compiled Crystal binaries have no distinguishing file extension
 # (`crystal build foo.cr` with no -o produces a plain `foo`), so a
 # name/extension-based .gitignore entry can't reliably catch a stray one
@@ -44,7 +86,7 @@ $f: $desc"
   fi
 fi
 
-# --- 3. Refuse bead/tracker ids in code -------------------------------
+# --- 4. Refuse bead/tracker ids in code -------------------------------
 # Beads is internal to the workflow; a bead id in a code comment means
 # nothing to a reader of the source and leaks the internal process into
 # permanent history. Checks the STAGED content (git grep --cached), not
