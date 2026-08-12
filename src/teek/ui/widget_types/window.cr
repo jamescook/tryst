@@ -16,8 +16,8 @@ module Teek
         opts = node.opts
         window = app.window(path)
 
-        window.set_title(opts[:title].to_s) if opts[:title]?
-        window.set_geometry(opts[:geometry].to_s) if opts[:geometry]?
+        window.title = opts[:title].to_s if opts[:title]?
+        window.geometry = opts[:geometry].to_s if opts[:geometry]?
 
         if opts.has_key?(:resizable)
           width, height = resizable_pair(opts[:resizable])

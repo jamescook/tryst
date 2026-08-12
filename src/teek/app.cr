@@ -441,8 +441,8 @@ module Teek
 
     # Set a window's title. Defaults to the root window ("."). window
     # accepts a Widget or a path String.
-    def set_window_title(title : String, window = ".") : String
-      self.window(window).set_title(title)
+    def set_window_title(title : String, window = ".") : Nil
+      self.window(window).title = title
     end
 
     # Get a window's current title. Defaults to the root window (".").
@@ -453,8 +453,8 @@ module Teek
 
     # Set a window's geometry (e.g. "400x300", "400x300+100+50"). Defaults
     # to the root window ("."). window accepts a Widget or a path String.
-    def set_window_geometry(geometry : String, window = ".") : String
-      self.window(window).set_geometry(geometry)
+    def set_window_geometry(geometry : String, window = ".") : Nil
+      self.window(window).geometry = geometry
     end
 
     # Get a window's current geometry. Defaults to the root window (".").
@@ -469,10 +469,10 @@ module Teek
       self.window(window).set_resizable(width, height)
     end
 
-    # Get whether a window is resizable ([width_resizable,
-    # height_resizable]). Defaults to the root window ("."). window
+    # Get whether a window is resizable ({width_resizable,
+    # height_resizable}). Defaults to the root window ("."). window
     # accepts a Widget or a path String.
-    def window_resizable(window = ".") : Array(Bool)
+    def window_resizable(window = ".") : {Bool, Bool}
       self.window(window).resizable
     end
 
@@ -515,8 +515,8 @@ module Teek
 
     # Force a window's macOS appearance, opting it out of the system
     # light/dark preference; :auto hands it back. A no-op on every other
-    # platform. Named set_appearance rather than appearance= to match this
-    # port's set_-prefix convention (see Window#set_title).
+    # platform. Not appearance=, since it takes the window to act on as
+    # well as the mode - the same reason #set_window_title isn't a setter.
     def set_appearance(mode : Appearance, window = ".") : Nil
       set_appearance(mode.to_tcl, window)
     end

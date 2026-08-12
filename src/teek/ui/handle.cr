@@ -115,7 +115,7 @@ module Teek
         window.withdraw
         # Detached again, so deiconifying the master can't bring a hidden
         # window back with it - see #apply_transient.
-        window.set_transient("") unless @node.opts[:transient]? == false
+        window.transient = "" unless @node.opts[:transient]? == false
         self
       end
 
@@ -131,7 +131,7 @@ module Teek
       private def apply_transient : Nil
         return if @node.opts[:transient]? == false
 
-        window.set_transient(toplevel_parent_path)
+        window.transient = toplevel_parent_path
       end
 
       # Grab all input to this window and focus it - what makes a dialog
@@ -479,7 +479,7 @@ module Teek
         return unless parent
 
         width, _height, x, y = parent
-        window.set_geometry("+#{x + width + 12}+#{y}")
+        window.geometry = "+#{x + width + 12}+#{y}"
       end
 
       private def declared_position? : Bool

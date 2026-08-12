@@ -342,8 +342,8 @@ class PaintDemo
   private def build_tools_window : Nil
     @app.command(:toplevel, TOOLS_PATH)
     tools = @app.window(TOOLS_PATH)
-    tools.set_title("Tools")
-    tools.set_geometry("50x200+910+300")
+    tools.title = "Tools"
+    tools.geometry = "50x200+910+300"
     tools.set_resizable(false, false)
 
     Tool.each do |tool|
@@ -367,8 +367,8 @@ class PaintDemo
   private def build_palette_window : Nil
     @app.command(:toplevel, PALETTE_PATH)
     palette = @app.window(PALETTE_PATH)
-    palette.set_title("Colors")
-    palette.set_geometry("170x160+910+100")
+    palette.title = "Colors"
+    palette.geometry = "170x160+910+100"
     palette.set_resizable(false, false)
 
     COLORS.each_with_index do |color, index|
@@ -388,13 +388,13 @@ class PaintDemo
     widget.bind("Enter") do
       destroy_tooltip
       @app.command(:toplevel, TOOLTIP_PATH, background: TOOLTIP_BACKGROUND)
-      @app.window(TOOLTIP_PATH).set_overrideredirect(true)
+      @app.window(TOOLTIP_PATH).overrideredirect = true
       # Purely cosmetic platform hints - not every window manager knows
       # them, so a failure here shouldn't take the tooltip down with it.
       @app.tcl_eval("catch {wm attributes #{TOOLTIP_PATH} -type tooltip}")
       @app.tcl_eval("catch {wm attributes #{TOOLTIP_PATH} -transparent true}")
 
-      @app.window(TOOLTIP_PATH).set_geometry("+#{@app.winfo.pointerx + 15}+#{@app.winfo.pointery + 10}")
+      @app.window(TOOLTIP_PATH).geometry = "+#{@app.winfo.pointerx + 15}+#{@app.winfo.pointery + 10}"
 
       @app.create_widget(:frame, "#{TOOLTIP_PATH}.f",
         background: TOOLTIP_BACKGROUND, relief: :solid,

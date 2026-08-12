@@ -38,21 +38,19 @@ class FakeWindow
   def initialize(@path : String)
   end
 
-  def set_title(value : String) : String # ameba:disable Naming/AccessorMethodName
+  def title=(value : String) : Nil
     @titles << value
-    value
   end
 
-  def set_geometry(value : String) : String # ameba:disable Naming/AccessorMethodName
+  def geometry=(value : String) : Nil
     @geometries << value
-    value
   end
 
   def set_resizable(width : Bool, height : Bool) : Nil
     @resizables << ResizableCall.new(width, height)
   end
 
-  def set_transient(master) : Nil # ameba:disable Naming/AccessorMethodName
+  def transient=(master) : Nil
     @transients << master.to_s
   end
 

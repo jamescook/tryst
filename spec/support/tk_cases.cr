@@ -327,17 +327,17 @@ tk_test "app.window(path) is scoped to that path" do |app|
   app.destroy(".t")
 end
 
-tk_test "Window#set_title/#title round-trip" do |app|
+tk_test "Window#title=/#title round-trip" do |app|
   w = app.window
-  w.set_title("Direct via Window")
+  w.title = "Direct via Window"
   raise "expected title to round-trip" unless w.title == "Direct via Window"
 end
 
-tk_test "Window#set_geometry/#geometry round-trip" do |app|
+tk_test "Window#geometry=/#geometry round-trip" do |app|
   app.show
   app.update
   w = app.window
-  w.set_geometry("320x240")
+  w.geometry = "320x240"
   app.update_idletasks
   raise "expected geometry to include 320x240, got #{w.geometry.inspect}" unless w.geometry.includes?("320x240")
 end
@@ -345,7 +345,7 @@ end
 tk_test "Window#set_resizable/#resizable round-trip" do |app|
   w = app.window
   w.set_resizable(false, true)
-  raise "expected [false, true], got #{w.resizable.inspect}" unless w.resizable == [false, true]
+  raise "expected {false, true}, got #{w.resizable.inspect}" unless w.resizable == {false, true}
 end
 
 tk_test "Window#deiconify/#withdraw map/unmap the window" do |app|
@@ -361,12 +361,12 @@ end
 
 # Every setter below goes through App#tcl_invoke, which hands Tcl an
 # argument vector directly - the value is never re-parsed, so it can't be
-# broken up by a space or resplit by a stray brace. #set_title is the one
-# wm subcommand taking free text, so it's where that's provable.
+# broken up by a space or resplit by a stray brace. #title= is the one wm
+# subcommand taking free text, so it's where that's provable.
 tk_test "a Window setter's value survives spaces and an unbalanced brace" do |app|
   w = app.window
   nasty = "a {unbalanced brace and spaces"
-  w.set_title(nasty)
+  w.title = nasty
   raise "expected #{nasty.inspect} to round-trip, got #{w.title.inspect}" unless w.title == nasty
 end
 
@@ -432,8 +432,8 @@ end
 # -alpha is stored by Tk itself, so it actually round-trips here.
 #
 # That leaves set_attribute's Float64 and Int32 branches covered; its Bool
-# branch shares the same App#bool_to_tcl coercion that
-# #set_overrideredirect below round-trips for real.
+# branch shares the same App#bool_to_tcl coercion that #overrideredirect=
+# below round-trips for real.
 tk_test "Window#set_attribute/#attribute round-trip a window manager attribute" do |app|
   app.tcl_eval("toplevel .t")
   app.update
@@ -448,41 +448,41 @@ tk_test "Window#set_attribute/#attribute round-trip a window manager attribute" 
   app.destroy(".t")
 end
 
-tk_test "Window#set_transient/#transient round-trip, nil when not transient" do |app|
+tk_test "Window#transient=/#transient round-trip, nil when not transient" do |app|
   app.tcl_eval("toplevel .t")
   app.update
   w = app.window(".t")
 
   raise "expected a fresh toplevel not to be transient, got #{w.transient.inspect}" unless w.transient.nil?
 
-  w.set_transient(".")
+  w.transient = "."
   raise "expected transient to be '.', got #{w.transient.inspect}" unless w.transient == "."
 
   app.destroy(".t")
 end
 
-tk_test "Window#set_transient also accepts another Window" do |app|
+tk_test "Window#transient= also accepts another Window" do |app|
   app.tcl_eval("toplevel .t")
   app.update
   w = app.window(".t")
 
-  w.set_transient(app.window)
+  w.transient = app.window
   raise "expected transient to be '.', got #{w.transient.inspect}" unless w.transient == "."
 
   app.destroy(".t")
 end
 
-tk_test "Window#set_overrideredirect/#overrideredirect? round-trip" do |app|
+tk_test "Window#overrideredirect=/#overrideredirect? round-trip" do |app|
   app.tcl_eval("toplevel .t")
   app.update
   w = app.window(".t")
 
   raise "expected a fresh toplevel to be decorated" if w.overrideredirect?
 
-  w.set_overrideredirect(true)
+  w.overrideredirect = true
   raise "expected overrideredirect to be set" unless w.overrideredirect?
 
-  w.set_overrideredirect(false)
+  w.overrideredirect = false
   raise "expected overrideredirect to be cleared" if w.overrideredirect?
 
   app.destroy(".t")

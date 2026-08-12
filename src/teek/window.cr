@@ -32,9 +32,8 @@ module Teek
       @app.tcl_invoke("wm", "title", @path)
     end
 
-    # Sets the window's title. Named set_title (not title=), matching
-    # ruby-teek and this port's own App#set_window_title convention.
-    def set_title(value : String) : String # ameba:disable Naming/AccessorMethodName
+    # Sets the window's title.
+    def title=(value : String) : Nil
       @app.tcl_invoke("wm", "title", @path, value)
     end
 
@@ -43,16 +42,15 @@ module Teek
       @app.tcl_invoke("wm", "geometry", @path)
     end
 
-    # Sets the window's geometry (e.g. "400x300", "400x300+100+50"). Named
-    # set_geometry (not geometry=), matching ruby-teek's own convention.
-    def set_geometry(value : String) : String # ameba:disable Naming/AccessorMethodName
+    # Sets the window's geometry (e.g. "400x300", "400x300+100+50").
+    def geometry=(value : String) : Nil
       @app.tcl_invoke("wm", "geometry", @path, value)
     end
 
-    # [width_resizable, height_resizable].
-    def resizable : Array(Bool)
+    # {width_resizable, height_resizable}.
+    def resizable : {Bool, Bool}
       parts = @app.tcl_invoke("wm", "resizable", @path).split
-      [@app.tcl_to_bool(parts[0]), @app.tcl_to_bool(parts[1])]
+      {@app.tcl_to_bool(parts[0]), @app.tcl_to_bool(parts[1])}
     end
 
     # width/height: whether to allow resizing in that direction.
@@ -149,7 +147,8 @@ module Teek
     end
 
     # Makes this window transient to master (a path String or a Window).
-    def set_transient(master) : Nil # ameba:disable Naming/AccessorMethodName
+    # An empty string detaches it again.
+    def transient=(master) : Nil
       @app.tcl_invoke("wm", "transient", @path, master.to_s)
     end
 
@@ -160,7 +159,7 @@ module Teek
       @app.tcl_to_bool(@app.tcl_invoke("wm", "overrideredirect", @path))
     end
 
-    def set_overrideredirect(value : Bool) : Nil # ameba:disable Naming/AccessorMethodName
+    def overrideredirect=(value : Bool) : Nil
       @app.tcl_invoke("wm", "overrideredirect", @path, @app.bool_to_tcl(value))
     end
 
@@ -227,13 +226,9 @@ module Teek
       raise ex
     end
 
+    # Grabs and focuses with no setup block to run.
     def modal(global : Bool = false) : Nil
-      grab_set(global: global)
-      @app.tcl_invoke("focus", "-force", @path)
-      @app.interp.bind(@path, "<Destroy>") { grab_release }
-    rescue ex
-      grab_release
-      raise ex
+      modal(global: global) { }
     end
   end
 end
