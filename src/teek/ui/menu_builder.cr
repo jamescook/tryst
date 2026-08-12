@@ -25,12 +25,12 @@ module Teek
       # A nested cascade - recursive, so the same method builds both a
       # menu_bar's top-level dropdowns (File/Edit/...) and any submenu
       # nested inside one of those.
-      def menu(name : Symbol? = nil, *, label : String, **opts, &block : MenuBuilder -> Nil) : Handle
+      def menu(name : Symbol? = nil, *, label : String, **opts, & : MenuBuilder -> Nil) : Handle
         node = build_menu_node(name, label, opts)
         @stack.push(node)
         @document.notify(:push, node, current_path)
         begin
-          block.call(self)
+          yield self
         ensure
           path = current_path
           @stack.pop

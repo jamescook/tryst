@@ -51,7 +51,7 @@ describe Teek::UI::WidgetTypes do
   end
 
   it "each enumerates every registered type including button" do
-    types = Teek::UI::WidgetTypes.each.map(&.type)
+    types = Teek::UI::WidgetTypes.all.map(&.type)
 
     types.should contain(:button)
   end

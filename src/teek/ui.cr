@@ -30,9 +30,9 @@ module Teek
     # (forwarded verbatim to Teek::App.new there) - Crystal needs a fixed
     # parameter list, and track_widgets is App.new's only other real
     # keyword arg.
-    def self.app(title : String? = nil, scroll : Bool? = nil, track_widgets : Bool = true, &block : Session -> Nil) : Session
+    def self.app(title : String? = nil, scroll : Bool? = nil, track_widgets : Bool = true, & : Session -> Nil) : Session
       session = Session.new(title: title, scroll: scroll, track_widgets: track_widgets)
-      block.call(session)
+      yield session
       session
     end
 

@@ -71,8 +71,8 @@ module Teek
         append_leaf(:slider, name, to_opts_hash(opts), bind)
       end
 
-      def panel(name : Symbol? = nil, **opts, &block : self -> Nil) : Handle
-        append_container(:panel, name, to_opts_hash(opts), &block)
+      def panel(name : Symbol? = nil, **opts, & : self -> Nil) : Handle
+        append_container(:panel, name, to_opts_hash(opts)) { |dsl| yield dsl }
       end
 
       def panel(name : Symbol? = nil, **opts) : Handle
@@ -88,8 +88,8 @@ module Teek
       # Created withdrawn, so a build can declare every window the app
       # will ever need without them all appearing at realize - reveal one
       # with handle.show, hide it again with handle.hide.
-      def window(name : Symbol? = nil, **opts, &block : self -> Nil) : Handle
-        append_container(:window, name, to_opts_hash(opts), &block)
+      def window(name : Symbol? = nil, **opts, & : self -> Nil) : Handle
+        append_container(:window, name, to_opts_hash(opts)) { |dsl| yield dsl }
       end
 
       def window(name : Symbol? = nil, **opts) : Handle
@@ -97,8 +97,8 @@ module Teek
       end
 
       # A tabbed notebook. Declare its pages with #tab inside the block.
-      def tabs(name : Symbol? = nil, **opts, &block : self -> Nil) : Handle
-        append_container(:tabs, name, to_opts_hash(opts), &block)
+      def tabs(name : Symbol? = nil, **opts, & : self -> Nil) : Handle
+        append_container(:tabs, name, to_opts_hash(opts)) { |dsl| yield dsl }
       end
 
       def tabs(name : Symbol? = nil, **opts) : Handle
@@ -112,8 +112,8 @@ module Teek
       #
       # Only valid directly inside a ui.tabs block; raises ArgumentError
       # anywhere else.
-      def tab(label : String, name : Symbol? = nil, **opts, &block : self -> Nil) : Handle
-        append_container(:tab, name, tab_opts(label, opts), &block)
+      def tab(label : String, name : Symbol? = nil, **opts, & : self -> Nil) : Handle
+        append_container(:tab, name, tab_opts(label, opts)) { |dsl| yield dsl }
       end
 
       def tab(label : String, name : Symbol? = nil, **opts) : Handle
@@ -152,24 +152,24 @@ module Teek
       #
       # With x: false, content is held at the visible width rather than
       # its natural one, so it never ends up narrower than the region.
-      def scrollable(name : Symbol? = nil, **opts, &block : self -> Nil) : Handle
-        append_container(:scrollable, name, to_opts_hash(opts), &block)
+      def scrollable(name : Symbol? = nil, **opts, & : self -> Nil) : Handle
+        append_container(:scrollable, name, to_opts_hash(opts)) { |dsl| yield dsl }
       end
 
       def scrollable(name : Symbol? = nil, **opts) : Handle
         append_container(:scrollable, name, to_opts_hash(opts))
       end
 
-      def column(name : Symbol? = nil, **opts, &block : self -> Nil) : Handle
-        append_container(:column, name, to_opts_hash(opts), &block)
+      def column(name : Symbol? = nil, **opts, & : self -> Nil) : Handle
+        append_container(:column, name, to_opts_hash(opts)) { |dsl| yield dsl }
       end
 
       def column(name : Symbol? = nil, **opts) : Handle
         append_container(:column, name, to_opts_hash(opts))
       end
 
-      def row(name : Symbol? = nil, **opts, &block : self -> Nil) : Handle
-        append_container(:row, name, to_opts_hash(opts), &block)
+      def row(name : Symbol? = nil, **opts, & : self -> Nil) : Handle
+        append_container(:row, name, to_opts_hash(opts)) { |dsl| yield dsl }
       end
 
       def row(name : Symbol? = nil, **opts) : Handle
@@ -182,8 +182,8 @@ module Teek
         append_leaf(:spacer, nil, {:grow => true} of Symbol => TclArgValue)
       end
 
-      def grid(name : Symbol? = nil, **opts, &block : self -> Nil) : Handle
-        append_container(:grid, name, to_opts_hash(opts), &block)
+      def grid(name : Symbol? = nil, **opts, & : self -> Nil) : Handle
+        append_container(:grid, name, to_opts_hash(opts)) { |dsl| yield dsl }
       end
 
       def grid(name : Symbol? = nil, **opts) : Handle
@@ -199,8 +199,8 @@ module Teek
       # Realizer#arrange_grid).
       def cell(row : Int32, col : Int32, colspan : Int32 = 1, rowspan : Int32 = 1,
                sticky : (Symbol | String)? = nil, padx : Int32? = nil, pady : Int32? = nil,
-               ipadx : Int32? = nil, ipady : Int32? = nil, &block : self -> Nil) : Nil
-        place_cell(row, col, colspan, rowspan, sticky, padx, pady, ipadx, ipady) { block.call(self) }
+               ipadx : Int32? = nil, ipady : Int32? = nil, & : self -> Nil) : Nil
+        place_cell(row, col, colspan, rowspan, sticky, padx, pady, ipadx, ipady) { yield self }
       end
 
       # Raises ArgumentError if this cell's block builds anything other
@@ -221,8 +221,8 @@ module Teek
         grid_node.opts[:stretch_rows] = to_tclarg_int_array(rows) unless rows.empty?
       end
 
-      def canvas(name : Symbol? = nil, **opts, &block : self -> Nil) : Handle
-        append_container(:canvas, name, to_opts_hash(opts), &block)
+      def canvas(name : Symbol? = nil, **opts, & : self -> Nil) : Handle
+        append_container(:canvas, name, to_opts_hash(opts)) { |dsl| yield dsl }
       end
 
       def canvas(name : Symbol? = nil, **opts) : Handle
@@ -239,8 +239,8 @@ module Teek
       # relative coordinates are fractions of the canvas's current
       # size, recomputed live by Tk on every resize. Only valid
       # directly inside a ui.canvas block.
-      def overlay(at : Symbol, &block : self -> Nil) : Nil
-        place_overlay(at) { block.call(self) }
+      def overlay(at : Symbol, & : self -> Nil) : Nil
+        place_overlay(at) { yield self }
       end
 
       # Raises ArgumentError if this overlay's block builds anything
@@ -293,9 +293,9 @@ module Teek
       # A window's menu bar - the row of top-level dropdowns (File/Edit/
       # ...) along its top edge. Valid at the top level of a build.
       # Raises ArgumentError if declared anywhere else.
-      def menu_bar(name : Symbol? = nil, **opts, &block : MenuBuilder -> Nil) : Handle
+      def menu_bar(name : Symbol? = nil, **opts, & : MenuBuilder -> Nil) : Handle
         node = build_menu_bar_node(name, opts)
-        build_menu_subtree(node, &block)
+        build_menu_subtree(node) { |menu| yield menu }
         Handle.new(node)
       end
 
@@ -306,11 +306,11 @@ module Teek
       # A standalone popup menu - built the same declarative way as a
       # menu_bar's dropdowns, but not attached to anything automatically.
       # Wire it to a widget with handle.on_right_click(this).
-      def context_menu(name : Symbol? = nil, **opts, &block : MenuBuilder -> Nil) : Handle
+      def context_menu(name : Symbol? = nil, **opts, & : MenuBuilder -> Nil) : Handle
         raise_if_closed!
         node = @document.create(type: :context_menu, name: name, opts: to_opts_hash(opts), scope: current_scope)
         @stack.last.add_child(node)
-        build_menu_subtree(node, &block)
+        build_menu_subtree(node) { |menu| yield menu }
         Handle.new(node)
       end
 
@@ -404,10 +404,10 @@ module Teek
       # see Document#subscribe) and yields a fresh MenuBuilder scoped to
       # it - a separate, small vocabulary from WidgetDSL itself (see
       # menu_builder.cr's own doc comment for why).
-      private def build_menu_subtree(node : Node, &block : MenuBuilder -> Nil) : Nil
+      private def build_menu_subtree(node : Node, & : MenuBuilder -> Nil) : Nil
         push_stack(node)
         begin
-          block.call(MenuBuilder.new(@document, @stack))
+          yield MenuBuilder.new(@document, @stack)
         ensure
           pop_stack
         end
@@ -419,10 +419,10 @@ module Teek
       # widget's cell position on its own node.
       private def place_cell(row : Int32, col : Int32, colspan : Int32, rowspan : Int32,
                              sticky : (Symbol | String)?, padx : Int32?, pady : Int32?,
-                             ipadx : Int32?, ipady : Int32?, &block : -> Nil) : Nil
+                             ipadx : Int32?, ipady : Int32?, & : -> Nil) : Nil
         grid_node = current_grid!("cell")
         before = grid_node.children.size
-        block.call
+        yield
         placed = grid_node.children[before..]
         unless placed.size == 1
           raise ArgumentError.new("cell needs exactly one widget declared in its block (got #{placed.size})")
@@ -438,14 +438,14 @@ module Teek
       # exactly one widget to the enclosing canvas (found via
       # #current_canvas!), and records that widget's overlay anchor on
       # its own node.
-      private def place_overlay(at : Symbol, &block : -> Nil) : Nil
+      private def place_overlay(at : Symbol, & : -> Nil) : Nil
         canvas_node = current_canvas!("overlay")
         unless OverlayAnchors::POSITIONS.has_key?(at)
           raise ArgumentError.new("overlay's at: must be one of #{OverlayAnchors::POSITIONS.keys.join(", ")} (got #{at.inspect})")
         end
 
         before = canvas_node.children.size
-        block.call
+        yield
         placed = canvas_node.children[before..]
         unless placed.size == 1
           raise ArgumentError.new("overlay needs exactly one widget declared in its block (got #{placed.size})")
@@ -528,7 +528,7 @@ module Teek
       # The full set of types scroll: actually works on, for the error
       # message above.
       private def scrollable_type_names : Array(Symbol)
-        WidgetTypes.each.select(&.natively_scrollable?).map(&.type).sort!
+        WidgetTypes.all.select(&.natively_scrollable?).map(&.type).sort!
       end
 
       # grow:/lazy: are DSL-only intents, not real Tk options - pull them
@@ -603,11 +603,11 @@ module Teek
         WidgetTypes.for_type(type).try(&.bind_option)
       end
 
-      private def append_container(type : Symbol, name : Symbol?, opts : Hash(Symbol, TclArgValue), &block : self -> Nil) : Handle
+      private def append_container(type : Symbol, name : Symbol?, opts : Hash(Symbol, TclArgValue), & : self -> Nil) : Handle
         node = build_container_node(type, name, opts)
         push_stack(node)
         begin
-          block.call(self)
+          yield self
         ensure
           pop_stack
         end

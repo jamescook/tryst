@@ -36,11 +36,12 @@ module Teek
         @@types[type.to_s]?
       end
 
-      def self.each(&block : WidgetType -> Nil) : Nil
-        @@types.each_value(&block)
+      def self.each(& : WidgetType -> Nil) : Nil
+        @@types.each_value { |widget_type| yield widget_type }
       end
 
-      def self.each : Array(WidgetType)
+      # Every registered type, in registration order.
+      def self.all : Array(WidgetType)
         @@types.values
       end
     end
