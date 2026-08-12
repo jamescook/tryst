@@ -50,10 +50,12 @@ module Teek
       #
       # An intent with a typed Node slot is not listed here - it never
       # entered opts to begin with. See WidgetDSL#extract_dsl_opts.
-      RESERVED_OPTIONS = [
+      # A Set, not a list: #filtered_opts asks about every option on every
+      # node.
+      RESERVED_OPTIONS = Set{
         :title, :geometry, :resizable, :transient, :modal,
         :x, :y, :scroll, :tab_label, :pane_weight,
-      ]
+      }
 
       # For App#command's Hash overload, where the call has no options of
       # its own - the same shape CanvasItem keeps for the same reason.

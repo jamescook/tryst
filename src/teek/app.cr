@@ -45,18 +45,20 @@ module Teek
   # to decide where a Proc-valued kwarg's ownership is scoped
   # (#track_widget_option_callbacks). Mirrors ruby-teek's
   # Teek::WIDGET_COMMANDS (lib/teek.rb).
-  WIDGET_COMMANDS = %w[
-    button label frame entry text canvas listbox
-    scrollbar scale spinbox menu menubutton message
-    panedwindow labelframe checkbutton radiobutton
-    toplevel
-    ttk::button ttk::label ttk::frame ttk::entry
-    ttk::combobox ttk::checkbutton ttk::radiobutton
-    ttk::scale ttk::scrollbar ttk::spinbox ttk::separator
-    ttk::sizegrip ttk::progressbar ttk::notebook
-    ttk::panedwindow ttk::labelframe ttk::menubutton
-    ttk::treeview
-  ]
+  # A Set, not a list: every #command call asks whether the command it
+  # was handed is one of these, twice.
+  WIDGET_COMMANDS = Set{
+    "button", "label", "frame", "entry", "text", "canvas", "listbox",
+    "scrollbar", "scale", "spinbox", "menu", "menubutton", "message",
+    "panedwindow", "labelframe", "checkbutton", "radiobutton",
+    "toplevel",
+    "ttk::button", "ttk::label", "ttk::frame", "ttk::entry",
+    "ttk::combobox", "ttk::checkbutton", "ttk::radiobutton",
+    "ttk::scale", "ttk::scrollbar", "ttk::spinbox", "ttk::separator",
+    "ttk::sizegrip", "ttk::progressbar", "ttk::notebook",
+    "ttk::panedwindow", "ttk::labelframe", "ttk::menubutton",
+    "ttk::treeview",
+  }
 
   # App#widgets' value shape - ruby-teek uses a bare {class:, parent:}
   # Hash; a real struct here instead since `class` is a reserved word in
@@ -124,7 +126,7 @@ module Teek
     # of scope for this port (see project notes on Debugger).
     def initialize(title : String? = nil, track_widgets : Bool = true)
       @interp = Interp.new
-      @installed_tcl_helpers = {} of Symbol => Bool
+      @installed_tcl_helpers = Set(Symbol).new
       @widget_types_by_path = {} of String => String
       @widget_counters = Hash(String, Int32).new(0)
       @widgets = {} of String => WidgetInfo
@@ -271,9 +273,12 @@ module Teek
     # Tcl-side helper proc without re-sending and re-parsing that
     # definition on every call.
     def ensure_tcl_helper(name : Symbol, & : -> String) : Nil
-      return if @installed_tcl_helpers[name]?
+      return if @installed_tcl_helpers.includes?(name)
+
+      # Recorded only after the definition lands, so a helper whose
+      # tcl_eval raises is retried rather than assumed installed.
       tcl_eval(yield)
-      @installed_tcl_helpers[name] = true
+      @installed_tcl_helpers << name
     end
 
     # Schedule a one-shot timer. Calls the block after ms milliseconds.

@@ -52,15 +52,16 @@ module Teek
         # One error per colliding PAIR. Two widgets overlapping across
         # three cells is one mistake, and reporting it three times buries
         # the rest of the validation output.
-        reported = Set({UInt64, UInt64}).new
+        # Keyed on the nodes themselves: a Set of references already
+        # compares and hashes by identity, which is all a pair needs.
+        reported = Set({Node, Node}).new
         occupancy.keys.sort!.each do |position|
           children = occupancy[position]
           next if children.size <= 1
 
           row, col = position
           children.each_combination(2, reuse: true) do |(first, second)|
-            pair = {first.object_id, second.object_id}
-            next unless reported.add?(pair)
+            next unless reported.add?({first, second})
 
             errors << "#{WidgetValidators.describe(node)} has more than one widget at row #{row}, col #{col}: " \
                       "#{WidgetValidators.describe(first)}, #{WidgetValidators.describe(second)}"
