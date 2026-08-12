@@ -58,7 +58,8 @@ module Teek
       @toast_path : String?
       @toast_timer : AfterHandle?
 
-      def initialize(@title : String? = nil, @scroll : Bool? = nil, @track_widgets : Bool = true)
+      def initialize(@title : String? = nil, @scroll : Bool? = nil, @track_widgets : Bool = true,
+                     @resizable : Bool? = nil)
         @document = Document.new
         @stack = [@document.root]
         @app = nil
@@ -95,6 +96,14 @@ module Teek
         Validator.validate!(@document, strict: strict)
 
         app = Teek::App.new(title: @title, track_widgets: @track_widgets)
+        # The root window's own properties, the counterpart to the title:
+        # already handled above and to the resizable: a ui.window takes.
+        #
+        # Tested against nil rather than for truthiness: `resizable: false`
+        # is the whole point of the option, and `if fixed = @resizable`
+        # would skip exactly that case.
+        fixed = @resizable
+        app.set_window_resizable(fixed, fixed) unless fixed.nil?
         begin
           # Vars and images realize first, so a widget bound to one
           # (bind:) displays its initial value from the moment it's

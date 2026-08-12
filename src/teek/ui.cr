@@ -30,14 +30,25 @@ module Teek
     # (forwarded verbatim to Teek::App.new there) - Crystal needs a fixed
     # parameter list, and track_widgets is App.new's only other real
     # keyword arg.
-    def self.app(title : String? = nil, scroll : Bool? = nil, track_widgets : Bool = true, & : Session -> Nil) : Session
-      session = Session.new(title: title, scroll: scroll, track_widgets: track_widgets)
+    # resizable: false fixes the root window at its content's size, the
+    # same option a ui.window takes.
+    def self.app(title : String? = nil, scroll : Bool? = nil, track_widgets : Bool = true,
+                 resizable : Bool? = nil, & : Session -> Nil) : Session
+      session = Session.new(title: title, scroll: scroll, track_widgets: track_widgets,
+        resizable: resizable)
       yield session
       session
     end
 
-    def self.app(title : String? = nil, scroll : Bool? = nil, track_widgets : Bool = true) : Session
-      Session.new(title: title, scroll: scroll, track_widgets: track_widgets)
+    # ditto with no block, for a class that builds its own tree: Crystal
+    # never counts an instance variable assigned inside a block as
+    # initialized, so `@session = Teek::UI.app(...)` followed by plain
+    # `@session.button(...)` statements is what lets a class hold its
+    # widgets in non-nilable fields. The Session IS the builder either way.
+    def self.app(title : String? = nil, scroll : Bool? = nil, track_widgets : Bool = true,
+                 resizable : Bool? = nil) : Session
+      Session.new(title: title, scroll: scroll, track_widgets: track_widgets,
+        resizable: resizable)
     end
   end
 end

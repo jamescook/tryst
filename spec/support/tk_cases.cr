@@ -3563,3 +3563,74 @@ ensure
   photo.try &.delete
   app.destroy(".tc_image")
 end
+
+# -- The app-level DSL surface: WidgetDSL#on_key/#style, ui.image(subsample:)
+#
+# All three replace what an app would otherwise reach past the DSL to do
+# with a raw app.command, so each is checked against real Tk rather than
+# just recorded against a FakeApp. Built through Realizer against the
+# worker's app (see the nested-tree case above) - no Session, so no second
+# interpreter.
+
+tk_test "ui.image(subsample:) shrinks the source and leaves no temporary behind" do |app|
+  # Writes its own source rather than reading one from examples/ - a spec
+  # reaching into an example is coupling worth avoiding on its own, and the
+  # Docker image only ships src/ and spec/ anyway. This case can do it
+  # because a tk_test already HAS an interpreter (unlike
+  # spec/standalone/ui_image_fixture.cr, which embeds a base64 GIF because
+  # the realize under test is what creates its only App).
+  source = File.join(Dir.tempdir, "tk_case_subsample_source.png")
+  app.command(:image, :create, :photo, "tk_case_src", width: 216, height: 216)
+  app.command("tk_case_src", :write, source, format: "png")
+  app.command(:image, :delete, "tk_case_src")
+
+  begin
+    image = Teek::UI::Image.new("tk_case_subsampled", source, subsample: 6)
+    image.realize(app)
+
+    size = {app.command(:image, :width, image.name), app.command(:image, :height, image.name)}
+    raise "expected a 36x36 image from a 216px source, got #{size}" unless size == {"36", "36"}
+
+    leftovers = app.split_list(app.command(:image, :names)).select(&.includes?("_subsample_source"))
+    raise "expected the full-size temporary deleted, found #{leftovers}" unless leftovers.empty?
+
+    # a bad factor is rejected up front rather than handed to Tk
+    begin
+      Teek::UI::Image.new("tk_case_bad_subsample", source, subsample: 0).realize(app)
+      raise "expected subsample: 0 to raise"
+    rescue ex : ArgumentError
+      raise "unexpected message: #{ex.message}" unless ex.message.to_s.includes?("positive")
+    end
+  ensure
+    File.delete(source) if File.exists?(source)
+  end
+end
+
+tk_test "WidgetDSL#style configures a ttk style the widgets can then name" do |app|
+  session = WidgetDslHarness.new
+  session.style("TkCase.TButton", font: "TkFixedFont 12 bold")
+  session.button(:styled, text: "hi", style: "TkCase.TButton")
+
+  Teek::UI::Realizer.new(app, session.document).realize
+
+  looked_up = app.command("ttk::style", :lookup, "TkCase.TButton", "-font")
+  raise "expected the style's font set, got #{looked_up.inspect}" unless looked_up == "TkFixedFont 12 bold"
+  raise "expected the widget to name it" unless app.command(".styled", :cget, "-style") == "TkCase.TButton"
+end
+
+# The root window is what an app-wide shortcut has to attach to, and it's a
+# structural node with no widget of its own - so this also pins that the
+# realizer gives :root a path to bind on.
+tk_test "WidgetDSL#on_key binds a real app-wide keystroke to the root window" do |app|
+  session = WidgetDslHarness.new
+  fired = 0
+  session.on_key(:f2) { |_args, _signal| fired += 1 }
+  session.button(:elsewhere, text: "not focused")
+
+  Teek::UI::Realizer.new(app, session.document).realize
+  app.show
+  app.update
+
+  app.interp.simulate_event(".", "<F2>")
+  raise "expected the F2 binding to fire, fired=#{fired}" unless app.interp.wait_until { fired > 0 }
+end

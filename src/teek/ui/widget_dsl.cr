@@ -398,11 +398,11 @@ module Teek
       # can't splat one into a method with named parameters.
       def image(path : String, width : Int32? = nil, height : Int32? = nil,
                 format : String? = nil, palette : String? = nil,
-                gamma : Float64? = nil) : Image
+                gamma : Float64? = nil, subsample : Int32? = nil) : Image
         raise_if_closed!
         img = Image.new("teek_ui_image_#{@images.size + 1}", path,
           width: width, height: height, format: format,
-          palette: palette, gamma: gamma)
+          palette: palette, gamma: gamma, subsample: subsample)
         @images << img
         img
       end
@@ -436,6 +436,31 @@ module Teek
         node = @document.create(type: :context_menu, name: name, opts: to_opts_hash(opts), scope: current_scope)
         @stack.last.add_child(node)
         Handle.new(node)
+      end
+
+      # An application-wide key binding, attached to the root window so it
+      # fires wherever the focus happens to be - the keyboard counterpart
+      # to a menu entry, and what actually makes a menu's shortcut: label
+      # true (that label draws the accelerator text and nothing more).
+      #
+      # Takes the same spec as Handle#on_key: a friendly Symbol (:f2,
+      # :enter, :escape) or a raw Tk sequence ("<Control-s>").
+      def on_key(spec : Symbol | String, &block : Array(String), CallbackSignal -> Nil) : Nil
+        Handle.new(@document.root).on_key(spec) { |args, signal| block.call(args, signal) }
+      end
+
+      # Configure a ttk style, for the options ttk keeps on a style rather
+      # than on the widget - a ttk::button has no -font of its own, so a
+      # bigger label means a named style and `style:` on the widget.
+      #
+      # Deferred to realize like #raw, since it's a live-interpreter call.
+      def style(name : String, **opts) : Nil
+        hash = to_opts_hash(opts)
+        raw do |app|
+          kwargs = Hash(String, TclArgValue).new
+          hash.each { |key, value| kwargs[key.to_s] = value }
+          app.command("ttk::style", ([:configure, name] of TclArgValue), kwargs)
+        end
       end
 
       # Look up a named widget declared in the current scope, raising

@@ -63,6 +63,7 @@ class Minesweeper
   @timer : Teek::UI::TimerHandle?
   @pressed_cell : {Int32, Int32}?
   @tiles : Hash(Symbol | Int32, String) = {} of Symbol | Int32 => String
+  @art : Array(Teek::UI::Image) = [] of Teek::UI::Image
   @cell : Array(Array(Teek::UI::CanvasItem)) = [] of Array(Teek::UI::CanvasItem)
   @mine : Array(Array(Bool)) = [] of Array(Bool)
   @revealed : Array(Array(Bool)) = [] of Array(Bool)
@@ -89,7 +90,8 @@ class Minesweeper
     apply_level
     blank_state
 
-    @session = Teek::UI.app(title: "Yet Another Minesweeper")
+    @session = Teek::UI.app(title: "Yet Another Minesweeper", resizable: false)
+    load_tiles(@session)
     @mine_var = @session.var(@num_mines)
     @time_var = @session.var(0)
     @level_var = @session.var(@level)
@@ -98,6 +100,12 @@ class Minesweeper
     @canvas = @session.canvas(:board, width: @cols * TILE_SIZE, height: @rows * TILE_SIZE,
       highlightthickness: 0)
     build_menu(@session)
+
+    # A ttk::button keeps its font on a style, not on the widget.
+    @session.style("Face.TButton", font: "TkFixedFont 12 bold")
+    # The menu's shortcut: draws "F2" beside the label; this is the
+    # keystroke itself, app-wide so it fires wherever the focus is.
+    @session.on_key(:f2) { |_args, _signal| new_game }
 
     wire_events
   end
@@ -129,16 +137,11 @@ class Minesweeper
     @canvas.on_right_click(:x, :y) { |args, _sig| at(args) { |row, col| on_right_click(row, col) } }
   end
 
-  # Realize, then everything that needs a live interpreter: the artwork, the
-  # first board, the button style, and the real F2 keystroke.
+  # The tiles and the whole widget tree are declared already; realize turns
+  # them into real Tk, then the first board can be drawn (canvas items need
+  # a live canvas) and the game is ready.
   def run : Nil
     app = @session.realize
-    app.set_window_resizable(false, false)
-    # ttk::button has no -font of its own - the font lives on a style.
-    app.command("ttk::style", :configure, "Face.TButton", font: "TkFixedFont 12 bold")
-    app.bind(".", "<F2>") { |_args, _signal| new_game }
-
-    load_tiles
     new_game
     app.bring_to_front
     app.mainloop
@@ -170,7 +173,6 @@ class Minesweeper
     @flags_placed = 0
     @elapsed = 0
     @pressed_cell = nil
-    @tiles = {} of Symbol | Int32 => String
     @cell = [] of Array(Teek::UI::CanvasItem)
     @mine = new_grid { false }
     @revealed = new_grid { false }
@@ -234,30 +236,22 @@ class Minesweeper
     yield row, col if in_bounds?(row, col)
   end
 
-  # Load each PNG at full size, copy it into a second photo at a sixth of
-  # the scale, then throw the big one away - only the 36px tiles are
-  # needed. -subsample takes two separate integers, so they go as
-  # positional arguments; as a single list-valued option Tk rejects them.
+  # Declared, not loaded: ui.image allocates the Tcl image name now and
+  # loads the file at realize, so a canvas item can name one before any
+  # interpreter exists. subsample: 6 is what turns the 216px source artwork
+  # into a 36px tile.
   #
-  # These are plain Tk photo names rather than Teek::Photo objects on
-  # purpose: a Photo owns its image's lifetime and reclaims it when
-  # collected, which is the wrong contract for artwork that has to outlive
-  # every canvas item pointing at it for the whole run.
-  private def load_tiles : Nil
-    app = @session.app
-    tiles = TILE_FILES.to_h.transform_keys(&.as(Symbol | Int32))
-    (1..8).each { |count| tiles[count] = count.to_s }
+  # The Images are held in @art for their whole run, not just their names:
+  # an Image owns its Tk photo's lifetime, so dropping the wrapper while a
+  # canvas item still points at the photo would let it be reclaimed.
+  private def load_tiles(ui : Teek::UI::Session) : Nil
+    suffixes = TILE_FILES.to_h.transform_keys(&.as(Symbol | Int32))
+    (1..8).each { |count| suffixes[count] = count.to_s }
 
-    tiles.each do |key, suffix|
-      full = "yam_full_#{suffix}"
-      small = "yam_#{suffix}"
-
-      app.command(:image, :create, :photo, full, file: File.join(ASSETS_DIR, "MINESWEEPER_#{suffix}.png"))
-      app.command(:image, :create, :photo, small)
-      app.command(small, :copy, full, "-subsample", SUBSAMPLE, SUBSAMPLE)
-      app.command(:image, :delete, full)
-
-      @tiles[key] = small
+    suffixes.each do |key, suffix|
+      image = ui.image(File.join(ASSETS_DIR, "MINESWEEPER_#{suffix}.png"), subsample: SUBSAMPLE)
+      @art << image
+      @tiles[key] = image.name
     end
   end
 
@@ -265,19 +259,11 @@ class Minesweeper
 
   private def new_game : Nil
     stop_timer
-    blank_state_preserving_tiles
+    blank_state
     @mine_var.value = @num_mines
     @time_var.value = 0
     @face.configure(text: FACE_READY)
     draw_board
-  end
-
-  # #blank_state also clears @tiles, which is loaded once per run rather
-  # than once per game - so a restart keeps the artwork.
-  private def blank_state_preserving_tiles : Nil
-    tiles = @tiles
-    blank_state
-    @tiles = tiles
   end
 
   # Changing difficulty resizes the canvas; the window follows because it

@@ -129,6 +129,12 @@ module Teek
         structural = StructuralTypes.includes?(node.type)
         path = structural ? parent_path : allocate_path(node, parent_path)
 
+        # :root stands in for Tk's "." - already created, so nothing to
+        # create here - but it still gets a realized path, because that's
+        # what an application-wide binding attaches to (WidgetDSL#on_key,
+        # whose events #link wires like any other node's).
+        node.realized = RealizedNode.new(app: @app, path: path) if node.type == :root
+
         unless structural
           # Creates its own children, into the wrapper's inner widget
           # rather than the wrapper - hence returning rather than falling
