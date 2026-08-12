@@ -36,6 +36,27 @@ private def realize(session, default_scroll : Bool? = nil)
   app
 end
 
+# Every view fraction the auto-hide pass asked for, as the axis name
+# alone, in the order it asked. Both axes query the same widget, so that
+# name is the only thing distinguishing one query from the other.
+private def view_queries(app, widget_path : String) : Array(String)
+  app.calls.compact_map do |call|
+    axis = call.args.first?
+    next unless call.cmd == widget_path && (axis == "yview" || axis == "xview")
+
+    axis.to_s
+  end
+end
+
+# The scrollbars taken back out of the grid, in the order they went.
+private def grid_removes(app) : Array(String)
+  app.calls.compact_map do |call|
+    next unless call.cmd == "grid" && call.args.first? == :remove
+
+    call.args[1].to_s
+  end
+end
+
 describe "a natively scrollable widget" do
   it "is wrapped in a frame with the real widget one level deeper" do
     session = WidgetDslHarness.new
@@ -165,5 +186,59 @@ describe "a natively scrollable widget" do
 
     app.calls.find { |call| call.cmd == "ttk::button" }
       .should_not(be_nil).args.should eq([".board.widget.go"] of Teek::TclArgValue)
+  end
+
+  # The initial pass, queued as an after_idle so it runs once every
+  # widget has had its first geometry pass. Whether the auto-hide then
+  # TRACKS content over time can only be answered by real Tk, and is
+  # covered in spec/standalone/native_scrollable_fixture.cr.
+  describe "the auto-hide's initial pass" do
+    it "asks each scrollbar about the axis it belongs to" do
+      session = WidgetDslHarness.new
+      session.list(:log, x: true)
+
+      app = realize(session)
+      app.idles.size.should eq(2) # one pass per scrollbar
+
+      # Fired one at a time, so a query and the grid call it caused can
+      # only have come from the same scrollbar - which is what pins each
+      # axis to its own bar. A horizontal scrollbar deciding from the
+      # VERTICAL fraction would be wrong the moment the two disagree,
+      # and there may be no later callback to correct it.
+      app.command_result = "0.0 1.0" # nothing to scroll, on either axis
+
+      app.idles[0].block.call
+      view_queries(app, ".log.widget").should eq(["yview"])
+      grid_removes(app).should eq([".log.vsb"])
+
+      app.idles[1].block.call
+      view_queries(app, ".log.widget").should eq(["yview", "xview"])
+      grid_removes(app).should eq([".log.vsb", ".log.hsb"])
+    end
+
+    it "leaves a scrollbar where it is when its axis has something to scroll" do
+      session = WidgetDslHarness.new
+      session.list(:log, x: true)
+
+      app = realize(session)
+      app.command_result = "0.0 0.4" # less than half the content is visible
+      app.idles.each(&.block.call)
+
+      grid_removes(app).should be_empty
+    end
+
+    # A widget can answer with nothing usable - one that has no view yet,
+    # or a path already gone by the time the idle drains. Neither is a
+    # reason to raise out of a callback the caller never sees.
+    it "does nothing when the widget reports no fractions at all" do
+      session = WidgetDslHarness.new
+      session.list(:log, x: true)
+
+      app = realize(session)
+      app.command_result = ""
+      app.idles.each(&.block.call)
+
+      grid_removes(app).should be_empty
+    end
   end
 end

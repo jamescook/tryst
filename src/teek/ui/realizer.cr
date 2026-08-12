@@ -348,9 +348,9 @@ module Teek
         @app.command(target_path, [:configure] of TclArgValue, {option => relay} of String => TclArgValue)
 
         @app.after_idle do
-          # Ruby queries yview here whichever axis this is, so a
-          # horizontal scrollbar's initial state is decided by the
-          # VERTICAL fraction; this asks the axis it actually belongs to.
+          # view_command, not yview always: each scrollbar's initial
+          # state has to come from the axis it belongs to, since the two
+          # axes routinely disagree about whether the content fits.
           fractions = @app.split_list(@app.command(target_path, ([view_command] of TclArgValue), EMPTY_KWARGS))
           apply.call(fractions[0], fractions[1]) if fractions.size >= 2
           nil
