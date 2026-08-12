@@ -171,6 +171,20 @@ tk_test "an Array kwarg becomes a well-formed Tcl list, round-tripping via split
   raise "expected hazardous columns to round-trip" unless app.split_list(result2) == ["a } b", "c$d"]
 end
 
+# What lets ui.tree get away with passing no options at all (see
+# widget_types/tree.cr). If Tk's own default ever stopped showing the
+# hierarchy column, a bare ui.tree would quietly render as a headerless
+# table instead of failing.
+tk_test "a bare ttk::treeview shows its hierarchy column by default" do |app|
+  app.command("ttk::treeview", ".tv_show")
+  show = app.split_list(app.command(".tv_show", :cget, "-show"))
+  raise "expected the tree column shown by default, got #{show.inspect}" unless show.includes?("tree")
+
+  app.command("ttk::treeview", ".tv_show_headings", show: :headings)
+  headings = app.split_list(app.command(".tv_show_headings", :cget, "-show"))
+  raise "expected show: :headings to drop the tree column, got #{headings.inspect}" unless headings == ["headings"]
+end
+
 tk_test "create_widget auto-names sequential paths per type" do |app|
   b1 = app.create_widget("ttk::button", text: "A")
   b2 = app.create_widget("ttk::button", text: "B")

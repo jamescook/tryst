@@ -119,6 +119,55 @@ describe Teek::UI::WidgetDSL do
     handle.type.should eq(:list)
   end
 
+  it "tree appends a node of the matching type" do
+    session = WidgetDslHarness.new
+    handle = session.tree(:w, height: 6)
+    root_child = session.document.root.children.first
+
+    root_child.type.should eq(:tree)
+    root_child.opts.should eq({:height => 6} of Symbol => Teek::TclArgValue)
+    handle.should be_a(Teek::UI::Handle)
+    handle.type.should eq(:tree)
+  end
+
+  it "table appends a node of the matching type" do
+    session = WidgetDslHarness.new
+    handle = session.table(:w, height: 6)
+    root_child = session.document.root.children.first
+
+    root_child.type.should eq(:table)
+    root_child.opts.should eq({:height => 6} of Symbol => Teek::TclArgValue)
+    handle.should be_a(Teek::UI::Handle)
+    handle.type.should eq(:table)
+  end
+
+  # :tree and :table are the same ttk::treeview, so which shape it takes
+  # is decided entirely by the options the caller passes - nothing about
+  # the mode is defaulted or enforced by the type. Both of these are real
+  # ttk::treeview options, so they travel as ordinary opts rather than
+  # being intercepted as DSL intents (see the reserved-option cases
+  # below); an Array value stays an Array, for App#command to encode as a
+  # Tcl list at realize.
+  it "table's mode-distinguishing options reach the node untouched" do
+    session = WidgetDslHarness.new
+    session.table(:rows, show: :headings, columns: ["name", "size"])
+
+    session.document.root.children.first.opts.should eq({
+      :show    => :headings,
+      :columns => ["name", "size"] of Teek::TclArgValue,
+    } of Symbol => Teek::TclArgValue)
+  end
+
+  # ...and a tree needs none of them: ttk::treeview's own -show default
+  # already displays the hierarchy column (pinned against real Tk in
+  # spec/support/tk_cases.cr).
+  it "tree passes no options of its own" do
+    session = WidgetDslHarness.new
+    session.tree(:hierarchy)
+
+    session.document.root.children.first.opts.should be_empty
+  end
+
   it "slider appends a node of the matching type" do
     session = WidgetDslHarness.new
     handle = session.slider(:w, from: 1, to: 10)

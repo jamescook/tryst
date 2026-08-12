@@ -75,6 +75,19 @@ module Teek
         append_leaf(:list, name, to_opts_hash(opts), bind)
       end
 
+      # A hierarchical treeview, showing the tree column Tk displays by
+      # default. Scrolls itself unless scroll: false.
+      def tree(name : Symbol? = nil, bind : Var? = nil, **opts) : Handle
+        append_leaf(:tree, name, to_opts_hash(opts), bind)
+      end
+
+      # The same widget as #tree, for rows of fields rather than a
+      # hierarchy: name the fields with columns:, and pass show: :headings
+      # to drop the hierarchy column. Scrolls itself unless scroll: false.
+      def table(name : Symbol? = nil, bind : Var? = nil, **opts) : Handle
+        append_leaf(:table, name, to_opts_hash(opts), bind)
+      end
+
       def slider(name : Symbol? = nil, bind : Var? = nil, **opts) : Handle
         append_leaf(:slider, name, to_opts_hash(opts), bind)
       end
@@ -200,10 +213,10 @@ module Teek
 
       # A scrolling region for ORDINARY widgets - a long column of them,
       # a form taller than its window. Only needed for content Tk can't
-      # scroll on its own: a list/canvas (and later a text_area/table/
-      # tree) already attaches its own scrollbar with no wrapper at all,
-      # driven by its own scroll: - so wrapping one in a ui.scrollable
-      # would nest two scrolling regions, not improve the one.
+      # scroll on its own: a list/text_area/tree/table/canvas already
+      # attaches its own scrollbar with no wrapper at all, driven by its
+      # own scroll: - so wrapping one in a ui.scrollable would nest two
+      # scrolling regions, not improve the one.
       #
       # y: (default true) and x: (default false) pick which scrollbars it
       # gets, and each auto-hides while its content fits. Wheel scrolling

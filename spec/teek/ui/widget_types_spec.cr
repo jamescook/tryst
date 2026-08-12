@@ -26,6 +26,8 @@ describe Teek::UI::WidgetTypes do
       text_box:  {"ttk::entry", :textvariable, false, true},
       text_area: {"text", nil, true, true},
       list:      {"listbox", nil, true, true},
+      tree:      {"ttk::treeview", nil, true, true},
+      table:     {"ttk::treeview", nil, true, true},
       slider:    {"ttk::scale", :variable, false, true},
     }
 

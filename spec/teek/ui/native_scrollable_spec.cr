@@ -4,14 +4,10 @@ require "../../support/widget_dsl_harness"
 require "../../../src/teek/ui/realizer"
 
 # Headless tests for the scrollbar a natively_scrollable widget type
-# (:list, :canvas) gets wrapped around it automatically, built against
-# FakeApp like realizer_spec.cr. Real-Tk confirmation that the auto-hide
-# actually tracks content lives in
+# (:list, :text_area, :tree, :table, :canvas) gets wrapped around it
+# automatically, built against FakeApp like realizer_spec.cr. Real-Tk
+# confirmation that the auto-hide actually tracks content lives in
 # spec/standalone/native_scrollable_fixture.cr.
-#
-# Mirrors ruby-teek's teek-ui/test/test_native_scrollable.rb, minus its
-# text_area/table/tree cases (those types aren't ported yet - :list and
-# :canvas are the two natively_scrollable types that exist here).
 
 # The globals are process-wide, so anything touching them has to put them
 # back or it silently steers every later example.
@@ -154,6 +150,36 @@ describe "a natively scrollable widget" do
     app.calls[1].args.should eq([".notes.widget"] of Teek::TclArgValue)
     app.calls[1].kwargs.should eq({"height" => 4} of String => Teek::TclArgValue)
     session.document.root.children.first.realized.should_not(be_nil).path.should eq(".notes.widget")
+  end
+
+  # Both DSL names are the same ttk::treeview, and the options that
+  # distinguish them have to survive onto the real widget rather than
+  # landing on the wrapper frame - a table whose -columns went to the
+  # frame would realize as an empty tree with no error to say why.
+  it "wraps a tree and a table the same way, options landing on the treeview" do
+    session = WidgetDslHarness.new
+    session.tree(:hierarchy)
+    session.table(:rows, show: :headings, columns: ["name", "size"])
+
+    app = realize(session)
+
+    treeviews = app.calls.select { |call| call.cmd == "ttk::treeview" }
+    treeviews.map(&.args).should eq([
+      [".hierarchy.widget"] of Teek::TclArgValue,
+      [".rows.widget"] of Teek::TclArgValue,
+    ])
+    treeviews[0].kwargs.should be_empty
+    treeviews[1].kwargs.should eq({
+      "show"    => :headings,
+      "columns" => ["name", "size"] of Teek::TclArgValue,
+    } of String => Teek::TclArgValue)
+
+    wrappers = app.calls.select { |call| call.cmd == "ttk::frame" }
+    wrappers.map(&.args).should eq([
+      [".hierarchy"] of Teek::TclArgValue,
+      [".rows"] of Teek::TclArgValue,
+    ])
+    wrappers.each(&.kwargs.should(be_empty))
   end
 
   # :canvas points its default at auto_scroll_canvas (false) rather than
