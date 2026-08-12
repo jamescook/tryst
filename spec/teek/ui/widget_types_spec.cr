@@ -3,24 +3,27 @@ require "../../../src/teek/ui/widget_types"
 
 # Pure-logic tests for Teek::UI::WidgetTypes - no Tk interpreter needed.
 # Mirrors the registry-mechanics cases of ruby-teek's
-# teek-ui/test/test_widget_types.rb, plus a metadata check for the seven
-# leaf/container types this phase actually registers (button/label/
-# panel/checkbox/radio/text_box/list) in place of ruby's much larger
-# LEAF_METADATA table (most of those types aren't ported yet). Not
-# ported: .on_register (no runtime codegen to replay registrations for -
-# see widget_types.cr's own doc comment) and the composed-validator
-# forwarding tests (WidgetValidators isn't ported yet, Phase B).
+# teek-ui/test/test_widget_types.rb, plus a metadata check over the basic
+# leaf/container types in place of ruby's own LEAF_METADATA table - the
+# same table, minus the rows for types that aren't ported yet. Not ported:
+# .on_register, which has no runtime codegen to replay registrations for -
+# see widget_types.cr's own doc comment. That a descriptor's validator: is
+# composed into WidgetValidators when it registers is covered where each
+# validator itself is (e.g. split_spec.cr, tabs_spec.cr), against a real
+# tree rather than the registry alone.
 describe Teek::UI::WidgetTypes do
   it "registers every basic leaf/container type with the right metadata" do
     # type -> [tk_command, bind_option, natively_scrollable?, leaf?]
     metadata = {
-      button:   {"ttk::button", nil, false, true},
-      label:    {"ttk::label", :textvariable, false, true},
-      panel:    {"ttk::frame", nil, false, false},
-      checkbox: {"ttk::checkbutton", :variable, false, true},
-      radio:    {"ttk::radiobutton", nil, false, true},
-      text_box: {"ttk::entry", :textvariable, false, true},
-      list:     {"listbox", nil, true, true},
+      button:    {"ttk::button", nil, false, true},
+      label:     {"ttk::label", :textvariable, false, true},
+      panel:     {"ttk::frame", nil, false, false},
+      checkbox:  {"ttk::checkbutton", :variable, false, true},
+      radio:     {"ttk::radiobutton", nil, false, true},
+      text_box:  {"ttk::entry", :textvariable, false, true},
+      text_area: {"text", nil, true, true},
+      list:      {"listbox", nil, true, true},
+      slider:    {"ttk::scale", :variable, false, true},
     }
 
     metadata.each do |type, (tk_command, bind_option, natively_scrollable, leaf)|

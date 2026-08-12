@@ -65,6 +65,12 @@ module Teek
         append_leaf(:text_box, name, to_opts_hash(opts), bind)
       end
 
+      # A multi-line text widget. Scrolls itself unless scroll: false -
+      # see #scrollable, which is for the widgets that can't.
+      def text_area(name : Symbol? = nil, bind : Var? = nil, **opts) : Handle
+        append_leaf(:text_area, name, to_opts_hash(opts), bind)
+      end
+
       def list(name : Symbol? = nil, bind : Var? = nil, **opts) : Handle
         append_leaf(:list, name, to_opts_hash(opts), bind)
       end

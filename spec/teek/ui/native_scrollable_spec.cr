@@ -141,6 +141,21 @@ describe "a natively scrollable widget" do
     session.document.root.children.first.realized.try(&.path).should eq(".log")
   end
 
+  # Every natively_scrollable type gets the same wrapper from the same
+  # code - what's worth asserting per type is that the type really is
+  # registered as one, and that its own Tk command ends up inside.
+  it "wraps a text_area the same way, with the text widget inside" do
+    session = WidgetDslHarness.new
+    session.text_area(:notes, height: 4)
+
+    app = realize(session)
+
+    app.calls.map(&.cmd).first(3).should eq(["ttk::frame", "text", "ttk::scrollbar"])
+    app.calls[1].args.should eq([".notes.widget"] of Teek::TclArgValue)
+    app.calls[1].kwargs.should eq({"height" => 4} of String => Teek::TclArgValue)
+    session.document.root.children.first.realized.should_not(be_nil).path.should eq(".notes.widget")
+  end
+
   # :canvas points its default at auto_scroll_canvas (false) rather than
   # the shared auto_scroll (true) - a canvas is as often fixed drawing as
   # scrollable content.

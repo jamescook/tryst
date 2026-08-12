@@ -9,10 +9,13 @@ require "../../support/widget_dsl_harness"
 # built against WidgetDslHarness (spec/support/widget_dsl_harness.cr), a
 # lighter stand-in for a real Session (src/teek/ui/session.cr now
 # exists, but this harness stays useful for keeping these specs
-# headless - see the harness's own doc comment). Not yet ported:
-# bind:/var:, and every widget type/DSL method outside grid/
-# column/row/spacer/panel/button/label/checkbox/radio/text_box/list
-# (tabs/split/scrollable/component/canvas/overlay/menu/slider/...).
+# headless - see the harness's own doc comment).
+#
+# What's here is one case per DSL method that only appends a node, plus
+# the machinery every method shares. A method with behaviour of its own
+# past appending is spec'd where that behaviour is instead - tabs_spec.cr,
+# split_spec.cr, scrollable_spec.cr, native_scrollable_spec.cr,
+# menu_builder_spec.cr and realizer_spec.cr.
 
 # Types registered the way a shard outside this library would - declared
 # in a build through #widget, which is the only thing that makes
@@ -89,6 +92,17 @@ describe Teek::UI::WidgetDSL do
     root_child.opts.should eq({:text => "x"} of Symbol => Teek::TclArgValue)
     handle.should be_a(Teek::UI::Handle)
     handle.type.should eq(:text_box)
+  end
+
+  it "text_area appends a node of the matching type" do
+    session = WidgetDslHarness.new
+    handle = session.text_area(:w, height: 4)
+    root_child = session.document.root.children.first
+
+    root_child.type.should eq(:text_area)
+    root_child.opts.should eq({:height => 4} of Symbol => Teek::TclArgValue)
+    handle.should be_a(Teek::UI::Handle)
+    handle.type.should eq(:text_area)
   end
 
   it "list appends a node of the matching type" do
