@@ -195,6 +195,63 @@ describe Teek::UI::WidgetDSL do
     handle.type.should eq(:slider)
   end
 
+  it "divider appends a node of the matching type" do
+    session = WidgetDslHarness.new
+    handle = session.divider(:sep, orient: "vertical")
+    root_child = session.document.root.children.first
+
+    root_child.type.should eq(:divider)
+    root_child.opts.should eq({:orient => "vertical"} of Symbol => Teek::TclArgValue)
+    handle.type.should eq(:divider)
+  end
+
+  it "progress appends a node of the matching type" do
+    session = WidgetDslHarness.new
+    handle = session.progress(:bar, mode: "determinate", maximum: 100, value: 25)
+    root_child = session.document.root.children.first
+
+    root_child.type.should eq(:progress)
+    root_child.opts.should eq({
+      :mode    => "determinate",
+      :maximum => 100,
+      :value   => 25,
+    } of Symbol => Teek::TclArgValue)
+    handle.type.should eq(:progress)
+  end
+
+  # values: is a real ttk::combobox option carrying a Tcl list, so it
+  # stays an Array for App#command to encode at realize.
+  it "dropdown appends a node of the matching type, keeping values: a list" do
+    session = WidgetDslHarness.new
+    handle = session.dropdown(:pick, values: ["alpha", "beta"])
+    root_child = session.document.root.children.first
+
+    root_child.type.should eq(:dropdown)
+    root_child.opts[:values]?.should eq(["alpha", "beta"] of Teek::TclArgValue)
+    handle.type.should eq(:dropdown)
+  end
+
+  # Each of the three binds differently, and that difference is the only
+  # thing separating their descriptors: a progress bar's Var carries a
+  # number through -variable, a dropdown's the chosen value through
+  # -textvariable, and a divider has nothing to bind at all.
+  it "binds progress and dropdown to their own Tk options, and rejects bind: on a divider" do
+    session = WidgetDslHarness.new
+    position = session.var(0)
+    chosen = session.var("alpha")
+
+    session.progress(:bar, bind: position)
+    session.dropdown(:pick, bind: chosen, values: ["alpha"])
+
+    bar, pick = session.document.root.children
+    bar.opts[:variable]?.should eq(position.name)
+    pick.opts[:textvariable]?.should eq(chosen.name)
+
+    expect_raises(ArgumentError, /#divider doesn't support bind:/) do
+      session.divider(:sep, bind: position)
+    end
+  end
+
   it "var allocates a Tcl variable name and returns a Var" do
     session = WidgetDslHarness.new
 

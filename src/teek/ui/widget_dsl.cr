@@ -107,6 +107,23 @@ module Teek
         append_leaf(:slider, name, to_opts_hash(opts), bind)
       end
 
+      # A rule between sections. orient: turns it vertical.
+      def divider(name : Symbol? = nil, bind : Var? = nil, **opts) : Handle
+        append_leaf(:divider, name, to_opts_hash(opts), bind)
+      end
+
+      # A progress bar: mode: (determinate/indeterminate), maximum: and
+      # value:, or bind: a Var to drive the position from code.
+      def progress(name : Symbol? = nil, bind : Var? = nil, **opts) : Handle
+        append_leaf(:progress, name, to_opts_hash(opts), bind)
+      end
+
+      # A one-of-many chooser. values: lists the choices; bind: a Var to
+      # read or set the chosen one.
+      def dropdown(name : Symbol? = nil, bind : Var? = nil, **opts) : Handle
+        append_leaf(:dropdown, name, to_opts_hash(opts), bind)
+      end
+
       def panel(name : Symbol? = nil, **opts, & : self -> Nil) : Handle
         append_container(:panel, name, to_opts_hash(opts)) { |dsl| yield dsl }
       end

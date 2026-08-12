@@ -30,6 +30,9 @@ describe Teek::UI::WidgetTypes do
       tree:      {"ttk::treeview", nil, true, true},
       table:     {"ttk::treeview", nil, true, true},
       slider:    {"ttk::scale", :variable, false, true},
+      divider:   {"ttk::separator", nil, false, true},
+      progress:  {"ttk::progressbar", :variable, false, true},
+      dropdown:  {"ttk::combobox", :textvariable, false, true},
     }
 
     metadata.each do |type, (tk_command, bind_option, natively_scrollable, leaf)|

@@ -2667,6 +2667,37 @@ tk_test "realizing a nested tree creates real, mapped widgets at hierarchical pa
   raise "expected #{go_path} to be mapped (packed/visible), not just created" unless app.winfo.ismapped?(go_path)
 end
 
+# The half a headless test structurally cannot check: that each type's
+# registered tk_command is a command real Tk actually HAS. A FakeApp only
+# records whatever string it was handed, and the metadata test can only
+# compare our string to our string - a typo copied into both goes green
+# there. Here Tk has to resolve the command and report the widget's own
+# class back, so "ttk::seperator" fails with an invalid command name.
+tk_test "the simple leaf types realize as the real Tk widgets they name" do |app|
+  session = WidgetDslHarness.new
+  session.divider(:sep)
+  session.progress(:bar, maximum: 100, value: 25)
+  session.dropdown(:pick, values: ["alpha", "beta"])
+
+  Teek::UI::Realizer.new(app, session.document).realize
+  app.show
+  app.update
+
+  {sep: "TSeparator", bar: "TProgressbar", pick: "TCombobox"}.each do |name, expected|
+    path = session.document.find(name).try(&.realized).try(&.path)
+    raise "expected :#{name} to have realized" unless path
+
+    actual = app.winfo.class_name(path)
+    raise "expected :#{name} to be a #{expected}, got #{actual.inspect}" unless actual == expected
+    raise "expected :#{name} mapped, not just created" unless app.winfo.ismapped?(path)
+  end
+
+  # ...and the options really are options these widgets accept - Tk errors
+  # on an unknown one at creation, so a wrong descriptor can't get this far.
+  raise "expected the dropdown's choices to round-trip" unless app.split_list(app.command(".pick", :cget, "-values")) == ["alpha", "beta"]
+  raise "expected the progress bar to hold its position" unless app.command(".bar", :cget, "-value") == "25"
+end
+
 # -- Teek::Photo --
 #
 # Ported from ruby-teek's test/test_photo.rb and test/test_photo_gc.rb.
