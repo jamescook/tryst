@@ -7,7 +7,7 @@ require "../src/teek"
 
 interp = Teek::Interp.new
 interp.tcl_invoke("wm", "title", ".", "crystal-teek")
-interp.tcl_eval("wm attributes . -topmost 1; raise .; focus -force .")
+interp.bring_to_front
 
 interp.create_widget("label", ".l", text: "no clicks yet")
 interp.create_widget("button", ".b", text: "Click me")

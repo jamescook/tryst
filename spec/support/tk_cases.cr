@@ -391,7 +391,15 @@ end
 # rather than a WM hint.
 tk_test "App#bring_to_front shows the window and takes the focus" do |app|
   app.hide
+  before = app.interp.callback_ids.size
   app.bring_to_front
+
+  # The deferred -topmost release is a plain Tcl script, not a registered
+  # Crystal callback, so bringing a window forward costs no callback churn -
+  # this fails if it ever goes back through App#after_idle, which registers
+  # one and unregisters it again when it fires.
+  after = app.interp.callback_ids.size
+  raise "expected no callback registered, went from #{before} to #{after}" unless after == before
 
   raise "expected the window mapped" unless app.interp.wait_until { app.winfo.ismapped?(".") }
   # `focus` with no arguments queries, so it goes through tcl_invoke -

@@ -16,7 +16,7 @@ require "../src/teek"
 # doesn't stall the rest of the program), opposite placement.
 interp = Teek::Interp.new
 interp.tcl_invoke("wm", "title", ".", "crystal-teek concurrency spike")
-interp.tcl_eval("wm attributes . -topmost 1; raise .; focus -force .")
+interp.bring_to_front
 interp.create_widget("label", ".l", text: "Tk on the main thread; ticker on its own Isolated thread")
 interp.pack(".l", pady: 20, padx: 20)
 

@@ -10,8 +10,9 @@ interp.tcl_invoke("wm", "title", ".", "crystal-teek mainloop spike")
 
 # A bare CLI-launched Tk process doesn't automatically get foreground
 # focus on macOS - without this the window exists but sits unfocused,
-# easy to miss entirely.
-interp.tcl_eval("wm attributes . -topmost 1; raise .; focus -force .")
+# easy to miss entirely. Before #mainloop on purpose: the -topmost pin
+# this sets is released on the next idle, which needs the loop running.
+interp.bring_to_front
 interp.tcl_eval("after 5000 {destroy .}")
 
 puts "Entering mainloop (window auto-closes after 5s)..."

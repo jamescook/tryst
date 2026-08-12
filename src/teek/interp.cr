@@ -481,6 +481,30 @@ module Teek
       tcl_invoke(args)
     end
 
+    # Show a toplevel and put it in front with the keyboard focus - what
+    # launching an app should do, and what a bare `wm deiconify` doesn't:
+    # a CLI-launched Tk process gets no foreground focus on macOS, so its
+    # window exists but sits behind the terminal that started it.
+    #
+    # -topmost is set to jump the window forward and then RELEASED again on
+    # the next idle, which is the part worth getting right. A window left
+    # topmost floats above every later window - native modal dialogs
+    # included - so a file chooser or colour picker opens behind the window
+    # that asked for it and cannot be raised over it.
+    #
+    # The release therefore needs one turn of the event loop: call this
+    # before #mainloop, not after. It's queued as a plain Tcl script (built
+    # by Tcl's own `list`, so a path is quoted rather than substituted)
+    # rather than a registered Crystal callback - there's nothing here that
+    # needs Crystal to run.
+    def bring_to_front(path : String = ".") : Nil
+      tcl_invoke("wm", "deiconify", path)
+      tcl_invoke("wm", "attributes", path, "-topmost", "1")
+      tcl_invoke("raise", path)
+      tcl_invoke("focus", "-force", path)
+      tcl_invoke("after", "idle", tcl_invoke("list", "wm", "attributes", path, "-topmost", "0"))
+    end
+
     # Pumps the event loop (non-blocking) until the block returns true or
     # timeout elapses. For tests: the deterministic way to wait for an
     # event/callback's effect to land instead of guessing a fixed sleep.
