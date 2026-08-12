@@ -2,6 +2,9 @@ require "../../spec_helper"
 require "../../support/fake_app"
 require "../../../src/teek/ui/canvas_item"
 require "../../../src/teek/ui/handle"
+# See handle_spec.cr's own note - widget_type.cr forward-declares
+# Realizer, so something has to require the real one.
+require "../../../src/teek/ui/realizer"
 
 # Headless tests for Teek::UI::CanvasItem, built against FakeApp
 # (spec/support/fake_app.cr) - confirms exactly what Tcl command each

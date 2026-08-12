@@ -1,6 +1,10 @@
 require "../../spec_helper"
 require "../../support/fake_app"
 require "../../../src/teek/ui/handle"
+# Not used directly here, but widget_type.cr only forward-declares
+# Realizer for its hook aliases - a build that never requires the real
+# class fails to typecheck the flow: arrange hook it hands out.
+require "../../../src/teek/ui/realizer"
 
 # A realized :window handle, built directly rather than through a
 # Realizer so the #show/#hide cases below assert only what those methods

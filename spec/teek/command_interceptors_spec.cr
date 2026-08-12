@@ -1,5 +1,8 @@
 require "../spec_helper"
 require "../../src/teek/command_interceptors"
+# An interceptor's own signature names App, which command_interceptors.cr
+# doesn't require itself (App requires IT, not the other way round).
+require "../../src/teek/app"
 
 # Pure-logic tests for Teek::CommandInterceptors's registry itself - no Tk
 # interpreter needed (precedent: ruby-teek has no dedicated test file for

@@ -1,6 +1,8 @@
 require "../../spec_helper"
 require "../../../src/teek/ui/menu_builder"
 require "../../../src/teek/ui/document"
+# See handle_spec.cr's own note on requiring the real Realizer.
+require "../../../src/teek/ui/realizer"
 
 # Pure-logic tests for Teek::UI::MenuBuilder - no Tk interpreter needed.
 # Built directly against a bare Document + stack (MenuBuilder needs

@@ -1,6 +1,8 @@
 require "../../spec_helper"
 require "../../support/widget_dsl_harness"
 require "../../../src/teek/ui/validator"
+# See handle_spec.cr's own note on requiring the real Realizer.
+require "../../../src/teek/ui/realizer"
 
 # Pure-logic tests for Teek::UI::Validator - no Tk interpreter needed.
 # Reduced from ruby-teek's teek-ui/test/test_validator.rb to the generic

@@ -1,5 +1,8 @@
 require "../../spec_helper"
 require "../../support/widget_dsl_harness"
+# See handle_spec.cr's own note - widget_type.cr forward-declares
+# Realizer, so something has to require the real one.
+require "../../../src/teek/ui/realizer"
 
 # Pure-logic tests for Teek::UI::WidgetDSL - no Tk interpreter needed.
 # Mirrors the cases of ruby-teek's teek-ui/test/test_widget_dsl.rb that

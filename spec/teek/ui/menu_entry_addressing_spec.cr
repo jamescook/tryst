@@ -1,5 +1,8 @@
 require "../../spec_helper"
 require "../../../src/teek/ui/menu_entry_addressing"
+# A strategy takes the Node it addresses, and these cases build one
+# through a Document.
+require "../../../src/teek/ui/document"
 
 # Pure-logic tests for Teek::UI::MenuEntryAddressing - no Tk interpreter
 # needed. Mirrors the two headless cases of ruby-teek's teek-ui/test/

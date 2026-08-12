@@ -2,6 +2,8 @@ require "../../spec_helper"
 require "../../support/widget_dsl_harness"
 require "../../../src/teek/ui/overlay_validator"
 require "../../../src/teek/ui/validator"
+# See handle_spec.cr's own note on requiring the real Realizer.
+require "../../../src/teek/ui/realizer"
 
 # Pure-logic tests for Teek::UI::OverlayValidator - no Tk interpreter
 # needed. Mirrors the overlay-specific case of ruby-teek's

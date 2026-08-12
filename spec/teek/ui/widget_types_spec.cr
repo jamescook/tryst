@@ -1,5 +1,8 @@
 require "../../spec_helper"
 require "../../../src/teek/ui/widget_types"
+# See handle_spec.cr's own note - widget_type.cr forward-declares
+# Realizer, so something has to require the real one.
+require "../../../src/teek/ui/realizer"
 
 # Pure-logic tests for Teek::UI::WidgetTypes - no Tk interpreter needed.
 # Mirrors the registry-mechanics cases of ruby-teek's

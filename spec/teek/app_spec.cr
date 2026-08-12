@@ -1,4 +1,5 @@
 require "../spec_helper"
+require "../../src/teek"
 
 # See spec/standalone/app_core_fixture.cr for why this runs as a subprocess
 # rather than constructing Teek::App directly in this spec.

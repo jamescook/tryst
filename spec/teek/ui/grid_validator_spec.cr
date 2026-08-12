@@ -1,6 +1,8 @@
 require "../../spec_helper"
 require "../../support/widget_dsl_harness"
 require "../../../src/teek/ui/grid_validator"
+# See handle_spec.cr's own note on requiring the real Realizer.
+require "../../../src/teek/ui/realizer"
 
 # Pure-logic tests for Teek::UI::GridValidator - no Tk interpreter
 # needed. Mirrors the grid-specific cases of ruby-teek's
