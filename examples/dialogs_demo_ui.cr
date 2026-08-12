@@ -86,7 +86,10 @@ session = Teek::UI.app(title: "Dialog Wrappers Demo (UI DSL)") do |builder|
     end
 
     col.button(text: "Choose Color...").on_action do
-      chosen = builder.choose_color(initial: "#3366ff", title: "Pick a } color")
+      # The } is deliberate, and seeing it verbatim in the dialog's title
+      # bar is the PASS condition - it means the brace reached Tk quoted
+      # rather than being read as the end of a Tcl group.
+      chosen = builder.choose_color(initial: "#3366ff", title: "Pick a } color (brace is deliberate)")
       result.value = "choose_color -> #{chosen.inspect}"
     end
 
@@ -101,13 +104,11 @@ session = Teek::UI.app(title: "Dialog Wrappers Demo (UI DSL)") do |builder|
       .on_right_click(menu)
   end
 
-  # A bare CLI-launched Tk window doesn't get foreground focus on macOS.
-  builder.raw do |app|
-    app.command(:wm, :geometry, ".", "520x420")
-    app.command(:wm, :attributes, ".", "-topmost", 1)
-    app.command(:raise, ".")
-    app.command(:focus, "-force", ".")
-  end
+  # No focus incantation here: #run brings the window to the front for us
+  # (App#bring_to_front), and does it WITHOUT leaving the window pinned
+  # above everything - which is what used to make every dialog below open
+  # behind this window.
+  builder.raw(&.command(:wm, :geometry, ".", "520x420"))
 end
 
 session.run

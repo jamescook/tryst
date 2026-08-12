@@ -65,10 +65,10 @@ session = Teek::UI.app(title: "Calculator") do |builder|
       4.times { |column| app.command(:grid, "columnconfigure", grid_path, column, minsize: 60) }
     end
 
-    # A bare CLI-launched Tk window doesn't get foreground focus on macOS.
-    app.command(:wm, :attributes, ".", "-topmost", 1)
-    app.command(:raise, ".")
-    app.command(:focus, "-force", ".")
+    # Nothing here about focus: #run brings the window to the front itself
+    # (App#bring_to_front), and unlike a bare `wm attributes -topmost 1` it
+    # releases the pin afterwards, so later windows - a native dialog, say
+    # - can still open above this one.
   end
 end
 

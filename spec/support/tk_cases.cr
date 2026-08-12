@@ -386,6 +386,65 @@ tk_test "Window#set_resizable/#resizable round-trip" do |app|
   raise "expected {false, true}, got #{w.resizable.inspect}" unless w.resizable == {false, true}
 end
 
+# The part of #bring_to_front that needs no window manager: it deiconifies
+# like #show does, and takes the keyboard focus, which is Tk's own state
+# rather than a WM hint.
+tk_test "App#bring_to_front shows the window and takes the focus" do |app|
+  app.hide
+  app.bring_to_front
+
+  raise "expected the window mapped" unless app.interp.wait_until { app.winfo.ismapped?(".") }
+  # `focus` with no arguments queries, so it goes through tcl_invoke -
+  # App#command always sends at least one argument after the command name.
+  unless app.interp.wait_until { app.tcl_invoke("focus") == "." }
+    raise "expected the focus on the root window, got #{app.tcl_invoke("focus").inspect}"
+  end
+end
+
+# -topmost is a window-manager HINT, so this half needs a real WM to mean
+# anything: under bare Xvfb (the Docker suite) Tk has nothing to apply it
+# to and reads it straight back as 0. darwin_only rather than deleted, so
+# it still runs where the bug it guards actually bites - and is reported
+# pending, not silently skipped, everywhere else.
+#
+# The release is what's easy to leave out and what the whole fix is: a
+# window LEFT topmost floats above every later window including native
+# modal dialogs, so a file chooser opens behind the window that asked for
+# it and cannot be raised over it.
+tk_test "App#bring_to_front stops pinning the window above later ones", darwin_only: true do |app|
+  app.hide
+  app.bring_to_front
+
+  # Read immediately and deliberately UNPOLLED: the release is queued as an
+  # idle callback, so pumping the loop to let this "settle" would be
+  # pumping away the very state being read.
+  pinned = app.command(:wm, :attributes, ".", "-topmost")
+  raise "expected -topmost set while the window is raised, got #{pinned.inspect}" unless pinned == "1"
+
+  unless app.interp.wait_until { app.command(:wm, :attributes, ".", "-topmost") == "0" }
+    raise "expected -topmost released once the event loop turned over"
+  end
+
+  # ...and the consequence that actually matters: another window can now sit
+  # above this one, which is exactly what a native dialog has to do. Polled,
+  # because the restack is the window manager's to do and is not done by the
+  # time `raise` returns.
+  app.command(:toplevel, ".front_probe")
+  begin
+    app.command(:raise, ".front_probe")
+    # `wm stackorder` only reports MAPPED windows - it raises outright on an
+    # unmapped one, so the probe has to be up before it can be compared.
+    unless app.interp.wait_until { app.winfo.ismapped?(".front_probe") }
+      raise "expected the probe window to map"
+    end
+    unless app.interp.wait_until { app.command(:wm, :stackorder, ".", :isabove, ".front_probe") == "0" }
+      raise "expected the root window to stop floating above a later window"
+    end
+  ensure
+    app.command(:destroy, ".front_probe")
+  end
+end
+
 tk_test "Window#deiconify/#withdraw map/unmap the window" do |app|
   w = app.window
   w.deiconify

@@ -122,8 +122,10 @@ class ThreadingDemo
     @app.set_window_title("Concurrency Demo - File Hasher")
     @app.window.set_minsize(600, 400)
     # A bare CLI-launched Tk window doesn't get foreground focus on macOS
-    # without this - same fix applied in every other example here.
-    @app.tcl_eval("wm attributes . -topmost 1; raise .; focus -force .")
+    # without this - same fix applied in every other example here. Setting
+    # -topmost by hand instead would leave the window pinned above every
+    # other window; #bring_to_front releases it once the window is up.
+    @app.bring_to_front
 
     @app.set_variable("::chunk_size", 3)
     @app.set_variable("::algorithm", "SHA256")

@@ -118,9 +118,17 @@ module Teek
       # before entering the event loop and once after it returns - so
       # whether the app leaked callbacks over its run is a flag, not
       # diagnostic code you have to write.
+      # Realize, bring the window to the front, and enter the event loop.
+      #
+      # #bring_to_front rather than a bare #show, so an app started from a
+      # terminal actually appears in front with the focus - and, just as
+      # importantly, does NOT stay pinned above later windows, which is
+      # what makes native dialogs open behind the window that asked for
+      # them. See App#bring_to_front. #run_async keeps the plain #show: its
+      # caller drives the event loop and may not want the focus taken.
       def run(strict : Bool = false, debug : Bool = false) : Nil
         realize(strict: strict)
-        app.show
+        app.bring_to_front
         print_debug_info if debug
         app.mainloop
         print_debug_info if debug

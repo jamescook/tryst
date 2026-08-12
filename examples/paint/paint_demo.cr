@@ -759,11 +759,12 @@ class PaintDemo
 end
 
 app = Teek::App.new(track_widgets: false)
-app.show
-
 # A bare CLI-launched Tk window doesn't get foreground focus on macOS, so
 # it would otherwise sit behind the terminal you started it from.
-app.tcl_eval("wm attributes . -topmost 1; raise .; focus -force .")
+# #bring_to_front deiconifies as #show does, then raises and focuses -
+# without leaving the window pinned above every other window, which is what
+# setting -topmost by hand does.
+app.bring_to_front
 
 PaintDemo.new(app)
 app.mainloop

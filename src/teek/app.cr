@@ -378,6 +378,29 @@ module Teek
       self.window(window).withdraw
     end
 
+    # Show a window AND put it in front with the keyboard focus - what
+    # launching an app should do. #show alone only deiconifies, which on
+    # macOS leaves a CLI-launched window sitting behind whatever terminal
+    # started it.
+    #
+    # -topmost is set to jump the window to the front and then released
+    # again on the next idle, which is the part that matters: a window
+    # LEFT topmost floats above every later window including native modal
+    # dialogs, so a file chooser or colour picker opens behind the window
+    # that asked for it and cannot be raised over it. Releasing it keeps
+    # the initial raise and gives ordinary stacking back.
+    #
+    # The release needs one turn of the event loop, so call this before
+    # entering #mainloop (Session#run already does).
+    def bring_to_front(window = ".") : Nil
+      target = self.window(window)
+      target.deiconify
+      command(:wm, :attributes, target.path, "-topmost", true)
+      command(:raise, target.path)
+      command(:focus, "-force", target.path)
+      after_idle { command(:wm, :attributes, target.path, "-topmost", false) }
+    end
+
     # Pixel width of text in a given font. See Interp#text_width - this
     # goes through Tk's C font API, not the slower Tcl `font measure`.
     def text_width(font : String, text : String) : Int32

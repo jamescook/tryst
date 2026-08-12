@@ -28,7 +28,6 @@ class DialogsDemo
   def initialize
     @app = Teek::App.new(title: "Dialog Wrappers Demo")
     @app.set_window_geometry("480x360")
-    @app.tcl_eval("wm attributes . -topmost 1; raise .; focus -force .")
 
     @app.create_widget("ttk::label",
       text: "Click each button below, then try options with spaces in them\n" \
@@ -77,7 +76,11 @@ class DialogsDemo
   end
 
   def run : Nil
-    @app.show
+    # Not #show plus a hand-rolled `wm attributes -topmost 1`: that pins
+    # this window above every later one, so each dialog below would open
+    # BEHIND it and refuse to be raised over it. #bring_to_front releases
+    # the pin once the window is up.
+    @app.bring_to_front
     @app.mainloop
   end
 
@@ -113,7 +116,9 @@ class DialogsDemo
   end
 
   private def demo_choose_color : Nil
-    result = @app.choose_color(initial: "#3366ff", title: "Pick a } color")
+    # The } is deliberate - seeing it verbatim in the title bar is the
+    # PASS condition, not a mangled string.
+    result = @app.choose_color(initial: "#3366ff", title: "Pick a } color (brace is deliberate)")
     log("choose_color -> #{result.inspect}")
   end
 

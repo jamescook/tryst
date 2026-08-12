@@ -27,7 +27,9 @@ class Calculator
 
     # A bare CLI-launched Tk window doesn't get foreground focus on macOS,
     # so it would otherwise sit behind the terminal you started it from.
-    @app.tcl_eval("wm attributes . -topmost 1; raise .; focus -force .")
+    # #bring_to_front rather than setting -topmost by hand, which would
+    # leave this window pinned above every other window on the desktop.
+    @app.bring_to_front
 
     # Button style - use a larger font since the macOS aqua theme ignores
     # vertical stretch; font size drives button height.
