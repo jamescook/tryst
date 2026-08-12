@@ -8,6 +8,16 @@ describe Teek::UI::WidgetValidators do
     Teek::UI::WidgetValidators.for_type(:__never_registered__).should eq([] of Teek::UI::ValidatorProc)
   end
 
+  # A lookup is a read. It used to insert an empty Array under any type
+  # it missed, so a validate pass grew the registry for every type with
+  # no validators.
+  it "a lookup that misses doesn't stop a later registration taking" do
+    Teek::UI::WidgetValidators.for_type(:__test_miss_then_register__).should be_empty
+    Teek::UI::WidgetValidators.register(:__test_miss_then_register__) { }
+
+    Teek::UI::WidgetValidators.for_type(:__test_miss_then_register__).size.should eq(1)
+  end
+
   it "register and for_type round trip" do
     calls = [] of {Teek::UI::Node, Teek::UI::Node?, Teek::UI::Document, Array(String)}
     document = Teek::UI::Document.new

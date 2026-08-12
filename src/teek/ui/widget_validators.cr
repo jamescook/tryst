@@ -27,16 +27,20 @@ module Teek
     # custom widget can register a CommandInterceptors entry without
     # editing app.cr.
     class WidgetValidators
-      @@validators = Hash(String, Array(ValidatorProc)).new { |hash, type| hash[type] = [] of ValidatorProc }
+      @@validators = {} of String => Array(ValidatorProc)
+
+      # Handed back for a type with no validators, so a validate pass
+      # allocates nothing for the types that have none.
+      private EMPTY = [] of ValidatorProc
 
       def self.register(type : Symbol | String, &block : Node, Node?, Document, Array(String) -> Nil) : Nil
-        @@validators[type.to_s] << block
+        (@@validators[type.to_s] ||= [] of ValidatorProc) << block
       end
 
       # Every validator registered for type, in registration order -
       # empty if none are.
       def self.for_type(type : Symbol | String) : Array(ValidatorProc)
-        @@validators[type.to_s]
+        @@validators[type.to_s]? || EMPTY
       end
 
       # Shared node-describing helper every validator's error messages

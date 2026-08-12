@@ -28,12 +28,12 @@ module Teek
     # itself is dropped entirely - nothing in this port's scope emits any,
     # and a Proc can't accept them generically the way a Ruby block can.
     class EventBus(T)
-      @listeners = Hash(Symbol, Array(Proc(Array(T), Nil))).new { |hash, event| hash[event] = [] of Proc(Array(T), Nil) }
+      @listeners = {} of Symbol => Array(Proc(Array(T), Nil))
 
       # Subscribe to a named event. Returns the block, to pass to a later
       # #off.
       def on(event : Symbol, &block : Array(T) -> Nil) : Proc(Array(T), Nil)
-        @listeners[event] << block
+        (@listeners[event] ||= [] of Proc(Array(T), Nil)) << block
         block
       end
 
@@ -41,8 +41,11 @@ module Teek
       # kind ("saved", "closed"). Needs to be its own overload rather
       # than falling out of the one below: a splat with a type
       # restriction requires at least one argument in Crystal.
+      # Emitting an event nobody listens to is ordinary, so every lookup
+      # here is a plain miss rather than a subscriber list conjured into
+      # existence and kept forever.
       def emit(event : Symbol) : Nil
-        @listeners[event].each(&.call(Array(T).new))
+        @listeners[event]?.try &.each(&.call(Array(T).new))
       end
 
       # Emit a named event to every current subscriber, in subscription
@@ -56,12 +59,12 @@ module Teek
         # narrower array to a Proc(Array(T), Nil) fails to compile).
         values = Array(T).new
         args.each { |arg| values << arg }
-        @listeners[event].each(&.call(values))
+        @listeners[event]?.try &.each(&.call(values))
       end
 
       # Unsubscribe a specific listener.
       def off(event : Symbol, listener : Proc(Array(T), Nil)) : Nil
-        @listeners[event].delete(listener)
+        @listeners[event]?.try &.delete(listener)
       end
     end
   end

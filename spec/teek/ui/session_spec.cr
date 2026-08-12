@@ -128,6 +128,19 @@ describe Teek::UI::Session do
 
       session.emit(:nobody_listening, 1)
     end
+
+    # Emitting used to record the event as though someone had subscribed
+    # to it. Subscribing after the fact has to behave the same either way.
+    it "emitting before anyone subscribes doesn't break a later subscriber" do
+      session = Teek::UI.app
+      seen = [] of String
+
+      session.emit(:late_subscriber, "ignored")
+      session.on(:late_subscriber) { |args| seen << args.first.to_s }
+      session.emit(:late_subscriber, "heard")
+
+      seen.should eq(["heard"])
+    end
   end
 
   # #every/#after queue when called before realize (same queue-then-wire

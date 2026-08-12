@@ -27,14 +27,20 @@ module Teek
     alias Block = Proc(App, String, Array(TclArgValue), Hash(String, TclArgValue), String?)
     record Entry, label : String, block : Block
 
-    @@interceptors = Hash(String, Array(Entry)).new { |interceptors, type| interceptors[type] = [] of Entry }
+    @@interceptors = {} of String => Array(Entry)
+
+    # Handed back for a type with no interceptors, so the miss on
+    # App#command's hot path allocates nothing.
+    private EMPTY = [] of Entry
 
     def self.register(type, label, &block : Block) : Nil
-      @@interceptors[type.to_s] << Entry.new(label.to_s, block)
+      (@@interceptors[type.to_s] ||= [] of Entry) << Entry.new(label.to_s, block)
     end
 
+    # Every interceptor registered for type, in registration order -
+    # empty if none are.
     def self.for_type(type) : Array(Entry)
-      @@interceptors[type.to_s]
+      @@interceptors[type.to_s]? || EMPTY
     end
   end
 end
