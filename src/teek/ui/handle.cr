@@ -222,12 +222,49 @@ module Teek
         self
       end
 
+      # ditto, asking for event details alongside it - the same
+      # substitutions App#bind takes (:x/:y for widget coordinates,
+      # :root_x/:root_y for screen ones, :button, ..., or a raw Tk %-code),
+      # arriving in the block's args in the order named.
+      #
+      # Without this a click handler knows THAT a click happened and
+      # nothing about where, which is unusable on a canvas: one binding on
+      # the whole widget plus the coordinates is how a grid of cells gets
+      # handled without a callback per cell.
+      def on_click(*subs : Symbol | String, &block : Array(String), CallbackSignal -> Nil) : Handle
+        bind_event("<Button-1>", block, subs_list(subs))
+        self
+      end
+
+      # Fires when the left button is RELEASED. The other half of a
+      # press-and-hold interaction: #on_click fires going down, this one
+      # coming back up, and only together can a widget offer the classic
+      # "drag off before releasing to cancel" behaviour.
+      def on_release(&block : Array(String), CallbackSignal -> Nil) : Handle
+        bind_event("<ButtonRelease-1>", block)
+        self
+      end
+
+      # ditto, with event substitutions - see #on_click's own overload.
+      def on_release(*subs : Symbol | String, &block : Array(String), CallbackSignal -> Nil) : Handle
+        bind_event("<ButtonRelease-1>", block, subs_list(subs))
+        self
+      end
+
       # Fires on a right click, however the platform spells it (Button-3
       # on Linux/Windows, Button-2 or Control-Button-1 on macOS). Handle
       # it yourself with a block, or use the overload below to pop up a
       # menu instead.
       def on_right_click(&block : Array(String), CallbackSignal -> Nil) : Handle
         MouseEvents::RIGHT_CLICK_EVENTS.each { |event| bind_event(event, block) }
+        self
+      end
+
+      # ditto, with event substitutions - see #on_click's own overload.
+      # Each platform spelling gets the same subs, so a handler reads its
+      # coordinates the same way wherever the click came from.
+      def on_right_click(*subs : Symbol | String, &block : Array(String), CallbackSignal -> Nil) : Handle
+        MouseEvents::RIGHT_CLICK_EVENTS.each { |event| bind_event(event, block, subs_list(subs)) }
         self
       end
 
@@ -542,6 +579,16 @@ module Teek
           @node.each { |descendant| document.unregister(descendant) }
         end
         @node.parent.try(&.remove_child(@node))
+      end
+
+      # A *subs splat arrives as a Tuple, and #to_a on an all-Symbol one
+      # gives Array(Symbol) - too narrow for EventBinding's own
+      # Array(Symbol | String), since Crystal's generics are invariant even
+      # when every element already fits the wider union.
+      private def subs_list(subs) : Array(Symbol | String)
+        list = Array(Symbol | String).new(subs.size)
+        subs.each { |sub| list << sub }
+        list
       end
 
       private def bind_event(event : String, handler : Proc(Array(String), CallbackSignal, Nil), subs : Array(Symbol | String) = [] of Symbol | String) : Nil

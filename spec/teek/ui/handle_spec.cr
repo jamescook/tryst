@@ -191,6 +191,52 @@ describe Teek::UI::Handle do
     fired.should be_false
   end
 
+  # Without substitutions a click handler knows THAT a click happened and
+  # nothing about where - unusable on a canvas, where one binding on the
+  # whole widget plus the coordinates is what replaces a callback per cell.
+  it "on_click carries the event substitutions it was asked for, in order" do
+    node = Teek::UI::Node.new(type: :canvas, name: :board)
+    handle = Teek::UI::Handle.new(node)
+
+    handle.on_click(:x, :y) { |_v, _s| }
+
+    binding = node.events.first
+    binding.event.should eq("<Button-1>")
+    binding.subs.should eq([:x, :y] of Symbol | String)
+  end
+
+  it "on_click with no substitutions still asks for none" do
+    node = Teek::UI::Node.new(type: :button, name: :go)
+    Teek::UI::Handle.new(node).on_click { |_v, _s| }
+
+    node.events.first.subs.should be_empty
+  end
+
+  # The other half of press-and-hold: without a release binding a widget
+  # can't offer "drag off before releasing to cancel".
+  it "on_release binds the release event, with or without substitutions" do
+    plain = Teek::UI::Node.new(type: :canvas, name: :a)
+    Teek::UI::Handle.new(plain).on_release { |_v, _s| }
+    plain.events.first.event.should eq("<ButtonRelease-1>")
+    plain.events.first.subs.should be_empty
+
+    with_subs = Teek::UI::Node.new(type: :canvas, name: :b)
+    Teek::UI::Handle.new(with_subs).on_release(:x, :y) { |_v, _s| }
+    with_subs.events.first.event.should eq("<ButtonRelease-1>")
+    with_subs.events.first.subs.should eq([:x, :y] of Symbol | String)
+  end
+
+  # Every platform spelling has to carry the SAME subs, or a handler would
+  # read its coordinates differently depending on which gesture fired.
+  it "on_right_click gives every platform spelling the same substitutions" do
+    node = Teek::UI::Node.new(type: :canvas, name: :board)
+    Teek::UI::Handle.new(node).on_right_click(:x, :y) { |_v, _s| }
+
+    node.events.size.should eq(Teek::UI::MouseEvents::RIGHT_CLICK_EVENTS.size)
+    node.events.map(&.event).should eq(Teek::UI::MouseEvents::RIGHT_CLICK_EVENTS)
+    node.events.each { |binding| binding.subs.should eq([:x, :y] of Symbol | String) }
+  end
+
   it "on_click wires immediately once already realized" do
     app = FakeApp.new
     node = Teek::UI::Node.new(type: :button, name: :go)
