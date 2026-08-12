@@ -343,7 +343,7 @@ describe Teek::UI::WidgetDSL do
 
     spacer_node = session.document.root.children.first.children.first
     spacer_node.type.should eq(:spacer)
-    spacer_node.layout.should eq({:grow => true} of Symbol => Teek::TclArgValue)
+    spacer_node.grow?.should be_true
     spacer_node.children.should eq([] of Teek::UI::Node)
   end
 
@@ -415,14 +415,14 @@ describe Teek::UI::WidgetDSL do
     cell.ipady.should be_nil
   end
 
-  it "cell coexists with an existing grow layout intent on the same widget" do
+  it "cell coexists with an existing grow intent on the same widget" do
     session = WidgetDslHarness.new
 
     session.grid(:g) { |grid| grid.cell(row: 0, col: 0) { grid.text_box(:t, grow: true) } }
 
     node = session.document.root.children.first.children.first
     node.cell_position.should eq(Teek::UI::CellPosition.new(row: 0, col: 0, colspan: 1))
-    node.layout.should eq({:grow => true} of Symbol => Teek::TclArgValue)
+    node.grow?.should be_true
   end
 
   it "cell raises if its block creates no widget" do
@@ -648,22 +648,22 @@ describe Teek::UI::WidgetDSL do
     session.document.root.children.map(&.opts[:scroll]).should eq([false] of Teek::TclArgValue)
   end
 
-  it "grow: is captured on the child's layout and stripped from opts" do
+  it "grow: is captured on the child's own slot and stripped from opts" do
     session = WidgetDslHarness.new
 
     session.panel(:outer) { |outer| outer.button(:go, text: "Go", grow: true) }
 
     button_node = session.document.root.children.first.children.first
-    button_node.layout.should eq({:grow => true} of Symbol => Teek::TclArgValue)
+    button_node.grow?.should be_true
     button_node.opts.should eq({:text => "Go"} of Symbol => Teek::TclArgValue)
   end
 
-  it "grow: defaults to nil layout when not given" do
+  it "grow: defaults to false when not given" do
     session = WidgetDslHarness.new
 
     session.button(:go)
 
-    session.document.root.children.first.layout.should be_nil
+    session.document.root.children.first.grow?.should be_false
   end
 
   it "grow: works on a container child too" do
@@ -672,7 +672,17 @@ describe Teek::UI::WidgetDSL do
     session.panel(:outer, &.panel(:inner, grow: true))
 
     inner_node = session.document.root.children.first.children.first
-    inner_node.layout.should eq({:grow => true} of Symbol => Teek::TclArgValue)
+    inner_node.grow?.should be_true
+  end
+
+  # 0 and "no" both read as "don't grow" to anyone writing them, and
+  # "yes" reads as the opposite - none of the three is a Bool.
+  it "grow: rejects anything that isn't a Bool" do
+    session = WidgetDslHarness.new
+
+    expect_raises(ArgumentError, /grow: expects true or false/) do
+      session.button(:go, grow: "yes")
+    end
   end
 
   it "lazy: true marks the container node lazy and is stripped from opts" do

@@ -596,7 +596,7 @@ module Teek
         opts[flow.main_pad.to_s] = main_pad
         opts[flow.cross_pad.to_s] = pad
 
-        grow = child.layout.try(&.[]?(:grow)) == true
+        grow = child.grow?
         stretch = align.stretch?
         fills = [] of String
         fills << flow.main_fill if grow

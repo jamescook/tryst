@@ -24,7 +24,7 @@ describe Teek::UI::Node do
     node.opts.should eq({} of Symbol => Teek::TclArgValue)
     node.children.should eq([] of Teek::UI::Node)
     node.events.should eq([] of Teek::UI::EventBinding)
-    node.layout.should be_nil
+    node.grow?.should be_false
     node.realized.should be_nil
     node.scope.should be(Teek::UI::Scope::TOP_LEVEL)
   end
@@ -65,13 +65,13 @@ describe Teek::UI::Node do
     result.should be(child)
   end
 
-  it "layout and realized are settable after construction" do
+  it "grow and realized are settable after construction" do
     node = Teek::UI::Node.new(type: :button)
 
-    node.layout = {:grow => true} of Symbol => Teek::TclArgValue
+    node.grow = true
     node.realized = Teek::UI::RealizedNode.new(app: nil, path: ".fake")
 
-    node.layout.should eq({:grow => true} of Symbol => Teek::TclArgValue)
+    node.grow?.should be_true
     node.realized.should eq(Teek::UI::RealizedNode.new(app: nil, path: ".fake"))
   end
 

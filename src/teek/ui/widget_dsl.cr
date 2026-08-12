@@ -537,23 +537,23 @@ module Teek
       # off opts. Each lands on a Node slot of its own; none is a Tk
       # option, so none reaches a widget-creation call.
       private record DslIntents,
-        layout : Hash(Symbol, TclArgValue)? = nil,
+        grow : Bool = false,
         lazy : Bool = false,
         gap : Int32 = 0,
         pad : Int32 = 0,
         align : FlowAlign = FlowAlign::Start
 
       # Splits a declaration's opts into the Tk options that go on to a
-      # widget-creation call, and the DSL intents that don't: grow:
-      # (Node#layout, where flow packing looks for it), lazy? (the
-      # realizer's tree walk skips the subtree until Handle#realize!),
+      # widget-creation call, and the DSL intents that don't: grow? (this
+      # child takes the leftover space on its parent's main axis), lazy?
+      # (the realizer's tree walk skips the subtree until Handle#realize!),
       # and the flow/grid spacing trio gap:/pad:/align?. A leaf gets the
       # same treatment even though only a container has anywhere to put
       # most of them.
       private def extract_dsl_opts(opts : Hash(Symbol, TclArgValue)) : {Hash(Symbol, TclArgValue), DslIntents}
         intents = DslIntents.new(
-          layout: opts.has_key?(:grow) ? {:grow => opts[:grow]} of Symbol => TclArgValue : nil,
-          lazy: lazy_flag(opts),
+          grow: bool_opt(opts, :grow),
+          lazy: bool_opt(opts, :lazy),
           gap: pixel_opt(opts, :gap),
           pad: pixel_opt(opts, :pad),
           align: align_opt(opts)
@@ -586,14 +586,14 @@ module Teek
           "align: expects :start, :center, :end or :stretch (got #{value.inspect})")
       end
 
-      # lazy: is read on this side and never handed to Tk, so it is true
-      # or false and nothing else. Absent means false.
-      private def lazy_flag(opts : Hash(Symbol, TclArgValue)) : Bool
-        case value = opts[:lazy]?
+      # grow:/lazy: are read on this side and never handed to Tk, so each
+      # is true or false and nothing else. Absent means false.
+      private def bool_opt(opts : Hash(Symbol, TclArgValue), key : Symbol) : Bool
+        case value = opts[key]?
         when Nil  then false
         when Bool then value
         else
-          raise ArgumentError.new("lazy: expects true or false (got #{value.inspect})")
+          raise ArgumentError.new("#{key}: expects true or false (got #{value.inspect})")
         end
       end
 
@@ -677,7 +677,7 @@ module Teek
       # lazy is set by the container path only - a leaf has no subtree to
       # defer.
       private def apply_dsl_intents(node : Node, intents : DslIntents) : Nil
-        node.layout = intents.layout if intents.layout
+        node.grow = intents.grow
         node.gap = intents.gap
         node.pad = intents.pad
         node.align = intents.align

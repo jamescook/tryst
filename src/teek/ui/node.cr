@@ -11,12 +11,11 @@ module Teek
     alias CloseHandler = Proc(Array(String), CallbackSignal, Nil)
 
     # A node's position inside its parent ui.grid, set by WidgetDSL#cell.
-    # A dedicated field on Node (see #cell_position below) rather than
-    # living in node.layout (ruby: layout[:cell] = {row:, col:, span:}) -
-    # a nested Hash doesn't fit TclArgValue's closed union, same reasoning
-    # as WidgetType#flow needing its own FlowConfig record instead of
-    # Hash(Symbol, TclArgValue).
-    # colspan/rowspan rather than ruby-teek's lone span: - a symmetric,
+    # Its own record rather than a Hash, which a nested structure like this
+    # could not be anyway - TclArgValue's union has no room for one, the
+    # same reason WidgetType#flow needs FlowConfig.
+    #
+    # colspan/rowspan rather than a lone span: - a symmetric,
     # self-documenting pair, where span:/rowspan: reads as though the two
     # were different kinds of thing. The per-cell overrides below are all
     # nilable on purpose: nil means "say nothing", so Realizer#arrange_grid
@@ -76,8 +75,11 @@ module Teek
       setter document : Document?
 
       property key : String?
-      property layout : Hash(Symbol, TclArgValue)?
       property realized : RealizedNode?
+
+      # Whether this child takes the leftover space on its parent flow
+      # container's main axis - the grow: option, and what ui.spacer is.
+      property? grow = false
 
       # WidgetDSL#raw's deferred block, for a :raw_op node only - run by
       # Realizer#run_raw_op with the live app once realized. Ruby stuffs
@@ -91,15 +93,13 @@ module Teek
       # teek-ui's AppContract - both worse than a dedicated field.
       property raw_block : Proc(AppContract, Nil)?
 
-      # This node's own position inside its parent ui.grid, if any - see
-      # CellPosition above for why this isn't part of node.layout.
+      # This node's own position inside its parent ui.grid, if any.
       property cell_position : CellPosition?
 
       # This node's placement anchor on its parent ui.canvas, if any, set
-      # by WidgetDSL#overlay - one of OverlayAnchors::POSITIONS's keys.
-      # Ruby nests this in node.layout too (layout[:overlay] = { at: }),
-      # but since it's a single Symbol value (unlike CellPosition's three
-      # fields), a plain property needs no dedicated record type at all.
+      # by WidgetDSL#overlay - one of OverlayAnchors::POSITIONS's keys. A
+      # single Symbol, so it needs no record of its own the way
+      # CellPosition's several fields do.
       property overlay_anchor : Symbol?
 
       # This window's close handler, from ui.window(on_close:) or from
@@ -147,7 +147,6 @@ module Teek
       )
         @key = key || @name.try(&.to_s)
         @children = [] of Node
-        @layout = nil
         @events = [] of EventBinding
         @realized = nil
         @parent = nil
