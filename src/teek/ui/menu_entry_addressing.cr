@@ -18,6 +18,13 @@ module Teek
     class MenuEntryAddressing
       include AddressingStrategy
 
+      # The addressing: hook to register a menu-entry type with. Being an
+      # entry rather than a widget is a trait the three of them share, not
+      # something each decides for itself. Spelled as a bare Proc rather
+      # than WidgetType::AddressingHook so a strategy needn't require the
+      # descriptor that selects it.
+      SHARED = Proc(Node, AddressingStrategy).new { |node| MenuEntryAddressing.new(node) }
+
       def initialize(@node : Node)
       end
 

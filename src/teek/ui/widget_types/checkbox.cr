@@ -1,5 +1,9 @@
 require "../widget_type"
 
-Teek::UI::WidgetTypes.register(
-  Teek::UI::WidgetType.new(type: :checkbox, tk_command: "ttk::checkbutton", takes_command: true, bind_option: :variable)
-)
+module Teek
+  module UI
+    WidgetTypes.register(
+      WidgetType.new(type: :checkbox, tk_command: "ttk::checkbutton", takes_command: true, bind_option: :variable)
+    )
+  end
+end

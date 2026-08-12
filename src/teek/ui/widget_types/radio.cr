@@ -1,5 +1,9 @@
 require "../widget_type"
 
-Teek::UI::WidgetTypes.register(
-  Teek::UI::WidgetType.new(type: :radio, tk_command: "ttk::radiobutton", takes_command: true)
-)
+module Teek
+  module UI
+    WidgetTypes.register(
+      WidgetType.new(type: :radio, tk_command: "ttk::radiobutton", takes_command: true)
+    )
+  end
+end

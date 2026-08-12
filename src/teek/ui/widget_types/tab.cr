@@ -17,18 +17,15 @@ module Teek
           {"text" => label || ""} of String => TclArgValue)
       end
     end
+
+    # Reached only through the hand-written WidgetDSL#tab, which takes the
+    # label positionally and checks it's being declared inside a ui.tabs.
+    WidgetTypes.register(
+      WidgetType.new(
+        type: :tab, tk_command: "ttk::frame", leaf: false, arranged: false,
+        post_create: PostCreateHook.new { |app, node, path, parent_path| TabRealize.post_create(app, node, path, parent_path) },
+        validator: ValidatorProc.new { |node, parent, document, errors| TabValidator.call(node, parent, document, errors) }
+      )
+    )
   end
 end
-
-# Reached only through the hand-written WidgetDSL#tab, which takes the
-# label positionally and checks it's being declared inside a ui.tabs.
-# Ruby additionally passes a no-op dsl: here so its runtime codegen
-# doesn't shadow that method with a generic same-named one; this port
-# hand-writes every DSL method, so there's no codegen to opt out of.
-Teek::UI::WidgetTypes.register(
-  Teek::UI::WidgetType.new(
-    type: :tab, tk_command: "ttk::frame", leaf: false, arranged: false,
-    post_create: ->Teek::UI::TabRealize.post_create(Teek::UI::AppContract, Teek::UI::Node, String, String),
-    validator: ->Teek::UI::TabValidator.call(Teek::UI::Node, Teek::UI::Node?, Teek::UI::Document, Array(String))
-  )
-)

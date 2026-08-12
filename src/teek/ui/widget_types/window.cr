@@ -75,15 +75,15 @@ module Teek
         nil
       end
     end
+
+    # A toplevel: placed by the window manager, never pack/gridded into
+    # its nominal parent - hence arranged: false.
+    WidgetTypes.register(
+      WidgetType.new(
+        type: :window, tk_command: "toplevel", leaf: false, arranged: false,
+        hosts_menu_bar: true,
+        post_create: PostCreateHook.new { |app, node, path, parent_path| WindowRealize.post_create(app, node, path, parent_path) }
+      )
+    )
   end
 end
-
-# A toplevel: placed by the window manager, never pack/gridded into its
-# nominal parent - hence arranged: false.
-Teek::UI::WidgetTypes.register(
-  Teek::UI::WidgetType.new(
-    type: :window, tk_command: "toplevel", leaf: false, arranged: false,
-    hosts_menu_bar: true,
-    post_create: ->Teek::UI::WindowRealize.post_create(Teek::UI::AppContract, Teek::UI::Node, String, String)
-  )
-)

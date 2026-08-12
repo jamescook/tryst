@@ -1,5 +1,9 @@
 require "../widget_type"
 
-Teek::UI::WidgetTypes.register(
-  Teek::UI::WidgetType.new(type: :list, tk_command: "listbox", natively_scrollable: true)
-)
+module Teek
+  module UI
+    WidgetTypes.register(
+      WidgetType.new(type: :list, tk_command: "listbox", natively_scrollable: true)
+    )
+  end
+end

@@ -28,6 +28,35 @@ module Teek
       # instead of anchoring, so it never reaches a lookup here.
       anchor : Hash(FlowAlign, String)
 
+    # Forward declaration, so the hook aliases below can name it. The real
+    # definition is realizer.cr, which requires this file rather than the
+    # other way round - and an alias resolves its types immediately, unlike
+    # the method-signature restrictions these replaced.
+    class Realizer; end
+
+    # The shapes a WidgetType's hooks take. Named because a registration
+    # has to spell the type out to build the Proc, and the bare Proc(...)
+    # form is most of the line.
+
+    # Replaces the generic pack arrangement for a container's children.
+    alias ArrangeHook = Proc(Realizer, Node, Array(Node), Nil)
+
+    # Replaces the realizer's entire per-node create/link handling.
+    # Receives the PARENT's path, since it allocates its own.
+    alias CreateHook = Proc(Realizer, Node, String, Nil)
+
+    # Replaces only the "create every child under this node" step, so it
+    # receives this node's own already-allocated path.
+    alias ChildrenHook = Proc(Realizer, Node, String, Nil)
+
+    # Runs right after the generic widget-creation call, with the app
+    # rather than the realizer: (app, node, path, parent_path).
+    alias PostCreateHook = Proc(AppContract, Node, String, String, Nil)
+
+    # Builds the AddressingStrategy a Handle on this type dispatches
+    # #path/#configure/#options through.
+    alias AddressingHook = Proc(Node, AddressingStrategy)
+
     # @api private
     #
     # A single widget/node type's own metadata: what it draws, how it's
@@ -58,7 +87,7 @@ module Teek
       getter bind_option : Symbol?
       getter flow : FlowConfig?
       getter validator : ValidatorProc?
-      getter addressing : Proc(Node, AddressingStrategy)
+      getter addressing : AddressingHook
 
       getter? leaf : Bool
       getter? natively_scrollable : Bool
@@ -88,15 +117,15 @@ module Teek
         @hosts_menu_bar : Bool = false,
         @bind_option : Symbol? = nil,
         @flow : FlowConfig? = nil,
-        arrange : Proc(Realizer, Node, Array(Node), Nil)? = nil,
+        arrange : ArrangeHook? = nil,
         @validator : ValidatorProc? = nil,
-        custom_create : Proc(Realizer, Node, String, Nil)? = nil,
-        custom_children : Proc(Realizer, Node, String, Nil)? = nil,
-        post_create : Proc(AppContract, Node, String, String, Nil)? = nil,
-        @addressing : Proc(Node, AddressingStrategy) = Proc(Node, AddressingStrategy).new { |node| WidgetAddressing.new(node) },
+        custom_create : CreateHook? = nil,
+        custom_children : ChildrenHook? = nil,
+        post_create : PostCreateHook? = nil,
+        @addressing : AddressingHook = AddressingHook.new { |node| WidgetAddressing.new(node) },
       )
         flow = @flow
-        @arrange = arrange || (flow ? Proc(Realizer, Node, Array(Node), Nil).new { |realizer, node, children| realizer.arrange_flow(node, children, flow) } : nil)
+        @arrange = arrange || (flow ? ArrangeHook.new { |realizer, node, children| realizer.arrange_flow(node, children, flow) } : nil)
         @custom_create = custom_create
         @custom_children = custom_children
         @post_create = post_create
