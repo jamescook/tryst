@@ -41,15 +41,16 @@ module Teek
     # own wheel handling (#create_scrollable, driven by WidgetType's
     # custom_children: hook).
     class Realizer
-      # DSL-reserved opts keys - layout keywords plus other entries the
-      # DSL stashes on node.opts for the realizer to pick up later - none
-      # of these are real Tk options, so none are ever passed through to
-      # a widget-creation call. Only on_close is actually consumed by
-      # this task's own #link; the rest are reserved now so a node
-      # carrying them (from a DSL method not ported yet) doesn't leak
-      # them into a widget-creation call as a bogus -option.
+      # Opts keys that are read on this side rather than handed to Tk, so
+      # they never reach a widget-creation call as a bogus -option. Every
+      # entry is one a type's own realize step consumes out of node.opts:
+      # :window's wm setup (title/geometry/resizable/transient/modal),
+      # :scroll (#resolve_scroll), :x/:y (an overlay's placement),
+      # :tab_label, and :pane_weight for the split type not yet ported.
+      #
+      # An intent with a typed Node slot is not listed here - it never
+      # entered opts to begin with. See WidgetDSL#extract_dsl_opts.
       RESERVED_OPTIONS = [
-        :gap, :align, :pad, :stretch_columns, :stretch_rows, :on_close,
         :title, :geometry, :resizable, :transient, :modal,
         :x, :y, :scroll, :tab_label, :pane_weight,
       ]
@@ -478,7 +479,7 @@ module Teek
         arrange_children(node)
         node.events.each { |binding| wire_event(node, binding) }
         run_raw_op(node) if node.type == :raw_op
-        wire_close_handler(node) if node.opts.has_key?(:on_close)
+        wire_close_handler(node)
         node.children.each { |child| link(child) unless child.lazy? }
       end
 
@@ -487,10 +488,12 @@ module Teek
       end
 
       private def wire_close_handler(node : Node) : Nil
+        block = node.close_handler
+        return unless block
+
         realized = node.realized
         return unless realized
 
-        block = node.opts[:on_close].as(Proc(Array(String), CallbackSignal, Nil))
         @app.on_close(realized.path, &block)
       end
 
@@ -573,20 +576,18 @@ module Teek
       # builds exactly that same kind of hook for any type registered
       # with flow: (see widget_type.cr).
       def arrange_flow(node : Node, children : Array(Node), flow : FlowConfig) : Nil
-        gap = node.opts.fetch(:gap, 0)
-        align = node.opts.fetch(:align, :start)
-        pad = node.opts.fetch(:pad, 0)
         last_index = children.size - 1
 
         children.each_with_index do |child, index|
-          opts = flow_pack_opts(flow, child, index, last_index, gap, align, pad)
+          opts = flow_pack_opts(flow, child, index, last_index, node.gap, node.align, node.pad)
           next unless realized = child.realized
 
           @app.command(:pack, [realized.arrange_path] of TclArgValue, opts)
         end
       end
 
-      private def flow_pack_opts(flow : FlowConfig, child : Node, index : Int32, last_index : Int32, gap : TclArgValue, align : TclArgValue, pad : TclArgValue) : Hash(String, TclArgValue)
+      private def flow_pack_opts(flow : FlowConfig, child : Node, index : Int32, last_index : Int32,
+                                 gap : Int32, align : FlowAlign, pad : Int32) : Hash(String, TclArgValue)
         opts = Hash(String, TclArgValue).new
         opts["side"] = flow.side
         main_pad = [index.zero? ? pad : gap, index == last_index ? pad : 0] of TclArgValue
@@ -594,18 +595,15 @@ module Teek
         opts[flow.cross_pad.to_s] = pad
 
         grow = child.layout.try(&.[]?(:grow)) == true
-        stretch = align == :stretch
+        stretch = align.stretch?
         fills = [] of String
         fills << flow.main_fill if grow
         fills << flow.cross_fill if stretch
         opts["fill"] = fills.size == 2 ? "both" : fills.first unless fills.empty?
         opts["expand"] = true if grow
-        unless stretch
-          align_key = align.as?(Symbol)
-          anchor = align_key ? flow.anchor[align_key]? : nil
-          anchor ||= raise ArgumentError.new("invalid align: #{align.inspect} (expected :start, :center, :end, or :stretch)")
-          opts["anchor"] = anchor
-        end
+        # Stretch fills the cross axis rather than anchoring on it, so
+        # it's the one align: with no anchor letter to look up.
+        opts["anchor"] = flow.anchor[align] unless stretch
 
         opts
       end
@@ -616,7 +614,7 @@ module Teek
       # #arrange_flow is (see its own comment) - a :grid WidgetType's
       # arrange: hook reaches this from outside the class.
       def arrange_grid(node : Node, children : Array(Node)) : Nil
-        gap = node.opts.fetch(:gap, 0)
+        gap = node.gap
 
         children.each do |child|
           cell = child.cell_position
@@ -658,24 +656,12 @@ module Teek
         realized_node = node.realized
         return unless realized_node
 
-        stretch_int_array(node.opts[:stretch_columns]?).each do |col|
+        node.stretch_columns.try &.each do |col|
           @app.command(:grid, [:columnconfigure, realized_node.path, col] of TclArgValue, {"weight" => 1} of String => TclArgValue)
         end
-        stretch_int_array(node.opts[:stretch_rows]?).each do |row|
+        node.stretch_rows.try &.each do |row|
           @app.command(:grid, [:rowconfigure, realized_node.path, row] of TclArgValue, {"weight" => 1} of String => TclArgValue)
         end
-      end
-
-      # node.opts[:stretch_columns/:stretch_rows] (WidgetDSL#stretch) are
-      # stored as Array(TclArgValue) (each element really an Int32) since
-      # that's the only shape a real Tk option value could take through
-      # opts - unwrapped back to Array(Int32) here for the plain grid
-      # column/row indices #arrange_grid actually needs.
-      private def stretch_int_array(value : TclArgValue?) : Array(Int32)
-        arr = value.as?(Array(TclArgValue))
-        return [] of Int32 unless arr
-
-        arr.map(&.as(Int32))
       end
 
       # Builds a whole menu subtree (a menu_bar, a standalone context_menu,

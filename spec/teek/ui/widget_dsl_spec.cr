@@ -285,15 +285,42 @@ describe Teek::UI::WidgetDSL do
     node.children.should eq([] of Teek::UI::Node)
   end
 
-  it "column and row are containers carrying gap/align/pad in opts" do
+  it "column and row are containers carrying gap/align/pad on their own slots" do
     session = WidgetDslHarness.new
 
     session.column(:c, gap: 8, align: :stretch, pad: 4, &.button(:go))
 
     node = session.document.root.children.first
     node.type.should eq(:column)
-    node.opts.should eq({:gap => 8, :align => :stretch, :pad => 4} of Symbol => Teek::TclArgValue)
+    node.gap.should eq(8)
+    node.pad.should eq(4)
+    node.align.should eq(Teek::UI::FlowAlign::Stretch)
+    node.opts.should be_empty
     node.children.map(&.type).should eq([:button])
+  end
+
+  it "align: accepts every one of its four values" do
+    session = WidgetDslHarness.new
+
+    session.column(:a, align: :start)
+    session.column(:b, align: :center)
+    session.column(:c, align: :end)
+    session.column(:d, align: :stretch)
+
+    session.document.root.children.map(&.align).should eq([
+      Teek::UI::FlowAlign::Start,
+      Teek::UI::FlowAlign::Center,
+      Teek::UI::FlowAlign::End,
+      Teek::UI::FlowAlign::Stretch,
+    ])
+  end
+
+  it "gap: rejects a value that isn't a pixel count" do
+    session = WidgetDslHarness.new
+
+    expect_raises(ArgumentError, /gap: expects a pixel count/) do
+      session.column(:c, gap: "wide")
+    end
   end
 
   it "row defaults gap/align/pad when not given" do
@@ -303,7 +330,10 @@ describe Teek::UI::WidgetDSL do
 
     node = session.document.root.children.first
     node.type.should eq(:row)
-    node.opts.should eq({} of Symbol => Teek::TclArgValue)
+    node.opts.should be_empty
+    node.gap.should eq(0)
+    node.pad.should eq(0)
+    node.align.should eq(Teek::UI::FlowAlign::Start)
   end
 
   it "spacer is a leaf node with grow baked in" do
@@ -324,7 +354,8 @@ describe Teek::UI::WidgetDSL do
 
     node = session.document.root.children.first
     node.type.should eq(:grid)
-    node.opts.should eq({:gap => 6} of Symbol => Teek::TclArgValue)
+    node.gap.should eq(6)
+    node.opts.should be_empty
   end
 
   it "cell tags the single widget it creates with row/col/span" do
@@ -414,14 +445,28 @@ describe Teek::UI::WidgetDSL do
     expect_raises(ArgumentError, /grid/) { session.cell(row: 0, col: 0) { } }
   end
 
-  it "stretch sets stretch_columns/stretch_rows on the grid node's opts" do
+  it "stretch sets stretch_columns/stretch_rows on the grid node" do
     session = WidgetDslHarness.new
 
     session.grid(:g, &.stretch(columns: [1], rows: [0]))
 
     node = session.document.root.children.first
-    node.opts[:stretch_columns].should eq([1] of Teek::TclArgValue)
-    node.opts[:stretch_rows].should eq([0] of Teek::TclArgValue)
+    node.stretch_columns.should eq([1])
+    node.stretch_rows.should eq([0])
+  end
+
+  # Naming only one axis leaves the other alone rather than clearing it.
+  it "stretch leaves the axis it wasn't given untouched" do
+    session = WidgetDslHarness.new
+
+    session.grid(:g) do |grid|
+      grid.stretch(columns: [1])
+      grid.stretch(rows: [0])
+    end
+
+    node = session.document.root.children.first
+    node.stretch_columns.should eq([1])
+    node.stretch_rows.should eq([0])
   end
 
   it "stretch outside a grid raises" do

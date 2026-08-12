@@ -601,7 +601,7 @@ describe Teek::UI::Handle do
     handle.on_close { |_values, _signal| }
 
     app.on_closes.should be_empty
-    node.opts[:on_close]?.should be_a(Proc(Array(String), Teek::CallbackSignal, Nil))
+    node.close_handler.should_not be_nil
   end
 
   it "on_close raises a clear error on a non-window handle" do

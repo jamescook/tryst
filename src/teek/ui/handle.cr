@@ -299,7 +299,7 @@ module Teek
           realized_app = realized_node.app || raise NotRealizedError.new
           realized_app.on_close(realized_node.path, &block)
         else
-          @node.opts[:on_close] = block
+          @node.close_handler = block
         end
         self
       end

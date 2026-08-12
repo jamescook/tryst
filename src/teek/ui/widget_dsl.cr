@@ -86,15 +86,21 @@ module Teek
       # its parent rather than subordinate to it, and modal: true to have
       # #show grab input when it opens.
       #
+      # on_close: runs when the window manager's close button is used;
+      # handle.on_close { } does the same thing after the fact. It is its
+      # own parameter rather than one of **opts for the same reason bind:
+      # is: a value that has to arrive with its type intact, not flattened
+      # into TclArgValue and recovered.
+      #
       # Created withdrawn, so a build can declare every window the app
       # will ever need without them all appearing at realize - reveal one
       # with handle.show, hide it again with handle.hide.
-      def window(name : Symbol? = nil, **opts, & : self -> Nil) : Handle
-        append_container(:window, name, to_opts_hash(opts)) { |dsl| yield dsl }
+      def window(name : Symbol? = nil, on_close : CloseHandler? = nil, **opts, & : self -> Nil) : Handle
+        append_container(:window, name, to_opts_hash(opts), on_close) { |dsl| yield dsl }
       end
 
-      def window(name : Symbol? = nil, **opts) : Handle
-        append_container(:window, name, to_opts_hash(opts))
+      def window(name : Symbol? = nil, on_close : CloseHandler? = nil, **opts) : Handle
+        append_container(:window, name, to_opts_hash(opts), on_close)
       end
 
       # A tabbed notebook. Declare its pages with #tab inside the block.
@@ -218,8 +224,8 @@ module Teek
       def stretch(columns : Array(Int32) = [] of Int32, rows : Array(Int32) = [] of Int32) : Nil
         grid_node = current_grid!("stretch")
 
-        grid_node.opts[:stretch_columns] = to_tclarg_int_array(columns) unless columns.empty?
-        grid_node.opts[:stretch_rows] = to_tclarg_int_array(rows) unless rows.empty?
+        grid_node.stretch_columns = columns unless columns.empty?
+        grid_node.stretch_rows = rows unless rows.empty?
       end
 
       def canvas(name : Symbol? = nil, **opts, & : self -> Nil) : Handle
@@ -482,14 +488,6 @@ module Teek
         grid_node
       end
 
-      # @api private - #stretch's columns:/rows: arrive as Array(Int32)
-      # (a real parameter type, not **opts), so unlike every other DSL
-      # option they need converting into TclArgValue by hand before they
-      # can be stashed on node.opts.
-      private def to_tclarg_int_array(values : Array(Int32)) : Array(TclArgValue)
-        values.map(&.as(TclArgValue))
-      end
-
       # @api private - the ONLY place @stack (the build-parent stack) is
       # pushed. Notifies Document#notify's :push event with the ancestry
       # this node now heads - see Document#subscribe.
@@ -535,19 +533,57 @@ module Teek
         WidgetTypes.all.select(&.natively_scrollable?).map(&.type).sort!
       end
 
-      # grow:/lazy: are DSL-only intents, not real Tk options - pull them
-      # off opts (so neither ever reaches a widget-creation call) and
-      # onto the node's own dedicated slots instead: grow: becomes part
-      # of Node#layout (the realizer's flow packing looks for it there),
-      # lazy: becomes Node#lazy? (the realizer's tree walk skips creating
-      # this subtree until something explicitly realizes it later - see
-      # Handle#realize!). A leaf's own lazy: return value is simply
-      # unused by its caller - only a container has anywhere to put it.
-      # Returns {cleaned opts, layout (or nil), lazy}.
-      private def extract_dsl_opts(opts : Hash(Symbol, TclArgValue)) : {Hash(Symbol, TclArgValue), Hash(Symbol, TclArgValue)?, Bool}
-        layout = opts.has_key?(:grow) ? {:grow => opts[:grow]} of Symbol => TclArgValue : nil
-        cleaned = opts.reject { |key, _| key == :grow || key == :lazy }
-        {cleaned, layout, lazy_flag(opts)}
+      # The DSL-only intents on a declaration, once they've been pulled
+      # off opts. Each lands on a Node slot of its own; none is a Tk
+      # option, so none reaches a widget-creation call.
+      private record DslIntents,
+        layout : Hash(Symbol, TclArgValue)? = nil,
+        lazy : Bool = false,
+        gap : Int32 = 0,
+        pad : Int32 = 0,
+        align : FlowAlign = FlowAlign::Start
+
+      # Splits a declaration's opts into the Tk options that go on to a
+      # widget-creation call, and the DSL intents that don't: grow:
+      # (Node#layout, where flow packing looks for it), lazy? (the
+      # realizer's tree walk skips the subtree until Handle#realize!),
+      # and the flow/grid spacing trio gap:/pad:/align?. A leaf gets the
+      # same treatment even though only a container has anywhere to put
+      # most of them.
+      private def extract_dsl_opts(opts : Hash(Symbol, TclArgValue)) : {Hash(Symbol, TclArgValue), DslIntents}
+        intents = DslIntents.new(
+          layout: opts.has_key?(:grow) ? {:grow => opts[:grow]} of Symbol => TclArgValue : nil,
+          lazy: lazy_flag(opts),
+          gap: pixel_opt(opts, :gap),
+          pad: pixel_opt(opts, :pad),
+          align: align_opt(opts)
+        )
+        cleaned = opts.reject { |key, _| DSL_INTENT_KEYS.includes?(key) }
+        {cleaned, intents}
+      end
+
+      private DSL_INTENT_KEYS = {:grow, :lazy, :gap, :pad, :align}
+
+      # gap:/pad: are pixel counts. Absent means zero.
+      private def pixel_opt(opts : Hash(Symbol, TclArgValue), key : Symbol) : Int32
+        case value = opts[key]?
+        when Nil   then 0
+        when Int32 then value
+        else
+          raise ArgumentError.new("#{key}: expects a pixel count as an Int32 (got #{value.inspect})")
+        end
+      end
+
+      # align: names one of four cross-axis placements. Absent means
+      # :start. Rejected here, at the declaration, rather than at realize
+      # - the caller is looking at the line that got it wrong.
+      private def align_opt(opts : Hash(Symbol, TclArgValue)) : FlowAlign
+        value = opts[:align]?
+        return FlowAlign::Start if value.nil?
+
+        parsed = value.is_a?(Symbol) ? FlowAlign.parse?(value.to_s) : nil
+        parsed || raise ArgumentError.new(
+          "align: expects :start, :center, :end or :stretch (got #{value.inspect})")
       end
 
       # lazy: is read on this side and never handed to Tk, so it is true
@@ -569,9 +605,9 @@ module Teek
         raise_if_closed!
         validate_scroll!(type, opts)
         opts = resolve_bind(type, opts, bind)
-        opts, layout, _lazy = extract_dsl_opts(opts)
+        opts, intents = extract_dsl_opts(opts)
         node = @document.create(type: type, name: name, opts: opts, scope: current_scope)
-        node.layout = layout if layout
+        apply_dsl_intents(node, intents)
         @stack.last.add_child(node)
         node
       end
@@ -607,8 +643,9 @@ module Teek
         WidgetTypes.for_type(type).try(&.bind_option)
       end
 
-      private def append_container(type : Symbol, name : Symbol?, opts : Hash(Symbol, TclArgValue), & : self -> Nil) : Handle
-        node = build_container_node(type, name, opts)
+      private def append_container(type : Symbol, name : Symbol?, opts : Hash(Symbol, TclArgValue),
+                                   close_handler : CloseHandler? = nil, & : self -> Nil) : Handle
+        node = build_container_node(type, name, opts, close_handler)
         push_stack(node)
         begin
           yield self
@@ -618,19 +655,32 @@ module Teek
         Handle.new(node)
       end
 
-      private def append_container(type : Symbol, name : Symbol?, opts : Hash(Symbol, TclArgValue)) : Handle
-        Handle.new(build_container_node(type, name, opts))
+      private def append_container(type : Symbol, name : Symbol?, opts : Hash(Symbol, TclArgValue),
+                                   close_handler : CloseHandler? = nil) : Handle
+        Handle.new(build_container_node(type, name, opts, close_handler))
       end
 
-      private def build_container_node(type : Symbol, name : Symbol?, opts : Hash(Symbol, TclArgValue)) : Node
+      private def build_container_node(type : Symbol, name : Symbol?, opts : Hash(Symbol, TclArgValue),
+                                       close_handler : CloseHandler? = nil) : Node
         raise_if_closed!
         validate_scroll!(type, opts)
-        opts, layout, lazy = extract_dsl_opts(opts)
+        opts, intents = extract_dsl_opts(opts)
         node = @document.create(type: type, name: name, opts: opts, scope: current_scope)
-        node.layout = layout if layout
-        node.lazy = lazy
+        apply_dsl_intents(node, intents)
+        node.lazy = intents.lazy
+        node.close_handler = close_handler
         @stack.last.add_child(node)
         node
+      end
+
+      # Everything extract_dsl_opts pulled off, onto the node's own slots.
+      # lazy is set by the container path only - a leaf has no subtree to
+      # defer.
+      private def apply_dsl_intents(node : Node, intents : DslIntents) : Nil
+        node.layout = intents.layout if intents.layout
+        node.gap = intents.gap
+        node.pad = intents.pad
+        node.align = intents.align
       end
     end
   end

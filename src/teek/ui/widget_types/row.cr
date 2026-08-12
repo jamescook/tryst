@@ -6,7 +6,11 @@ Teek::UI::WidgetTypes.register(
     flow: Teek::UI::FlowConfig.new(
       side: "left", main_pad: :padx, cross_pad: :pady,
       main_fill: "x", cross_fill: "y",
-      anchor: {:start => "n", :center => "center", :end => "s"}
+      anchor: {
+        Teek::UI::FlowAlign::Start  => "n",
+        Teek::UI::FlowAlign::Center => "center",
+        Teek::UI::FlowAlign::End    => "s",
+      }
     )
   )
 )

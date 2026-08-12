@@ -1,6 +1,7 @@
 require "./widget_validators"
 require "./widget_addressing"
 require "./scroll_defaults"
+require "./flow_align"
 
 module Teek
   module UI
@@ -22,7 +23,10 @@ module Teek
       cross_pad : Symbol,
       main_fill : String,
       cross_fill : String,
-      anchor : Hash(Symbol, String)
+      # The Tk anchor letter for each align: this container understands.
+      # FlowAlign::Stretch is absent on purpose - it fills the cross axis
+      # instead of anchoring, so it never reaches a lookup here.
+      anchor : Hash(FlowAlign, String)
 
     # @api private
     #

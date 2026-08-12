@@ -2,9 +2,14 @@ require "./scope"
 require "./realized_node"
 require "./event_binding"
 require "./app_contract"
+require "./flow_align"
 
 module Teek
   module UI
+    # A window's close handler - the shape every event callback takes,
+    # named because it travels as a value here rather than as a block.
+    alias CloseHandler = Proc(Array(String), CallbackSignal, Nil)
+
     # A node's position inside its parent ui.grid, set by WidgetDSL#cell.
     # A dedicated field on Node (see #cell_position below) rather than
     # living in node.layout (ruby: layout[:cell] = {row:, col:, span:}) -
@@ -96,6 +101,28 @@ module Teek
       # but since it's a single Symbol value (unlike CellPosition's three
       # fields), a plain property needs no dedicated record type at all.
       property overlay_anchor : Symbol?
+
+      # This window's close handler, from ui.window(on_close:) or from
+      # Handle#on_close before realize - Realizer#link wires it to the
+      # real window once there is one.
+      property close_handler : CloseHandler?
+
+      # Which columns/rows of this ui.grid absorb leftover space, from
+      # WidgetDSL#stretch. nil means the grid never said.
+      property stretch_columns : Array(Int32)?
+      property stretch_rows : Array(Int32)?
+
+      # Spacing between this container's children, in pixels - the gap:
+      # option on a flow container or a grid.
+      property gap : Int32 = 0
+
+      # Spacing between this flow container's own edges and its children,
+      # in pixels - the pad: option.
+      property pad : Int32 = 0
+
+      # Where this flow container's children sit on its cross axis - the
+      # align: option.
+      property align : FlowAlign = FlowAlign::Start
 
       # Whether a deferred Handle#destroy! is currently scheduled (via
       # "after idle") but hasn't run yet - lets a second destroy! call on

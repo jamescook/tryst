@@ -58,9 +58,20 @@ describe Teek::UI::Realizer do
 
   it "reserved DSL-only opts never leak through to a widget-creation call" do
     session = WidgetDslHarness.new
-    on_close_block = Proc(Array(String), Teek::CallbackSignal, Nil).new { |_v, _s| }
-    node = session.document.create(type: :button, opts: {:text => "Go", :on_close => on_close_block} of Symbol => Teek::TclArgValue)
+    node = session.document.create(type: :button, opts: {:text => "Go", :scroll => false} of Symbol => Teek::TclArgValue)
     session.document.root.add_child(node)
+
+    app = FakeApp.new
+    Teek::UI::Realizer.new(app, session.document).realize
+
+    app.calls.first.kwargs.should eq({"text" => "Go"} of String => Teek::TclArgValue)
+  end
+
+  # gap:/pad:/align: come off opts at declaration and onto Node slots, so
+  # they can't reach a creation call even if RESERVED_OPTIONS forgot them.
+  it "flow spacing options never reach a widget-creation call" do
+    session = WidgetDslHarness.new
+    session.column(:c, gap: 4, pad: 2, align: :center, text: "Go")
 
     app = FakeApp.new
     Teek::UI::Realizer.new(app, session.document).realize
@@ -97,7 +108,7 @@ describe Teek::UI::Realizer do
     closed = false
     block = Proc(Array(String), Teek::CallbackSignal, Nil).new { |_v, _s| closed = true }
     session.button(:go)
-    session.document.root.children.first.opts[:on_close] = block
+    session.document.root.children.first.close_handler = block
 
     app = FakeApp.new
     Teek::UI::Realizer.new(app, session.document).realize
@@ -240,11 +251,14 @@ describe Teek::UI::Realizer do
     app.calls.reverse_each.find! { |call| call.cmd == "pack" }.kwargs["anchor"].should eq("center")
   end
 
-  it "an invalid align: value raises" do
+  # Rejected at the declaration now, not at realize - the stack trace
+  # points at the line that got it wrong.
+  it "an invalid align: value raises where it was declared" do
     session = WidgetDslHarness.new
-    session.column(:c, align: :diagonal, &.button(:a))
 
-    expect_raises(ArgumentError, /invalid align/) { Teek::UI::Realizer.new(FakeApp.new, session.document).realize }
+    expect_raises(ArgumentError, /align: expects :start, :center, :end or :stretch/) do
+      session.column(:c, align: :diagonal, &.button(:a))
+    end
   end
 
   it "grid layout places each cell's widget with its own row/column/sticky/padding" do

@@ -182,6 +182,24 @@ describe "the :window widget type" do
     fired.should be_true
   end
 
+  # on_close: is a typed parameter rather than one of **opts precisely so
+  # this works. A handler whose body always raises is a
+  # Proc(..., NoReturn), which survives being passed to a typed parameter
+  # but not a round-trip through TclArgValue - out of that union it
+  # answers false to is_a?(Proc(..., Nil)) and fails an unchecked cast.
+  it "on_close: accepts a handler that always raises" do
+    session = WidgetDslHarness.new
+    session.window(:tools, on_close: ->(_values : Array(String), _signal : Teek::CallbackSignal) { raise "closing" })
+
+    app = FakeApp.new
+    Teek::UI::Realizer.new(app, session.document).realize
+
+    app.on_closes.map(&.window).should eq([".tools"])
+    expect_raises(Exception, "closing") do
+      app.on_closes.first.block.call([] of String, Teek::CallbackSignal.new)
+    end
+  end
+
   it "a menu_bar may be declared inside a window, not just at the root" do
     session = WidgetDslHarness.new
 
