@@ -486,9 +486,9 @@ module Teek
       # The name Tk's appearance command expects for this mode.
       def to_tcl : String
         case self
-        when Light then "aqua"
-        when Dark  then "darkaqua"
-        else            "auto"
+        in Light then "aqua"
+        in Dark  then "darkaqua"
+        in Auto  then "auto"
         end
       end
     end

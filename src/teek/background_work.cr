@@ -142,8 +142,10 @@ module Teek
     # Crystal doesn't support a generic (parameterized) alias, and a
     # class-level alias can't see its own enclosing generic class's type
     # param either (both confirmed directly) - so the output event union
-    # is just spelled out at each of its two use sites instead of being
-    # named once.
+    # is spelled out at each of its three use sites (the two channel
+    # declarations and #dispatch_event) instead of being named once.
+    # Adding a member means updating all three; #dispatch_event's
+    # exhaustive case then points at any branch still missing.
     def initialize(@app : App, @data : Data, &@work_block : TaskContext(Result), Data -> Nil)
       @callback_progress = nil
       @callback_done = nil
@@ -301,9 +303,11 @@ module Teek
     # Returns the (possibly updated) last_progress/results_this_poll
     # counters plus whether the drain loop should stop (a BackgroundDone
     # was seen).
-    private def dispatch_event(event, drop_intermediate : Bool, last_progress : Result?, results_this_poll : Int32) : {Result?, Int32, Bool}
+    private def dispatch_event(event : BackgroundDone | BackgroundProgress(Result) | BackgroundUserMessage | BackgroundFailure,
+                               drop_intermediate : Bool, last_progress : Result?,
+                               results_this_poll : Int32) : {Result?, Int32, Bool}
       case event
-      when BackgroundDone
+      in BackgroundDone
         @done = true
         if lp = last_progress
           @callback_progress.try(&.call(lp))
@@ -311,7 +315,7 @@ module Teek
         warn_if_choked
         @callback_done.try(&.call)
         {nil, results_this_poll, true}
-      when BackgroundProgress(Result)
+      in BackgroundProgress(Result)
         results_this_poll += 1
         if drop_intermediate
           {event.value, results_this_poll, false}
@@ -319,14 +323,12 @@ module Teek
           @callback_progress.try(&.call(event.value))
           {last_progress, results_this_poll, false}
         end
-      when BackgroundUserMessage
+      in BackgroundUserMessage
         @callback_message.try(&.call(event.value))
         {last_progress, results_this_poll, false}
-      when BackgroundFailure
+      in BackgroundFailure
         STDERR.puts "[Teek::BackgroundWork] Background work error: #{event.text}"
         {last_progress, results_this_poll, false}
-      else
-        raise "unreachable: unknown background event #{event.inspect}"
       end
     end
 
