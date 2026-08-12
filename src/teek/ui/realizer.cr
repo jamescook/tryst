@@ -46,7 +46,8 @@ module Teek
       # entry is one a type's own realize step consumes out of node.opts:
       # :window's wm setup (title/geometry/resizable/transient/modal),
       # :scroll (#resolve_scroll), :x/:y (an overlay's placement),
-      # :tab_label, and :pane_weight for the split type not yet ported.
+      # :tab_label (a page's label), and :pane_weight (how much of a
+      # split's leftover space one pane takes).
       #
       # An intent with a typed Node slot is not listed here - it never
       # entered opts to begin with. See WidgetDSL#extract_dsl_opts.

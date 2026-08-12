@@ -8,6 +8,7 @@ require "./var"
 require "./image"
 require "./menu_builder"
 require "./structural_types"
+require "./split_orientation"
 
 module Teek
   module UI
@@ -135,6 +136,51 @@ module Teek
         raise_unless_inside!(:tabs, "tab")
         hash = to_opts_hash(opts)
         hash[:tab_label] = label
+        hash
+      end
+
+      # A draggable split - two or more #pane regions with a sash between
+      # them to resize by. orientation: :horizontal puts the panes side by
+      # side, so the sash is vertical; :vertical stacks them.
+      def split(name : Symbol? = nil, orientation : SplitOrientation = :horizontal,
+                **opts, & : self -> Nil) : Handle
+        append_container(:split, name, split_opts(orientation, opts)) { |dsl| yield dsl }
+      end
+
+      def split(name : Symbol? = nil, orientation : SplitOrientation = :horizontal, **opts) : Handle
+        append_container(:split, name, split_opts(orientation, opts))
+      end
+
+      # #split's own opts, with orientation: translated to the real
+      # -orient option ttk::panedwindow takes.
+      private def split_opts(orientation : SplitOrientation, opts) : Hash(Symbol, TclArgValue)
+        hash = to_opts_hash(opts)
+        hash[:orient] = orientation.to_tcl
+        hash
+      end
+
+      # One region of a #split. weight: is how much of the leftover space
+      # this pane takes when the split is resized, relative to its
+      # siblings' weights; left unset, ttk::panedwindow's own default
+      # applies - a pane that keeps its size until the sash is dragged.
+      #
+      # Only valid directly inside a ui.split block; raises ArgumentError
+      # anywhere else.
+      def pane(name : Symbol? = nil, weight : Int32? = nil, **opts, & : self -> Nil) : Handle
+        append_container(:pane, name, pane_opts(weight, opts)) { |dsl| yield dsl }
+      end
+
+      def pane(name : Symbol? = nil, weight : Int32? = nil, **opts) : Handle
+        append_container(:pane, name, pane_opts(weight, opts))
+      end
+
+      # #pane's own opts, with the weight folded in under the key :pane's
+      # post_create reads it from. Checks the enclosing container first,
+      # for the same reason #tab_opts does.
+      private def pane_opts(weight : Int32?, opts) : Hash(Symbol, TclArgValue)
+        raise_unless_inside!(:split, "pane")
+        hash = to_opts_hash(opts)
+        hash[:pane_weight] = weight unless weight.nil?
         hash
       end
 
