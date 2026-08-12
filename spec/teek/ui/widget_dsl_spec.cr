@@ -231,6 +231,32 @@ describe Teek::UI::WidgetDSL do
     handle.type.should eq(:dropdown)
   end
 
+  it "number_box appends a node of the matching type" do
+    session = WidgetDslHarness.new
+    handle = session.number_box(:size, from: 1, to: 64, increment: 2)
+    root_child = session.document.root.children.first
+
+    root_child.type.should eq(:number_box)
+    root_child.opts.should eq({
+      :from      => 1,
+      :to        => 64,
+      :increment => 2,
+    } of Symbol => Teek::TclArgValue)
+    handle.type.should eq(:number_box)
+  end
+
+  # A number_box binds through -textvariable, not the -variable a slider
+  # uses - ttk::spinbox has no -variable at all, so the two numeric
+  # widgets genuinely differ here rather than being spelled inconsistently.
+  it "binds a number_box through textvariable, like the other spinbox-shaped widgets" do
+    session = WidgetDslHarness.new
+    size = session.var(8)
+
+    session.number_box(:size, bind: size, from: 1, to: 64)
+
+    session.document.root.children.first.opts[:textvariable]?.should eq(size.name)
+  end
+
   # Each of the three binds differently, and that difference is the only
   # thing separating their descriptors: a progress bar's Var carries a
   # number through -variable, a dropdown's the chosen value through

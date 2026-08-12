@@ -18,21 +18,22 @@ describe Teek::UI::WidgetTypes do
   it "registers every basic leaf/container type with the right metadata" do
     # type -> [tk_command, bind_option, natively_scrollable?, leaf?]
     metadata = {
-      button:    {"ttk::button", nil, false, true},
-      label:     {"ttk::label", :textvariable, false, true},
-      panel:     {"ttk::frame", nil, false, false},
-      group:     {"ttk::labelframe", nil, false, false},
-      checkbox:  {"ttk::checkbutton", :variable, false, true},
-      radio:     {"ttk::radiobutton", nil, false, true},
-      text_box:  {"ttk::entry", :textvariable, false, true},
-      text_area: {"text", nil, true, true},
-      list:      {"listbox", nil, true, true},
-      tree:      {"ttk::treeview", nil, true, true},
-      table:     {"ttk::treeview", nil, true, true},
-      slider:    {"ttk::scale", :variable, false, true},
-      divider:   {"ttk::separator", nil, false, true},
-      progress:  {"ttk::progressbar", :variable, false, true},
-      dropdown:  {"ttk::combobox", :textvariable, false, true},
+      button:     {"ttk::button", nil, false, true},
+      label:      {"ttk::label", :textvariable, false, true},
+      panel:      {"ttk::frame", nil, false, false},
+      group:      {"ttk::labelframe", nil, false, false},
+      checkbox:   {"ttk::checkbutton", :variable, false, true},
+      radio:      {"ttk::radiobutton", nil, false, true},
+      text_box:   {"ttk::entry", :textvariable, false, true},
+      text_area:  {"text", nil, true, true},
+      list:       {"listbox", nil, true, true},
+      tree:       {"ttk::treeview", nil, true, true},
+      table:      {"ttk::treeview", nil, true, true},
+      slider:     {"ttk::scale", :variable, false, true},
+      divider:    {"ttk::separator", nil, false, true},
+      progress:   {"ttk::progressbar", :variable, false, true},
+      dropdown:   {"ttk::combobox", :textvariable, false, true},
+      number_box: {"ttk::spinbox", :textvariable, false, true},
     }
 
     metadata.each do |type, (tk_command, bind_option, natively_scrollable, leaf)|

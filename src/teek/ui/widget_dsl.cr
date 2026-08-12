@@ -124,6 +124,12 @@ module Teek
         append_leaf(:dropdown, name, to_opts_hash(opts), bind)
       end
 
+      # A numeric stepper: from:/to: bound the range, increment: sets the
+      # step, and bind: a Var to read or set the value.
+      def number_box(name : Symbol? = nil, bind : Var? = nil, **opts) : Handle
+        append_leaf(:number_box, name, to_opts_hash(opts), bind)
+      end
+
       def panel(name : Symbol? = nil, **opts, & : self -> Nil) : Handle
         append_container(:panel, name, to_opts_hash(opts)) { |dsl| yield dsl }
       end

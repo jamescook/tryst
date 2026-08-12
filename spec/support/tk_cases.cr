@@ -2678,12 +2678,13 @@ tk_test "the simple leaf types realize as the real Tk widgets they name" do |app
   session.divider(:sep)
   session.progress(:bar, maximum: 100, value: 25)
   session.dropdown(:pick, values: ["alpha", "beta"])
+  session.number_box(:size, from: 1, to: 64, increment: 2)
 
   Teek::UI::Realizer.new(app, session.document).realize
   app.show
   app.update
 
-  {sep: "TSeparator", bar: "TProgressbar", pick: "TCombobox"}.each do |name, expected|
+  {sep: "TSeparator", bar: "TProgressbar", pick: "TCombobox", size: "TSpinbox"}.each do |name, expected|
     path = session.document.find(name).try(&.realized).try(&.path)
     raise "expected :#{name} to have realized" unless path
 
@@ -2696,6 +2697,7 @@ tk_test "the simple leaf types realize as the real Tk widgets they name" do |app
   # on an unknown one at creation, so a wrong descriptor can't get this far.
   raise "expected the dropdown's choices to round-trip" unless app.split_list(app.command(".pick", :cget, "-values")) == ["alpha", "beta"]
   raise "expected the progress bar to hold its position" unless app.command(".bar", :cget, "-value") == "25"
+  raise "expected the number box to hold its range" unless app.command(".size", :cget, "-to") == "64"
 end
 
 # -- Teek::Photo --
