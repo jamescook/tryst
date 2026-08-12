@@ -1,4 +1,9 @@
 module Teek
+  # The filetypes: a file dialog filters on - a display name paired with
+  # either one extension or a list of them, e.g.
+  # [{"Images", [".png", ".jpg"]}, {"Text Files", ".txt"}, {"All", "*"}].
+  alias FileTypes = Array({String, String | Array(String)})
+
   # Native OS dialog wrappers - reopens App directly (mirrors ruby-teek's
   # own file layout: lib/teek/dialogs.rb reopens class App rather than
   # defining a separate wrapper class, unlike Winfo/Clipboard/Window).
@@ -9,7 +14,7 @@ module Teek
     # ({"Images", [".png", ".jpg"]}). multiple: allow selecting more than
     # one file. Returns the chosen path (an array of paths if multiple:),
     # or nil if the dialog was cancelled.
-    def choose_open_file(filetypes = nil, initialdir : String? = nil, initialfile : String? = nil,
+    def choose_open_file(filetypes : FileTypes? = nil, initialdir : String? = nil, initialfile : String? = nil,
                          title : String? = nil, multiple : Bool = false, parent = nil) : (String | Array(String))?
       args = ["tk_getOpenFile"]
       args.push("-filetypes", build_filetypes(filetypes)) if filetypes
@@ -30,7 +35,7 @@ module Teek
     # doesn't already have one. confirmoverwrite: ask before overwriting
     # an existing file (Tk's own default is true; pass false to skip the
     # confirmation). Returns the chosen path, or nil if cancelled.
-    def choose_save_file(filetypes = nil, initialdir : String? = nil, initialfile : String? = nil,
+    def choose_save_file(filetypes : FileTypes? = nil, initialdir : String? = nil, initialfile : String? = nil,
                          title : String? = nil, defaultextension : String? = nil,
                          confirmoverwrite : Bool = true, parent = nil) : String?
       args = ["tk_getSaveFile"]
@@ -120,10 +125,10 @@ module Teek
 
     # Builds the nested Tcl list -filetypes expects:
     # {{name extensionOrExtensionList} {name2 ...}}
-    private def build_filetypes(filetypes) : String
-      entries = filetypes.map do |name, exts|
-        ext_arg = exts.is_a?(Array) ? make_list(exts.map(&.to_s)) : exts.to_s
-        make_list([name.to_s, ext_arg])
+    private def build_filetypes(filetypes : FileTypes) : String
+      entries = filetypes.map do |(name, exts)|
+        ext_arg = exts.is_a?(Array) ? make_list(exts) : exts
+        make_list([name, ext_arg])
       end
       make_list(entries)
     end
