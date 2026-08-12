@@ -55,6 +55,7 @@ end
 require "./widget_types/button"
 require "./widget_types/label"
 require "./widget_types/panel"
+require "./widget_types/group"
 require "./widget_types/checkbox"
 require "./widget_types/radio"
 require "./widget_types/text_box"

@@ -115,6 +115,17 @@ module Teek
         append_container(:panel, name, to_opts_hash(opts))
       end
 
+      # A titled container: a panel with a caption drawn into its border,
+      # passed as text:. Stacks its children like #panel does - put a
+      # column/row/grid inside to arrange them.
+      def group(name : Symbol? = nil, **opts, & : self -> Nil) : Handle
+        append_container(:group, name, to_opts_hash(opts)) { |dsl| yield dsl }
+      end
+
+      def group(name : Symbol? = nil, **opts) : Handle
+        append_container(:group, name, to_opts_hash(opts))
+      end
+
       # A separate toplevel window. Configure it with title:, geometry:
       # ("WxH+X+Y", or just "+X+Y"), resizable: (one Bool for both axes,
       # or [width, height]), transient: false to make it independent of

@@ -52,6 +52,22 @@ describe Teek::UI::Realizer do
     app.calls[1].kwargs.should eq({"text" => "Go"} of String => Teek::TclArgValue)
   end
 
+  # A group realizes exactly like the panel above, just to a different Tk
+  # command - the caption is an ordinary creation option on it, and the
+  # children nest inside rather than beside it.
+  it "realizing a group creates a labelframe with its children inside" do
+    session = WidgetDslHarness.new
+    session.group(:settings, text: "Settings", &.checkbox(:verbose))
+
+    app = FakeApp.new
+    Teek::UI::Realizer.new(app, session.document).realize
+
+    app.calls.map(&.cmd).should eq(["ttk::labelframe", "ttk::checkbutton", "pack", "pack"])
+    app.calls[0].args.should eq([".settings"] of Teek::TclArgValue)
+    app.calls[0].kwargs.should eq({"text" => "Settings"} of String => Teek::TclArgValue)
+    app.calls[1].args.should eq([".settings.verbose"] of Teek::TclArgValue)
+  end
+
   it "fills each node's realized slot with its own live path" do
     session = WidgetDslHarness.new
     session.panel(:controls, &.button(:go))

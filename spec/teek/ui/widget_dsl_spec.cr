@@ -462,6 +462,33 @@ describe Teek::UI::WidgetDSL do
     node.children.should eq([] of Teek::UI::Node)
   end
 
+  # A group is a panel with a caption, so what's worth pinning is that it
+  # gets the same container treatment - both overloads, and children
+  # nesting under it - with the caption travelling as an ordinary option.
+  it "group nests children declared in its block, carrying its caption" do
+    session = WidgetDslHarness.new
+
+    handle = session.group(:settings, text: "Settings") do |group|
+      group.checkbox(:verbose)
+    end
+
+    node = session.document.root.children.first
+    node.type.should eq(:group)
+    node.opts.should eq({:text => "Settings"} of Symbol => Teek::TclArgValue)
+    node.children.map(&.name).should eq([:verbose])
+    handle.type.should eq(:group)
+  end
+
+  it "group without a block still creates a childless node" do
+    session = WidgetDslHarness.new
+
+    session.group(:empty, text: "Empty")
+
+    node = session.document.root.children.first
+    node.type.should eq(:group)
+    node.children.should eq([] of Teek::UI::Node)
+  end
+
   it "column and row are containers carrying gap/align/pad on their own slots" do
     session = WidgetDslHarness.new
 

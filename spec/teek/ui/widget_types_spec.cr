@@ -21,6 +21,7 @@ describe Teek::UI::WidgetTypes do
       button:    {"ttk::button", nil, false, true},
       label:     {"ttk::label", :textvariable, false, true},
       panel:     {"ttk::frame", nil, false, false},
+      group:     {"ttk::labelframe", nil, false, false},
       checkbox:  {"ttk::checkbutton", :variable, false, true},
       radio:     {"ttk::radiobutton", nil, false, true},
       text_box:  {"ttk::entry", :textvariable, false, true},
