@@ -72,7 +72,6 @@ begin
   # a build-time declaration hands out has to survive into the real -image
   # option, which is the whole reason it is allocated that early.
   added_logo = session[:added_logo]
-  raise "image: expected :added_logo to be found" unless added_logo
   shown = app.command(added_logo.path, :cget, "-image")
   raise "image: expected -image #{inner_image.name}, got #{shown.inspect}" unless shown == inner_image.name
 

@@ -107,7 +107,6 @@ end
 # Case 9: the handle addresses the outer frame - the whole region is what
 # a caller means by "the scrollable", not the canvas inside it.
 scroller = session[:scroller]
-raise "scrollable: expected :scroller to be found" unless scroller
 raise "scrollable: expected .scroller, got #{scroller.path}" unless scroller.path == ".scroller"
 
 # Case 10: Session#add into an ALREADY-REALIZED scrollable. This used to

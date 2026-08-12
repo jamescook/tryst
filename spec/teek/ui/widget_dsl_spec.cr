@@ -361,21 +361,33 @@ describe Teek::UI::WidgetDSL do
     expect_raises(ArgumentError) { session.button(:save) }
   end
 
-  it "a named widget is addressable via bracket lookup" do
+  # Crystal's convention: #[] raises, #[]? hands back nil. Worth pinning
+  # both, because the non-nil return is what lets a class keep its widgets
+  # in plain non-nilable fields.
+  it "a named widget is addressable via bracket lookup, typed non-nil" do
     session = WidgetDslHarness.new
     session.text_box(:query)
 
     handle = session[:query]
 
     handle.should be_a(Teek::UI::Handle)
-    handle.try(&.type).should eq(:text_box)
-    handle.try(&.name).should eq(:query)
+    handle.type.should eq(:text_box)
+    handle.name.should eq(:query)
   end
 
-  it "bracket lookup returns nil for an unknown name" do
+  it "bracket lookup raises for an unknown name, naming it" do
     session = WidgetDslHarness.new
 
-    session[:nope].should be_nil
+    error = expect_raises(KeyError) { session[:nope] }
+    error.message.try(&.includes?("nope")).should be_true
+  end
+
+  it "the question-mark form returns nil for an unknown name instead" do
+    session = WidgetDslHarness.new
+    session.text_box(:query)
+
+    session[:nope]?.should be_nil
+    session[:query]?.should_not be_nil
   end
 
   it "raw creates a raw_op node attached to the current parent" do
@@ -829,7 +841,7 @@ describe Teek::UI::WidgetDSL do
 
     handle = session[:mb]
     handle.should be_a(Teek::UI::Handle)
-    handle.try(&.type).should eq(:menu_bar)
+    handle.type.should eq(:menu_bar)
   end
 
   it "menu_bar raises when declared inside a regular container" do

@@ -57,7 +57,6 @@ raise "split: expected vertical, got #{stacked_orient}" unless stacked_orient ==
 # Case 5: a widget declared inside a pane is an ordinary widget - really
 # inside it, and addressable/configurable through its own handle.
 go = session[:go]
-raise "split: expected :go to be found" unless go
 raise "split: expected the button at .sideways.left.go, got #{go.path}" unless go.path == ".sideways.left.go"
 go.configure(text: "Changed")
 app.update

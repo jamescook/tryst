@@ -18,7 +18,6 @@ app.show
 app.update
 
 board = session[:board]
-raise "expected :board to be found" unless board
 
 # Case 1: #line creates a real line item; #coords reads it back.
 item = board.line(10, 10, 50, 50, fill: "red")

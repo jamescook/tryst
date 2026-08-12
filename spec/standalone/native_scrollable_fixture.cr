@@ -18,7 +18,6 @@ app.show
 app.update
 
 log = session[:log]
-raise "scrollable: expected :log to be found" unless log
 
 # Case 1: the wrapper is real, and the handle still addresses the actual
 # listbox rather than the frame around it.

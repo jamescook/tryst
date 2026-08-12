@@ -113,7 +113,6 @@ raise "window: expected #hide to return the handle" unless tools.hide.same?(tool
 app.update
 
 main_label = session[:main_label]
-raise "window: expected :main_label to be found" unless main_label
 begin
   main_label.show
   raise "window: expected ArgumentError calling #show on a label"

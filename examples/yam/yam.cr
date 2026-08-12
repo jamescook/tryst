@@ -74,25 +74,22 @@ class Minesweeper
   @canvas : Teek::UI::Handle
   @face : Teek::UI::Handle
 
-  # Builds against Teek::UI::Session directly rather than through
-  # `Teek::UI.app { |ui| ... }`. The block form is the nicer spelling for a
-  # script, but it cannot build a class's own state: Crystal can't prove a
-  # method actually yields, so an instance variable assigned inside that
-  # block counts as only MAYBE assigned and every one of these ends up
-  # nilable. Teek::UI.app is a thin wrapper over Session.new anyway, and
-  # the Session IS the builder - so plain statements here get the same tree
-  # with none of that.
+  # Note the no-block form of Teek::UI.app. The block spelling
+  # (`Teek::UI.app { |ui| ... }`) is the nicer one for a script, but it
+  # can't populate a class's own fields: Crystal never counts an instance
+  # variable assigned inside a block as initialized - not even a plain
+  # `yield` - so every field assigned in there comes out nilable. Without a
+  # block the same call just hands back the Session, which IS the builder,
+  # and plain statements build the identical tree with none of that.
   #
-  # The tree is still declared before any callback is wired (#wire_events
-  # below), which is its own constraint: a Proc the DSL stores makes
-  # Crystal require every instance variable in that Proc's call graph to be
-  # initialized at the point the Proc is CREATED, even though Tk only
-  # invokes it much later.
+  # Wiring lives in #wire_events purely for readability - the callbacks
+  # could equally go inline right after each widget. Nothing forces the
+  # split.
   def initialize(@level : String = "beginner")
     apply_level
     blank_state
 
-    @session = Teek::UI::Session.new(title: "Yet Another Minesweeper")
+    @session = Teek::UI.app(title: "Yet Another Minesweeper")
     @mine_var = @session.var(@num_mines)
     @time_var = @session.var(0)
     @level_var = @session.var(@level)
@@ -106,12 +103,13 @@ class Minesweeper
   end
 
   # Everything that carries a block, in one place. Menu entries are
-  # declared without one above and get theirs here by name, which is what
-  # keeps the build block Proc-free.
+  # declared without one above and get theirs here by name - ui[:name]
+  # returns a Handle rather than a Handle?, so there's no nil check to
+  # thread through.
   private def wire_events : Nil
     @face.on_action { new_game }
-    @session[:new_game].try(&.on_action { new_game })
-    @session[:exit_game].try(&.on_action { @session.app.destroy })
+    @session[:new_game].on_action { new_game }
+    @session[:exit_game].on_action { @session.app.destroy }
 
     # One handler for the whole radio group rather than a command per
     # entry: the Var is what changed, so the Var is what to listen to.

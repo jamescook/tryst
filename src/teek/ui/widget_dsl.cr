@@ -438,9 +438,21 @@ module Teek
         Handle.new(node)
       end
 
-      # Look up a named widget declared in the current scope. Returns
-      # nil if nothing by that name exists (yet, or ever).
-      def [](name : Symbol) : Handle?
+      # Look up a named widget declared in the current scope, raising
+      # KeyError if there's no such name - Crystal's convention throughout,
+      # where #[] raises and #[]? is the one that hands back nil.
+      #
+      # Raising is what most lookups want, and reads far better where a
+      # handle is being kept: `@board = ui[:board]` types as a Handle, so
+      # a class can hold its widgets without a nil check per field. Reach
+      # for #[]? when a name legitimately might not be there.
+      def [](name : Symbol) : Handle
+        self[name]? || raise KeyError.new("no widget named :#{name} in this scope")
+      end
+
+      # Look up a named widget declared in the current scope. nil if
+      # nothing by that name exists (yet, or ever).
+      def []?(name : Symbol) : Handle?
         node = @document.find(name, scope: current_scope)
         node.try { |found| Handle.new(found) }
       end
