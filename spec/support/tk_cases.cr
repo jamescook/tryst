@@ -175,21 +175,21 @@ tk_test "create_widget auto-names sequential paths per type" do |app|
   b1 = app.create_widget("ttk::button", text: "A")
   b2 = app.create_widget("ttk::button", text: "B")
   lbl = app.create_widget(:label, text: "C")
-  raise "expected .ttkbtn1, got #{b1}" unless b1 == ".ttkbtn1"
-  raise "expected .ttkbtn2, got #{b2}" unless b2 == ".ttkbtn2"
-  raise "expected .lbl1, got #{lbl}" unless lbl == ".lbl1"
+  raise "expected .ttkbtn1, got #{b1}" unless b1.path == ".ttkbtn1"
+  raise "expected .ttkbtn2, got #{b2}" unless b2.path == ".ttkbtn2"
+  raise "expected .lbl1, got #{lbl}" unless lbl.path == ".lbl1"
 end
 
 tk_test "create_widget nests auto-named paths under a parent" do |app|
   frm = app.create_widget("ttk::frame")
   btn = app.create_widget("ttk::button", parent: frm, text: "Hi")
-  raise "expected .ttkfrm1, got #{frm}" unless frm == ".ttkfrm1"
-  raise "expected .ttkfrm1.ttkbtn1, got #{btn}" unless btn == ".ttkfrm1.ttkbtn1"
+  raise "expected .ttkfrm1, got #{frm}" unless frm.path == ".ttkfrm1"
+  raise "expected .ttkfrm1.ttkbtn1, got #{btn}" unless btn.path == ".ttkfrm1.ttkbtn1"
 end
 
 tk_test "create_widget uses an explicit path as-is" do |app|
   frm = app.create_widget("ttk::frame", ".myframe")
-  raise "expected .myframe, got #{frm}" unless frm == ".myframe"
+  raise "expected .myframe, got #{frm}" unless frm.path == ".myframe"
 end
 
 tk_test "command registers a Proc kwarg as a real callback via app.callback" do |app|
@@ -989,8 +989,9 @@ end
 
 tk_test "Widget equality is by path" do |app|
   btn = app.create_widget("ttk::button", text: "Hi")
-  raise "expected btn == btn.path" unless btn == btn.path
+  other = app.create_widget("ttk::button", text: "Bye")
   raise "expected btn == Widget.new(app, btn.path)" unless btn == Teek::Widget.new(app, btn.path)
+  raise "expected two different paths to compare unequal" if btn == other
   raise "expected matching hash" unless btn.path.hash == btn.hash
 end
 
@@ -2645,6 +2646,19 @@ tk_test "Photo auto-generates unique names" do |app|
 ensure
   first.try(&.delete)
   second.try(&.delete)
+end
+
+tk_test "Photo equality is by image name" do |app|
+  first = Teek::Photo.new(app, name: "eq_photo", width: 1, height: 1)
+  same = Teek::Photo.new(app, name: "eq_photo", width: 1, height: 1)
+  other = Teek::Photo.new(app, name: "eq_photo_other", width: 1, height: 1)
+
+  raise "expected two handles on eq_photo to compare equal" unless first == same
+  raise "expected different names to compare unequal" if first == other
+  raise "expected matching hash" unless first.name.hash == first.hash
+ensure
+  first.try(&.delete)
+  other.try(&.delete)
 end
 
 tk_test "Photo accepts an explicit name, and #to_s is that name" do |app|

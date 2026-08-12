@@ -115,16 +115,13 @@ module Teek
       io << "#<Teek::Widget " << @path << '>'
     end
 
-    def ==(other) : Bool
-      other.is_a?(Widget) ? @path == other.path : @path == other.to_s
+    # Two widgets are the same widget when they address the same Tk path.
+    # Comparing against anything else is a compile error - to test a path,
+    # say so: widget.path == ".entry".
+    def ==(other : Widget) : Bool
+      @path == other.path
     end
 
-    def eql?(other) : Bool
-      self == other
-    end
-
-    def hash(hasher)
-      @path.hash(hasher)
-    end
+    def_hash @path
   end
 end

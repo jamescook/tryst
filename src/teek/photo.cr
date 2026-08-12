@@ -490,12 +490,11 @@ module Teek
       io << "#<Teek::Photo " << @name << '>'
     end
 
+    # Two photos are the same image when they carry the same Tk image
+    # name. Comparing against anything else is a compile error - to test
+    # a name, say so: photo.name == "img1".
     def ==(other : Photo) : Bool
       @name == other.name
-    end
-
-    def ==(other) : Bool
-      @name == other.to_s
     end
 
     def_hash @name
