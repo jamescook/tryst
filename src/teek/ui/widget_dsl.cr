@@ -481,9 +481,7 @@ module Teek
       # option they need converting into TclArgValue by hand before they
       # can be stashed on node.opts.
       private def to_tclarg_int_array(values : Array(Int32)) : Array(TclArgValue)
-        arr = Array(TclArgValue).new
-        values.each { |value| arr << value }
-        arr
+        values.map(&.as(TclArgValue))
       end
 
       # @api private - the ONLY place @stack (the build-parent stack) is

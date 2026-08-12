@@ -348,8 +348,9 @@ module Teek
     def after_cancel(after_id : AfterHandle) : AfterHandle
       tcl_eval("after cancel #{after_id.tcl_id}")
       if cb_id = after_id.cb_id
+        # Cancelling the same handle twice is harmless: unregistering an
+        # id that is already gone is a no-op.
         unregister_callback(cb_id)
-        after_id.cb_id = nil
       end
       after_id
     end

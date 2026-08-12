@@ -1909,6 +1909,24 @@ tk_test "after_cancel prevents the callback" do |app|
   raise "callback fired despite cancel" if fired
 end
 
+# An AfterHandle is a value, so cancelling doesn't blank out the copy the
+# caller is holding. Releasing the same callback id twice has to be safe.
+tk_test "after_cancel is safe to call twice on the same handle" do |app|
+  fired = false
+  timer_id = app.after(50) { fired = true }
+  before = app.interp.callback_ids.size
+
+  app.after_cancel(timer_id)
+  released = app.interp.callback_ids.size
+  app.after_cancel(timer_id)
+
+  raise "expected the callback id to be released" unless released == before - 1
+  raise "second cancel changed the registry" unless app.interp.callback_ids.size == released
+
+  app.interp.wait_until(300.milliseconds) { false }
+  raise "callback fired despite cancel" if fired
+end
+
 tk_test "nested timers both fire" do |app|
   results = [] of String
 

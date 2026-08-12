@@ -327,7 +327,7 @@ module Teek
                                       option : String, view_command : String) : Nil
         shown = true
 
-        apply = Proc(String, String, Nil).new do |first, last|
+        apply = ->(first : String, last : String) do
           fits = first.to_f <= 0.0 && last.to_f >= 1.0
           if fits && shown
             @app.command(:grid, ([:remove, scrollbar_path] of TclArgValue), EMPTY_KWARGS)
@@ -341,7 +341,7 @@ module Teek
 
         # Tk appends the two fractions to -yscrollcommand/-xscrollcommand
         # when it calls it, so they arrive as the callback's own values.
-        relay = Proc(Array(String), CallbackSignal, Nil).new do |values, _signal|
+        relay = ->(values : Array(String), _signal : CallbackSignal) do
           first, last = values[0], values[1]
           @app.command(scrollbar_path, ([:set, first, last] of TclArgValue), EMPTY_KWARGS)
           apply.call(first, last)
