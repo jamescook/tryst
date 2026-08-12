@@ -14,10 +14,9 @@ require "../../support/widget_dsl_harness"
 # column/row/spacer/panel/button/label/checkbox/radio/text_box/list
 # (tabs/split/scrollable/component/canvas/overlay/menu/slider/...).
 
-# A type registered the way a shard outside this library would, saying it
-# can host a menu bar. Getting one into a build takes a declaration method
-# of its own: WidgetDSL's append_container is private, which in Crystal
-# still means reachable without a receiver from a type that includes it.
+# Types registered the way a shard outside this library would - declared
+# in a build through #widget, which is the only thing that makes
+# WidgetTypes.register usable from outside.
 Teek::UI::WidgetTypes.register(
   Teek::UI::WidgetType.new(
     type: :__test_menu_host__, tk_command: "toplevel",
@@ -25,11 +24,13 @@ Teek::UI::WidgetTypes.register(
   )
 )
 
-class MenuHostHarness < WidgetDslHarness
-  def menu_host(name : Symbol? = nil, **opts, & : MenuHostHarness -> Nil) : Teek::UI::Handle
-    append_container(:__test_menu_host__, name, to_opts_hash(opts)) { |dsl| yield dsl }
-  end
-end
+Teek::UI::WidgetTypes.register(
+  Teek::UI::WidgetType.new(type: :__test_gauge__, tk_command: "ttk::progressbar", bind_option: :variable)
+)
+
+Teek::UI::WidgetTypes.register(
+  Teek::UI::WidgetType.new(type: :__test_box__, tk_command: "ttk::frame", leaf: false)
+)
 
 describe Teek::UI::WidgetDSL do
   # Crystal has no Ruby-style #send-by-symbol, so each leaf method gets
@@ -229,6 +230,100 @@ describe Teek::UI::WidgetDSL do
     session.raw { |_app| executed = true }
 
     executed.should be_false
+  end
+
+  # #widget is what makes WidgetTypes.register a usable extension point:
+  # every built-in type has a hand-written method, so without this a shard
+  # could register a type and never declare one.
+  describe "#widget" do
+    it "declares a leaf of a type registered from outside this library" do
+      session = WidgetDslHarness.new
+
+      handle = session.widget(:__test_gauge__, :cpu, maximum: 100)
+
+      node = session.document.root.children.first
+      node.type.should eq(:__test_gauge__)
+      node.name.should eq(:cpu)
+      node.opts.should eq({:maximum => 100} of Symbol => Teek::TclArgValue)
+      handle.type.should eq(:__test_gauge__)
+    end
+
+    it "declares a container, nesting the children its block builds" do
+      session = WidgetDslHarness.new
+
+      session.widget(:__test_box__, :outer) do |box|
+        box.button(:go, text: "Go")
+        box.widget(:__test_gauge__, :inner)
+      end
+
+      node = session.document.root.children.first
+      node.children.map(&.type).should eq([:button, :__test_gauge__])
+    end
+
+    it "declares a childless container with no block" do
+      session = WidgetDslHarness.new
+
+      session.widget(:__test_box__, :empty)
+
+      node = session.document.root.children.first
+      node.type.should eq(:__test_box__)
+      node.children.should be_empty
+    end
+
+    it "routes bind: through the type's own bind_option" do
+      session = WidgetDslHarness.new
+      var = Teek::UI::Var.new("::teek_ui_widget_bind", 0)
+
+      session.widget(:__test_gauge__, :cpu, bind: var)
+
+      node = session.document.root.children.first
+      node.opts.should eq({:variable => var.name} of Symbol => Teek::TclArgValue)
+    end
+
+    it "honours the DSL intents that travel through opts" do
+      session = WidgetDslHarness.new
+
+      session.widget(:__test_box__, :outer, grow: true, gap: 6, lazy: true)
+
+      node = session.document.root.children.first
+      node.grow?.should be_true
+      node.gap.should eq(6)
+      node.lazy?.should be_true
+      node.opts.should be_empty
+    end
+
+    # A typo'd type would otherwise reach realize and fail there as "no Tk
+    # command mapped for node type :x", nowhere near the line at fault.
+    it "raises on a type nothing registered" do
+      session = WidgetDslHarness.new
+
+      expect_raises(ArgumentError, /no widget type :__never_registered__ is registered/) do
+        session.widget(:__never_registered__)
+      end
+    end
+
+    it "raises when a leaf type is given a block" do
+      session = WidgetDslHarness.new
+
+      expect_raises(ArgumentError, /leaf widget and takes no block/) do
+        session.widget(:__test_gauge__, :cpu) { |_dsl| }
+      end
+    end
+
+    it "raises when a container is given bind:" do
+      session = WidgetDslHarness.new
+
+      expect_raises(ArgumentError, /bind: only applies to a leaf widget/) do
+        session.widget(:__test_box__, :outer, bind: Teek::UI::Var.new("::teek_ui_widget_bad_bind", 0))
+      end
+    end
+
+    it "refuses to add to a build that has already realized" do
+      session = WidgetDslHarness.new
+      session.build_open = false
+
+      expect_raises(Teek::UI::ClosedBuilderError) { session.widget(:__test_gauge__) }
+    end
   end
 
   it "panel nests children declared in its block" do
@@ -566,9 +661,9 @@ describe Teek::UI::WidgetDSL do
   # from outside this library can answer it too - it isn't a list of
   # :root/:window that only this library can edit.
   it "menu_bar can be declared inside any type registered as a host" do
-    session = MenuHostHarness.new
+    session = WidgetDslHarness.new
 
-    session.menu_host(:dialog, &.menu_bar(:dmb, &.menu(label: "File")))
+    session.widget(:__test_menu_host__, :dialog, &.menu_bar(:dmb, &.menu(label: "File")))
 
     host_node = session.document.root.children.first
     host_node.children.map(&.type).should eq([:menu_bar])

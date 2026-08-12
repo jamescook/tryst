@@ -17,7 +17,28 @@ require "../../../src/teek/ui/realizer"
 # for Session, same as widget_dsl_spec.cr - a real Session works too,
 # but this keeps these specs headless), scoped to what create/link/
 # plain-pack-layout/flow-layout/grid-layout actually does.
+Teek::UI::WidgetTypes.register(
+  Teek::UI::WidgetType.new(type: :__test_realize_gauge__, tk_command: "ttk::progressbar")
+)
+
 describe Teek::UI::Realizer do
+  # Closes the loop a shard needs: register a type, declare one with
+  # ui.widget, and it reaches Tk through the generic create path like any
+  # built-in type.
+  it "realizes a type registered from outside this library" do
+    session = WidgetDslHarness.new
+    session.widget(:__test_realize_gauge__, :cpu, maximum: 100)
+
+    app = FakeApp.new
+    Teek::UI::Realizer.new(app, session.document).realize
+
+    create = app.calls.first
+    create.cmd.should eq("ttk::progressbar")
+    create.args.should eq([".cpu"] of Teek::TclArgValue)
+    create.kwargs.should eq({"maximum" => 100} of String => Teek::TclArgValue)
+    session.document.root.children.first.realized.try(&.path).should eq(".cpu")
+  end
+
   it "realizing a nested tree creates every widget at a hierarchical path" do
     session = WidgetDslHarness.new
     session.panel(:controls, &.button(:go, text: "Go"))

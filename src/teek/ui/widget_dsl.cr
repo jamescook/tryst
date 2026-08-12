@@ -346,6 +346,48 @@ module Teek
         nil
       end
 
+      # Declares a widget of any registered type, by type name. The way to
+      # use a type registered from outside this library - every type built
+      # in here has its own method above, which reads better and is worth
+      # preferring where one exists.
+      #
+      # Takes the same name:/bind:/**opts as those methods, and a leaf or
+      # a container depending on what the type registered itself as; pass
+      # a block for a container's children.
+      #
+      #     WidgetTypes.register(WidgetType.new(type: :gauge, tk_command: "ttk::progressbar"))
+      #     ui.widget(:gauge, :cpu, maximum: 100)
+      #
+      # A shard wanting ui.gauge(...) instead can define it: WidgetDSL is
+      # a module, so reopening it puts a method alongside the built-in
+      # ones, calling the same #widget.
+      def widget(type : Symbol, name : Symbol? = nil, bind : Var? = nil, **opts) : Handle
+        return append_leaf(type, name, to_opts_hash(opts), bind) if registered_type!(type).leaf?
+
+        if bind
+          raise ArgumentError.new("##{type} is a container, and bind: only applies to a leaf widget")
+        end
+        append_container(type, name, to_opts_hash(opts))
+      end
+
+      # ditto, for a container with children.
+      def widget(type : Symbol, name : Symbol? = nil, **opts, & : self -> Nil) : Handle
+        if registered_type!(type).leaf?
+          raise ArgumentError.new("##{type} is a leaf widget and takes no block")
+        end
+
+        append_container(type, name, to_opts_hash(opts)) { |dsl| yield dsl }
+      end
+
+      # #widget's own type lookup. A name nothing registered is caught
+      # here rather than at realize, where it surfaces as "no Tk command
+      # mapped for node type :x" a long way from the line that wrote it.
+      private def registered_type!(type : Symbol) : WidgetType
+        WidgetTypes.for_type(type) ||
+          raise ArgumentError.new("no widget type :#{type} is registered - register one with " \
+                                  "WidgetTypes.register before declaring it")
+      end
+
       # The current build-parent ancestry, as a readable breadcrumb (e.g.
       # "column > row") - derived from @stack, the one thing only the
       # builder (not the Document) knows: which containers are currently
