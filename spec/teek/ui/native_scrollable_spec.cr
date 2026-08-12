@@ -155,11 +155,13 @@ describe "a natively scrollable widget" do
   # Both DSL names are the same ttk::treeview, and the options that
   # distinguish them have to survive onto the real widget rather than
   # landing on the wrapper frame - a table whose -columns went to the
-  # frame would realize as an empty tree with no error to say why.
+  # frame would realize as an empty tree with no error to say why. That
+  # includes the -show #table defaults for itself, which has the whole
+  # wrapper path to get lost down before it reaches Tk.
   it "wraps a tree and a table the same way, options landing on the treeview" do
     session = WidgetDslHarness.new
     session.tree(:hierarchy)
-    session.table(:rows, show: :headings, columns: ["name", "size"])
+    session.table(:rows, columns: ["name", "size"])
 
     app = realize(session)
 

@@ -171,18 +171,42 @@ tk_test "an Array kwarg becomes a well-formed Tcl list, round-tripping via split
   raise "expected hazardous columns to round-trip" unless app.split_list(result2) == ["a } b", "c$d"]
 end
 
-# What lets ui.tree get away with passing no options at all (see
-# widget_types/tree.cr). If Tk's own default ever stopped showing the
-# hierarchy column, a bare ui.tree would quietly render as a headerless
-# table instead of failing.
-tk_test "a bare ttk::treeview shows its hierarchy column by default" do |app|
-  app.command("ttk::treeview", ".tv_show")
-  show = app.split_list(app.command(".tv_show", :cget, "-show"))
-  raise "expected the tree column shown by default, got #{show.inspect}" unless show.includes?("tree")
+# The two facts the tree/table DSL pair is built on (see
+# widget_types/tree.cr and WidgetDSL#table_opts): Tk shows the hierarchy
+# column unless told otherwise, which is why ui.tree passes no options at
+# all, and -show headings takes it away, which is why ui.table defaults
+# that option for itself. Asserted through `identify column` rather than
+# `cget -show` alone, so it's the rendered layout being pinned and not
+# just that the option was stored.
+tk_test "ttk::treeview keeps its hierarchy column until -show says otherwise" do |app|
+  app.show
+  app.command("ttk::treeview", ".tv_show", columns: ["name", "size"])
+  app.command("ttk::treeview", ".tv_show_headings", show: :headings, columns: ["name", "size"])
+  app.command(:pack, ".tv_show", ".tv_show_headings")
+  app.update
 
-  app.command("ttk::treeview", ".tv_show_headings", show: :headings)
-  headings = app.split_list(app.command(".tv_show_headings", :cget, "-show"))
-  raise "expected show: :headings to drop the tree column, got #{headings.inspect}" unless headings == ["headings"]
+  stored = app.split_list(app.command(".tv_show", :cget, "-show"))
+  raise "expected the tree column shown by default, got #{stored.inspect}" unless stored.includes?("tree")
+
+  # The leftmost column of the body: #0 is the hierarchy column, #1 the
+  # first of the declared ones.
+  leftmost = app.command(".tv_show", :identify, :column, 10, 40)
+  raise "expected the default layout to start with #0, got #{leftmost.inspect}" unless leftmost == "#0"
+
+  leftmost_headings = app.command(".tv_show_headings", :identify, :column, 10, 40)
+  unless leftmost_headings == "#1"
+    raise "expected show: :headings to put a declared column first, got #{leftmost_headings.inspect}"
+  end
+
+  # ...and it really is a wide column being reclaimed (200px, a third of
+  # the width this widget asks for), not a sliver - what makes the default
+  # actively wrong for a table rather than merely untidy.
+  unless app.command(".tv_show", :identify, :column, 120, 40) == "#0"
+    raise "expected #0 to be wide enough to crowd the declared columns"
+  end
+  if app.command(".tv_show_headings", :identify, :column, 120, 40) == "#0"
+    raise "expected the declared columns to start well left of that"
+  end
 end
 
 tk_test "create_widget auto-names sequential paths per type" do |app|

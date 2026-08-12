@@ -136,31 +136,47 @@ describe Teek::UI::WidgetDSL do
     root_child = session.document.root.children.first
 
     root_child.type.should eq(:table)
-    root_child.opts.should eq({:height => 6} of Symbol => Teek::TclArgValue)
+    root_child.opts.should eq({:height => 6, :show => :headings} of Symbol => Teek::TclArgValue)
     handle.should be_a(Teek::UI::Handle)
     handle.type.should eq(:table)
   end
 
   # :tree and :table are the same ttk::treeview, so which shape it takes
-  # is decided entirely by the options the caller passes - nothing about
-  # the mode is defaulted or enforced by the type. Both of these are real
-  # ttk::treeview options, so they travel as ordinary opts rather than
-  # being intercepted as DSL intents (see the reserved-option cases
-  # below); an Array value stays an Array, for App#command to encode as a
-  # Tcl list at realize.
-  it "table's mode-distinguishing options reach the node untouched" do
+  # is decided entirely by its options. columns: is a real ttk::treeview
+  # option, so it travels as an ordinary opt rather than being intercepted
+  # as a DSL intent (see the reserved-option cases below); an Array value
+  # stays an Array, for App#command to encode as a Tcl list at realize.
+  it "table's columns reach the node untouched" do
     session = WidgetDslHarness.new
-    session.table(:rows, show: :headings, columns: ["name", "size"])
+    session.table(:rows, columns: ["name", "size"])
 
-    session.document.root.children.first.opts.should eq({
-      :show    => :headings,
-      :columns => ["name", "size"] of Teek::TclArgValue,
-    } of Symbol => Teek::TclArgValue)
+    session.document.root.children.first.opts[:columns]?
+      .should eq(["name", "size"] of Teek::TclArgValue)
   end
 
-  # ...and a tree needs none of them: ttk::treeview's own -show default
-  # already displays the hierarchy column (pinned against real Tk in
-  # spec/support/tk_cases.cr).
+  # The one thing #table does that #tree doesn't. Tk's own -show default
+  # keeps the hierarchy column, which on a table is a wide permanently
+  # empty one crowding the fields to its right (Tk's side of this is
+  # pinned in spec/support/tk_cases.cr).
+  it "table defaults -show to headings alone" do
+    session = WidgetDslHarness.new
+    session.table(:rows, columns: ["name"])
+
+    session.document.root.children.first.opts[:show]?.should eq(:headings)
+  end
+
+  it "table's -show default gives way to an explicit show:" do
+    session = WidgetDslHarness.new
+    session.table(:rows, show: "tree headings")
+    session.table(:hidden, show: :tree)
+
+    rows, hidden = session.document.root.children
+    rows.opts[:show]?.should eq("tree headings")
+    hidden.opts[:show]?.should eq(:tree)
+  end
+
+  # ...where a tree needs no options at all: Tk's default already
+  # displays the hierarchy column, so #tree adds nothing of its own.
   it "tree passes no options of its own" do
     session = WidgetDslHarness.new
     session.tree(:hierarchy)

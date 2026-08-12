@@ -82,10 +82,25 @@ module Teek
       end
 
       # The same widget as #tree, for rows of fields rather than a
-      # hierarchy: name the fields with columns:, and pass show: :headings
-      # to drop the hierarchy column. Scrolls itself unless scroll: false.
+      # hierarchy: name the fields with columns:. Scrolls itself unless
+      # scroll: false.
       def table(name : Symbol? = nil, bind : Var? = nil, **opts) : Handle
-        append_leaf(:table, name, to_opts_hash(opts), bind)
+        append_leaf(:table, name, table_opts(opts), bind)
+      end
+
+      # #table's own opts, defaulting -show to headings alone. Tk's own
+      # default is "tree headings", which keeps the hierarchy column (#0)
+      # - and it's a WIDE column, so a table left on that default shows
+      # its fields crowded to the right of a permanently empty one.
+      # Dropping it is what makes the widget look like a table rather
+      # than a tree that happens to have fields.
+      #
+      # Only a default: pass show: explicitly to get anything else back,
+      # including Tk's own "tree headings".
+      private def table_opts(opts) : Hash(Symbol, TclArgValue)
+        hash = to_opts_hash(opts)
+        hash[:show] = :headings unless hash.has_key?(:show)
+        hash
       end
 
       def slider(name : Symbol? = nil, bind : Var? = nil, **opts) : Handle
