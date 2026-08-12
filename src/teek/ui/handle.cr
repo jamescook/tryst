@@ -7,6 +7,7 @@ require "./widget_types"
 require "./mouse_events"
 require "./keysyms"
 require "./canvas_item"
+require "./text_content"
 
 module Teek
   module UI
@@ -16,11 +17,9 @@ module Teek
     # filled in by the realizer, then the same Handle object drives the
     # real widget through it.
     #
-    # Only the subset needed for a basic interactive app is ported here -
-    # see this task's own bead for what's deferred: on_drag (CanvasItem's
-    # own on_drag/#draggable are deferred right alongside this one - see
-    # canvas_item.cr's own doc comment) and #text_content, which needs a
-    # TextContent class not built yet. The window lifecycle
+    # One method is deliberately absent: #on_drag, which CanvasItem's own
+    # on_drag/#draggable wait on too - see canvas_item.cr's own doc comment
+    # for why both are held back together. The window lifecycle
     # (show/hide/modal/grab_release/on_close) IS ported, alongside the
     # :window widget type it acts on; only its Screens/ModalStack
     # integration is still outstanding.
@@ -408,6 +407,20 @@ module Teek
       def tagged(tag : String | Symbol | Int32) : CanvasItem
         raise_unless_canvas!("tagged")
         CanvasItem.new(app, realized.path, tag)
+      end
+
+      # This widget's content API - insert/get/delete, named formats,
+      # markers, search, embedded images. See TextContent for the whole
+      # surface. Only valid on a ui.text_area handle.
+      #
+      # realized.path, so a text_area wrapped in its own scrollbar hands
+      # back the text widget rather than the wrapper frame around it.
+      def text_content : TextContent
+        unless type == :text_area
+          raise ArgumentError.new("#text_content only makes sense on a text_area (got a :#{type})")
+        end
+
+        TextContent.new(app, realized.path)
       end
 
       private def realized : RealizedNode

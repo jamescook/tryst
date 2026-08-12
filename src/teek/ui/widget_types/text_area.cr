@@ -9,8 +9,8 @@ module Teek
     #
     # No bind_option: a text widget has no -textvariable, so its content
     # can't be tied to a Var the way a one-line text_box's can. Reading and
-    # writing the content is its own API, not ported yet - see handle.cr's
-    # own doc comment.
+    # writing the content is its own API instead - Handle#text_content,
+    # see TextContent.
     WidgetTypes.register(
       WidgetType.new(type: :text_area, tk_command: "text", natively_scrollable: true)
     )
