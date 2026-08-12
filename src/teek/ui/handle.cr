@@ -224,41 +224,33 @@ module Teek
       end
 
       # Fires on a right click, however the platform spells it (Button-3
-      # on Linux/Windows, Button-2 or Control-Button-1 on macOS). Either
-      # handle it yourself with a block, or hand it a :menu/:context_menu
-      # handle to pop up at the click's screen position - not both.
-      # Raises ArgumentError if given both a menu and a block, or if menu
-      # isn't a menu handle.
-      def on_right_click(menu : Handle? = nil, &block : Array(String), CallbackSignal -> Nil) : Handle
-        if menu
-          raise ArgumentError.new("on_right_click takes either a menu handle or a block, not both")
-        end
-
+      # on Linux/Windows, Button-2 or Control-Button-1 on macOS). Handle
+      # it yourself with a block, or use the overload below to pop up a
+      # menu instead.
+      def on_right_click(&block : Array(String), CallbackSignal -> Nil) : Handle
         MouseEvents::RIGHT_CLICK_EVENTS.each { |event| bind_event(event, block) }
         self
       end
 
-      # Raises ArgumentError if given neither a menu nor a block, or menu
-      # isn't a menu handle.
-      def on_right_click(menu : Handle? = nil) : Handle
-        if menu
-          unless MouseEvents::MENU_HANDLE_TYPES.includes?(menu.type)
-            raise ArgumentError.new("on_right_click(menu) needs a :menu or :context_menu handle (got a :#{menu.type})")
-          end
-
-          # menu.path is read lazily, inside the handler (not here) - a
-          # forward-referenced menu (declared later in the same build
-          # block) isn't realized yet at on_right_click's own call time,
-          # only by the time a real click actually fires.
-          popup = Proc(Array(String), CallbackSignal, Nil).new do |args, _signal|
-            app_ref = realized.app || raise NotRealizedError.new
-            app_ref.popup_menu(menu.path, args[0].to_i, args[1].to_i)
-            nil
-          end
-          MouseEvents::RIGHT_CLICK_EVENTS.each { |event| bind_event(event, popup, subs: [:root_x, :root_y] of Symbol | String) }
-        else
-          raise ArgumentError.new("on_right_click needs either a menu handle or a block")
+      # Pops menu up at the click's screen position. Raises ArgumentError
+      # unless menu is a :menu or :context_menu handle - a Handle's node
+      # type isn't part of its static type, so that one stays a runtime
+      # check.
+      def on_right_click(menu : Handle) : Handle
+        unless MouseEvents::MENU_HANDLE_TYPES.includes?(menu.type)
+          raise ArgumentError.new("on_right_click(menu) needs a :menu or :context_menu handle (got a :#{menu.type})")
         end
+
+        # menu.path is read lazily, inside the handler (not here) - a
+        # forward-referenced menu (declared later in the same build
+        # block) isn't realized yet at on_right_click's own call time,
+        # only by the time a real click actually fires.
+        popup = Proc(Array(String), CallbackSignal, Nil).new do |args, _signal|
+          app_ref = realized.app || raise NotRealizedError.new
+          app_ref.popup_menu(menu.path, args[0].to_i, args[1].to_i)
+          nil
+        end
+        MouseEvents::RIGHT_CLICK_EVENTS.each { |event| bind_event(event, popup, subs: [:root_x, :root_y] of Symbol | String) }
         self
       end
 

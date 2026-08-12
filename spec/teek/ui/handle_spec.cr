@@ -308,21 +308,6 @@ describe Teek::UI::Handle do
     expect_raises(ArgumentError, /menu/i) { handle.on_right_click(not_a_menu) }
   end
 
-  it "on_right_click with neither a menu nor a block raises" do
-    node = Teek::UI::Node.new(type: :canvas, name: :board)
-    handle = Teek::UI::Handle.new(node)
-
-    expect_raises(ArgumentError) { handle.on_right_click }
-  end
-
-  it "on_right_click with both a menu and a block raises" do
-    node = Teek::UI::Node.new(type: :canvas, name: :board)
-    handle = Teek::UI::Handle.new(node)
-    menu_handle = Teek::UI::Handle.new(Teek::UI::Node.new(type: :menu, name: :m))
-
-    expect_raises(ArgumentError, /either/i) { handle.on_right_click(menu_handle) { |_v, _s| } }
-  end
-
   it "destroy!(defer: false) tears down synchronously and unlinks the node" do
     app = FakeApp.new
     document = Teek::UI::Document.new

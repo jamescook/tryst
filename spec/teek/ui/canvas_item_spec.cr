@@ -207,21 +207,6 @@ describe Teek::UI::CanvasItem do
     app.popups.last.y.should eq(456)
   end
 
-  it "on_right_click with both a menu and a block raises" do
-    app = FakeApp.new
-    item = Teek::UI::CanvasItem.new(app, ".board", "I1")
-    menu_handle = Teek::UI::Handle.new(Teek::UI::Node.new(type: :context_menu, name: :ctx))
-
-    expect_raises(ArgumentError, /menu/i) { item.on_right_click(menu_handle) { |_args, _signal| } }
-  end
-
-  it "on_right_click with neither a menu nor a block raises" do
-    app = FakeApp.new
-    item = Teek::UI::CanvasItem.new(app, ".board", "I1")
-
-    expect_raises(ArgumentError, /menu/i) { item.on_right_click }
-  end
-
   it "on_right_click given a non-menu handle raises" do
     app = FakeApp.new
     item = Teek::UI::CanvasItem.new(app, ".board", "I1")

@@ -166,34 +166,27 @@ module Teek
       end
 
       # Fires on a right click, however the platform spells it (see
-      # MouseEvents::RIGHT_CLICK_EVENTS). Either handle it yourself with
-      # a block, or hand it a :menu/:context_menu handle to pop up at
-      # the click's screen position - not both.
-      def on_right_click(menu : Handle? = nil, &block : Array(String), CallbackSignal -> Nil) : self
-        if menu
-          raise ArgumentError.new("on_right_click takes either a menu handle or a block, not both")
-        end
-
+      # MouseEvents::RIGHT_CLICK_EVENTS). Handle it yourself with a
+      # block, or use the overload below to pop up a menu instead.
+      def on_right_click(&block : Array(String), CallbackSignal -> Nil) : self
         MouseEvents::RIGHT_CLICK_EVENTS.each { |event| bind_item_event(event, block) }
         self
       end
 
-      # Raises ArgumentError if given neither a menu nor a block, or
-      # menu isn't a menu handle.
-      def on_right_click(menu : Handle? = nil) : self
-        if menu
-          unless MouseEvents::MENU_HANDLE_TYPES.includes?(menu.type)
-            raise ArgumentError.new("on_right_click(menu) needs a :menu or :context_menu handle (got a :#{menu.type})")
-          end
-
-          popup = Proc(Array(String), CallbackSignal, Nil).new do |args, _signal|
-            @app.popup_menu(menu.path, args[0].to_i, args[1].to_i)
-            nil
-          end
-          MouseEvents::RIGHT_CLICK_EVENTS.each { |event| bind_item_event(event, popup, subs: [:root_x, :root_y] of Symbol) }
-        else
-          raise ArgumentError.new("on_right_click needs either a menu handle or a block")
+      # Pops menu up at the click's screen position. Raises ArgumentError
+      # unless menu is a :menu or :context_menu handle - a Handle's node
+      # type isn't part of its static type, so that one stays a runtime
+      # check.
+      def on_right_click(menu : Handle) : self
+        unless MouseEvents::MENU_HANDLE_TYPES.includes?(menu.type)
+          raise ArgumentError.new("on_right_click(menu) needs a :menu or :context_menu handle (got a :#{menu.type})")
         end
+
+        popup = Proc(Array(String), CallbackSignal, Nil).new do |args, _signal|
+          @app.popup_menu(menu.path, args[0].to_i, args[1].to_i)
+          nil
+        end
+        MouseEvents::RIGHT_CLICK_EVENTS.each { |event| bind_item_event(event, popup, subs: [:root_x, :root_y] of Symbol) }
         self
       end
 
