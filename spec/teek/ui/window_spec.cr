@@ -11,6 +11,19 @@ require "../../../src/teek/ui/realizer"
 #
 # Mirrors ruby-teek's teek-ui/test/test_window.rb, minus its screens/
 # modal-stack cases (Phase E, not ported).
+
+# A FakeApp standing in for a parent that has no -menu option at all -
+# what a window declared inside a frame gets, since -menu belongs to
+# toplevels. Real Tk answers `cget -menu` there with a TclError rather
+# than an empty string, and plain FakeApp can only ever hand back a
+# String, so staging it needs this one override.
+class MenulessParentFakeApp < FakeApp
+  def command(cmd, args : Array(Teek::TclArgValue), kwargs : Hash(String, Teek::TclArgValue)) : String
+    raise Teek::TclError.new(%q(unknown option "-menu")) if args.first? == :cget
+    super
+  end
+end
+
 describe "the :window widget type" do
   it "window appends a :window node carrying its options" do
     session = WidgetDslHarness.new
@@ -207,5 +220,73 @@ describe "the :window widget type" do
 
     window_node = session.document.root.children.first
     window_node.children.map(&.type).should eq([:menu_bar])
+  end
+
+  # -- the macOS shared menu bar --
+  #
+  # Only the CALL SITE is gated on the platform, so the branch's body is
+  # reachable from any machine by calling it directly - which is the whole
+  # reason these three run everywhere rather than being darwin_only cases
+  # that report pending in CI. It also swallows TclError by design, so
+  # without them a mistake in it would be invisible on the one platform
+  # that runs it.
+  it "share_macos_menu points the window at its parent's menu bar" do
+    app = FakeApp.new
+    app.command_result = ".app_menu"
+
+    Teek::UI::WindowRealize.share_macos_menu(app, ".tools", ".")
+
+    read, write = app.calls
+    read.cmd.should eq(".")
+    read.args.should eq([:cget, "-menu"] of Teek::TclArgValue)
+
+    write.cmd.should eq(".tools")
+    write.args.should eq([:configure] of Teek::TclArgValue)
+    write.kwargs["menu"].should eq(".app_menu")
+  end
+
+  # An empty answer means the parent has no menu bar of its own, so there
+  # is nothing to share - configuring -menu to "" would be a pointless
+  # call, and on a window that DID inherit one already, a destructive one.
+  it "share_macos_menu leaves the window alone when the parent has no menu" do
+    app = FakeApp.new
+    app.command_result = ""
+
+    Teek::UI::WindowRealize.share_macos_menu(app, ".tools", ".")
+
+    app.calls.size.should eq(1)
+    app.calls.first.args.should eq([:cget, "-menu"] of Teek::TclArgValue)
+  end
+
+  # -menu only exists on a toplevel, so a window declared inside a frame
+  # asks a parent that has no such option - a TclError, not an empty
+  # string. Sharing a menu bar is cosmetic; it must not take the window's
+  # whole realize down with it.
+  it "share_macos_menu survives a parent with no -menu option at all" do
+    app = MenulessParentFakeApp.new
+
+    Teek::UI::WindowRealize.share_macos_menu(app, ".panel.tools", ".panel")
+
+    app.calls.should be_empty
+  end
+
+  # The gate itself, as a per-platform expectation rather than a case that
+  # only runs on a Mac: whichever machine runs this asserts its own half of
+  # `if Teek.platform.darwin?` - that the sharing happens there, or that it
+  # stays entirely out of the way.
+  it "shares the parent's menu bar at realize only on macOS" do
+    session = WidgetDslHarness.new
+    session.window(:tools)
+
+    app = FakeApp.new
+    app.command_result = ".app_menu"
+    Teek::UI::Realizer.new(app, session.document).realize
+
+    shared = app.calls.select { |call| call.cmd == ".tools" && call.kwargs.has_key?("menu") }
+    if Teek.platform.darwin?
+      shared.map(&.kwargs.["menu"]).should eq([".app_menu"] of Teek::TclArgValue)
+    else
+      shared.should be_empty
+    end
   end
 end

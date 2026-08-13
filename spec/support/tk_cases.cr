@@ -3634,3 +3634,45 @@ tk_test "WidgetDSL#on_key binds a real app-wide keystroke to the root window" do
   app.interp.simulate_event(".", "<F2>")
   raise "expected the F2 binding to fire, fired=#{fired}" unless app.interp.wait_until { fired > 0 }
 end
+
+# The half no headless test can reach: that every spelling in
+# MouseEvents::RIGHT_CLICK_EVENTS is a pattern real Tk both ACCEPTS in
+# `bind` and DELIVERS. A FakeApp only records whatever string it was
+# handed, so a mistyped <Contol-Button-1> goes green there and then
+# silently never fires for a macOS user.
+#
+# Deliberately NOT darwin_only: it loops over whichever spellings this
+# platform actually binds, so it exercises the two macOS-only gestures for
+# real when the suite runs on a Mac, and <Button-3> alone under Xvfb -
+# rather than reporting pending and checking nothing.
+tk_test "every right-click spelling this platform binds is one real Tk delivers" do |app|
+  session = WidgetDslHarness.new
+  seen = [] of String
+  session.canvas(:board, width: 80, height: 80).on_right_click(:x, :y) do |args, _signal|
+    seen << args.join(",")
+  end
+
+  Teek::UI::Realizer.new(app, session.document).realize
+  app.show
+  app.update
+
+  patterns = Teek::UI::MouseEvents::RIGHT_CLICK_EVENTS
+  # `bind <window>` with no pattern reports every sequence bound on it, so
+  # Tk itself confirms it parsed each pattern rather than us re-reading our
+  # own list back.
+  bound = app.split_list(app.command(:bind, ".board"))
+  patterns.each do |pattern|
+    raise "expected #{pattern} bound on .board, got #{bound.inspect}" unless bound.includes?(pattern)
+  end
+
+  patterns.each_with_index do |pattern, index|
+    x, y = 11 + index, 22 + index
+    app.interp.simulate_event(".board", pattern, x: x, y: y)
+    unless app.interp.wait_until { seen.size == index + 1 }
+      raise "expected #{pattern} to fire the right-click handler, fired #{seen.size} of #{index + 1}"
+    end
+    # Every spelling carries the SAME substitutions, so a handler reads its
+    # coordinates identically whichever gesture arrived.
+    raise "expected #{pattern} to carry x/y, got #{seen.last.inspect}" unless seen.last == "#{x},#{y}"
+  end
+end

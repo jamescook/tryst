@@ -13,11 +13,20 @@ require "../../src/teek/ui"
 # actually lands is not a stable thing to assert on.
 #
 # Includes the ui.window-hosted menu bar case that menu_fixture.cr had to
-# skip while :window was unported.
+# skip while :window was unported, and the macOS shared-menu-bar quirk
+# (Case 6a) - asserted as a per-platform expectation rather than skipped
+# off macOS, so both halves of WindowRealize's `if Teek.platform.darwin?`
+# are checked by whichever machine runs this.
 
 handles = {} of Symbol => Teek::UI::Handle
 
 session = Teek::UI.app(title: "ui window fixture") do |builder|
+  # Declared first so it's attached to the root before any window's
+  # post_create asks the root what its menu is (Case 6a).
+  builder.menu_bar(:app_menu) do |menu_bar|
+    menu_bar.menu(:app_file, label: "AppFile", &.item(label: "Quit") { |_v, _s| })
+  end
+
   builder.label(:main_label, text: "Main")
 
   handles[:tools] = builder.window(:tools, title: "Tools",
@@ -29,6 +38,17 @@ session = Teek::UI.app(title: "ui window fixture") do |builder|
   end
 
   handles[:free] = builder.window(:free, title: "Free", transient: false)
+
+  # No menu bar of its own - the case macOS's single app-wide menu bar
+  # forces, where a new window with nothing declared would otherwise fall
+  # back to Tk's default "wish" menu.
+  handles[:plain] = builder.window(:plain, title: "Plain")
+
+  # A window whose PARENT is a frame, so the menu it would inherit on
+  # macOS doesn't exist to ask for: -menu is a toplevel option, and real Tk
+  # answers `cget -menu` on a frame with an error. Sharing a menu bar is
+  # cosmetic and must not take the window down with it (Case 6b).
+  builder.panel(:host) { |panel| handles[:nested] = panel.window(:nested, title: "Nested") }
 end
 
 app = session.realize
@@ -79,9 +99,37 @@ unless tools_menu == ".tools.tools_menu"
 end
 entry = app.command(tools_menu, :entrycget, 0, "-label")
 raise "window: expected a File cascade, got #{entry.inspect}" unless entry == "File"
-# The root keeps its own (absent) menu - the window's didn't leak up.
+# The root keeps its OWN menu - the window's didn't leak up, and the
+# window's own bar won over the one macOS shares down into it.
 root_menu = app.command(".", :cget, "-menu")
-raise "window: expected the root menu untouched, got #{root_menu.inspect}" unless root_menu.empty?
+raise "window: expected the root to keep .app_menu, got #{root_menu.inspect}" unless root_menu == ".app_menu"
+
+# Case 6a: macOS has a single app-wide menu bar, so a window that declares
+# none of its own is pointed at its parent's; every other platform gives
+# each window its own menu bar and must be left alone. Both are asserted
+# here, one per platform, because the branch only exists on one of them.
+plain_menu = app.command(".plain", :cget, "-menu")
+if Teek.platform.darwin?
+  unless plain_menu == ".app_menu"
+    raise "window: expected .plain to share the root's menu on macOS, got #{plain_menu.inspect}"
+  end
+else
+  unless plain_menu.empty?
+    raise "window: expected .plain to keep its own (absent) menu off macOS, got #{plain_menu.inspect}"
+  end
+end
+
+# Case 6b: the window under a frame realized anyway. On macOS this is the
+# rescue path doing its job - the parent has no -menu to read, which real
+# Tk reports as an error, and a cosmetic menu-bar tweak must not cost the
+# window its whole realize.
+nested = handles[:nested]
+raise "window: expected .host.nested to exist" unless app.winfo.exists?(".host.nested")
+nested_class = app.command(:winfo, :class, ".host.nested")
+raise "window: expected a nested Toplevel, got #{nested_class}" unless nested_class == "Toplevel"
+raise "window: expected the nested window's path, got #{nested.path}" unless nested.path == ".host.nested"
+nested_state = app.command(:wm, :state, ".host.nested")
+raise "window: expected .host.nested withdrawn, got #{nested_state}" unless nested_state == "withdrawn"
 
 # Case 7: #show maps it, #hide puts it back.
 tools.show

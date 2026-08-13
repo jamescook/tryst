@@ -18,7 +18,19 @@ module Teek
       # distinct button of its own) - binding them unconditionally there
       # would silently fire a "right click" handler on gestures users
       # never intended as one.
-      RIGHT_CLICK_EVENTS = Teek.platform.darwin? ? ["<Button-2>", "<Button-3>", "<Control-Button-1>"] : ["<Button-3>"]
+      #
+      # A function of the platform rather than of THIS platform, so that
+      # both answers stay reachable wherever the suite runs: the macOS
+      # spelling is checkable from a Linux CI machine and vice versa.
+      # Written as a ternary directly on Teek.platform.darwin?, half of it
+      # would be unexecutable code on either machine - which is how a
+      # dropped <Button-3> or a mistyped <Control-Button-1> gets shipped.
+      def self.right_click_events(darwin : Bool) : Array(String)
+        darwin ? ["<Button-2>", "<Button-3>", "<Control-Button-1>"] : ["<Button-3>"]
+      end
+
+      # The spellings for the platform this build is running on.
+      RIGHT_CLICK_EVENTS = right_click_events(Teek.platform.darwin?)
 
       # Handle types on_right_click(menu) accepts to pop up.
       MENU_HANDLE_TYPES = [:menu, :context_menu]
