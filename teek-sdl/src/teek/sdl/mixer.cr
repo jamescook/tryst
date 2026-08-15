@@ -1,35 +1,246 @@
-require "./lib_sdl"
+require "./bindings/mixer"
 require "./version"
+require "./audio_spec"
 
 module Teek
   module SDL
-    # SDL3_mixer. Only lifecycle and version so far - sound effects,
-    # music and WAV capture land on top of this.
+    # An SDL3_mixer mixer: the thing audio is loaded into and played
+    # through. Two kinds, and the difference matters:
     #
-    # Note for anyone arriving from ruby-teek's teek-sdl2: SDL3_mixer is
-    # a redesign rather than a rename. SDL2_mixer's Mix_Chunk, numbered
-    # channels and a separate Mix_Music become one audio type plus
-    # explicit tracks (MIX_CreateMixer / MIX_LoadAudio / MIX_CreateTrack),
-    # so the channel-oriented surface does not carry across call for call.
-    module Mixer
-      # The SDL3_mixer actually loaded into this process. Safe before
-      # `init`, unlike everything else here.
+    # - `Mixer.new` opens an audio device and mixes in real time on SDL's
+    #   own audio thread. What an application wants.
+    # - `Mixer.buffered` has no device at all and produces audio only
+    #   when `#generate` asks, as fast as it is asked. What a test wants:
+    #   no hardware, no waiting, and the mixed samples in hand.
+    #
+    # SDL2_mixer had one implicit global mixer and a fixed pool of
+    # numbered channels. Neither survives here: a mixer is an object you
+    # make and own, and `Track` replaces the numbered channels.
+    class Mixer
+      # --- The library, as opposed to any one mixer ---------------------
+
+      # The SDL3_mixer actually loaded into this process. Safe to call
+      # before `init`, unlike everything else here.
       def self.version : Version
         Version.from_versionnum(LibSDLMixer.version)
       end
 
       # Reference counted: repeated calls succeed and each needs its own
-      # `quit`. Requires SDL's audio subsystem to be up first.
+      # `quit`. Every mixer takes a reference in its constructor and
+      # drops it in `#destroy`, so calling these directly is only needed
+      # to load the decoders before there is any mixer to load them for.
       def self.init : Nil
         return if LibSDLMixer.init
         raise Error.new("MIX_Init failed: #{SDL.last_error}")
       end
 
-      # Drops one reference; the library only really shuts down when the
-      # count reaches zero, at which point it destroys every mixer,
-      # track and audio object it handed out.
       def self.quit : Nil
         LibSDLMixer.quit
+      end
+
+      # The decoders this build has, e.g. WAV, MP3, OGG. Decided during
+      # `init`, so the library has to be up for this to answer usefully.
+      def self.decoders : Array(String)
+        Array(String).new(LibSDLMixer.get_num_audio_decoders) do |index|
+          String.new(LibSDLMixer.get_audio_decoder(index))
+        end
+      end
+
+      # --- The default ---------------------------------------------------
+
+      # The mixer used by any constructor not given one. Read it and it
+      # opens a device on first use, so `Sound.new("click.wav").play`
+      # works with no setup; assign it and that choice is yours:
+      #
+      # ```
+      # Teek::SDL::Mixer.default = Teek::SDL::Mixer.new(spec)
+      # Teek::SDL::Mixer.default = Teek::SDL::Mixer.buffered # tests
+      # ```
+      #
+      # It is a default, not a manager. Nothing here destroys it, closes
+      # it or swaps it behind your back, and every constructor that
+      # consults it takes a Mixer parameter to bypass it entirely.
+      #
+      # Main thread only, which is SDL's constraint rather than this
+      # shard's: MIX_CreateMixerDevice must be called there.
+      @@default : Mixer? = nil
+
+      def self.default : Mixer
+        @@default ||= new
+      end
+
+      # Nilable so it can be put back to "nothing yet", which is what a
+      # test needs to leave the next one a clean slate.
+      def self.default=(mixer : Mixer?) : Mixer?
+        @@default = mixer
+      end
+
+      # --- Mixers -------------------------------------------------------
+
+      # A mixer with no device behind it, producing audio only when
+      # `#generate` asks. The readable spelling of `new(spec,
+      # buffered: true)`.
+      def self.buffered(spec : AudioSpec = AudioSpec.new) : Mixer
+        new(spec, buffered: true)
+      end
+
+      @ptr : LibSDLMixer::Mixer*
+
+      # True for a mixer with no audio device - the only kind `#generate`
+      # works on.
+      getter? buffered : Bool
+      getter? destroyed : Bool = false
+
+      # @api private - the AudioCapture currently tapping this mixer, if
+      # any. SDL allows one post-mix callback per mixer, so this is what
+      # lets a second capture say so instead of silently unhooking the
+      # first and leaving it writing to a file nothing feeds.
+      property active_capture : AudioCapture? = nil
+
+      # Opens an audio device and mixes on SDL's audio thread. A nil spec
+      # lets the device choose; the mixer converts everything to whatever
+      # it settled on either way, so naming one only saves conversion
+      # work.
+      #
+      # `buffered: true` builds the device-less kind instead, where the
+      # spec is what the mixer produces rather than a request.
+      def initialize(spec : AudioSpec? = nil, buffered : Bool = false)
+        Mixer.init
+        @buffered = buffered
+
+        ptr =
+          if buffered
+            raw = (spec || AudioSpec.new).to_unsafe
+            LibSDLMixer.create_mixer(pointerof(raw))
+          elsif spec
+            raw = spec.to_unsafe
+            LibSDLMixer.create_mixer_device(LibSDL::AUDIO_DEVICE_DEFAULT_PLAYBACK, pointerof(raw))
+          else
+            LibSDLMixer.create_mixer_device(LibSDL::AUDIO_DEVICE_DEFAULT_PLAYBACK, nil)
+          end
+
+        if ptr.null?
+          # Hand back the library reference taken above, so a failed
+          # constructor leaves the refcount where it found it.
+          Mixer.quit
+          call = buffered ? "MIX_CreateMixer" : "MIX_CreateMixerDevice"
+          raise Error.new("#{call} failed: #{SDL.last_error}")
+        end
+        @ptr = ptr
+      end
+
+      # @api private - lets a Mixer be passed straight to a MIX_ call.
+      def to_unsafe : LibSDLMixer::Mixer*
+        check_open
+        @ptr
+      end
+
+      # The format this mixer settled on, which for a device mixer is the
+      # device's choice and not necessarily what was asked for.
+      # `#generate` produces bytes in this format.
+      def format : AudioSpec
+        check_open
+        spec = LibSDL::AudioSpec.new
+        unless LibSDLMixer.get_mixer_format(@ptr, pointerof(spec))
+          raise Error.new("MIX_GetMixerFormat failed: #{SDL.last_error}")
+        end
+        AudioSpec.from_unsafe(spec)
+      end
+
+      # Master gain over everything this mixer plays: 1.0 unchanged, 0.0
+      # silent, above 1.0 amplifies. SDL2_mixer's 0-128 integer volume
+      # has no equivalent here and is deliberately not emulated.
+      def gain : Float32
+        check_open
+        LibSDLMixer.get_mixer_gain(@ptr)
+      end
+
+      def gain=(value : Float32 | Float64) : Float32
+        check_open
+        gain = value.to_f32
+        unless LibSDLMixer.set_mixer_gain(@ptr, gain)
+          raise Error.new("MIX_SetMixerGain(#{gain}) failed: #{SDL.last_error}")
+        end
+        gain
+      end
+
+      # Mixes into `into` and reports how many bytes of it are REAL
+      # audio. The whole buffer is always written; anything past the
+      # return value is silence appended because every track ran out,
+      # which is how a test tells "it played" from "it didn't".
+      #
+      # Buffered mixers only - a device mixer generates on its own audio
+      # thread whenever the device asks, and MIX_Generate refuses it.
+      def generate(into : Bytes) : Int32
+        check_open
+        unless @buffered
+          raise Error.new("#generate needs a Mixer.buffered - a device mixer " \
+                          "generates on its own audio thread")
+        end
+        frame = format.frame_size
+        unless (into.size % frame).zero?
+          raise ArgumentError.new("buffer size #{into.size} is not a multiple of the " \
+                                  "#{frame}-byte sample frame")
+        end
+        mixed = LibSDLMixer.generate(@ptr, into.to_unsafe.as(Void*), into.size)
+        raise Error.new("MIX_Generate failed: #{SDL.last_error}") if mixed < 0
+        mixed.to_i32
+      end
+
+      # Mixes `frames` sample frames and hands back the whole buffer,
+      # trailing silence included.
+      def generate(frames : Int32) : Bytes
+        buffer = Bytes.new(frames * format.frame_size)
+        generate(buffer)
+        buffer
+      end
+
+      # Halts every track on this mixer, optionally fading out first.
+      def stop_all(fade_ms : Int32 = 0) : Nil
+        check_open
+        unless LibSDLMixer.stop_all_tracks(@ptr, fade_ms.to_i64)
+          raise Error.new("MIX_StopAllTracks failed: #{SDL.last_error}")
+        end
+      end
+
+      def pause_all : Nil
+        check_open
+        raise Error.new("MIX_PauseAllTracks failed: #{SDL.last_error}") unless LibSDLMixer.pause_all_tracks(@ptr)
+      end
+
+      def resume_all : Nil
+        check_open
+        raise Error.new("MIX_ResumeAllTracks failed: #{SDL.last_error}") unless LibSDLMixer.resume_all_tracks(@ptr)
+      end
+
+      # Stops the mixer running for the duration of the block, so its
+      # state can be changed without racing the audio thread. Nestable.
+      def lock(&)
+        check_open
+        LibSDLMixer.lock_mixer(@ptr)
+        begin
+          yield
+        ensure
+          LibSDLMixer.unlock_mixer(@ptr)
+        end
+      end
+
+      # Frees the mixer and drops this object's reference on the library.
+      # SDL destroys every track and every loaded audio attached to it at
+      # the same time, so anything still holding those must not use them
+      # afterwards.
+      def destroy : Nil
+        return if @destroyed
+        # Before the mixer goes, so the WAV gets its real length written
+        # into the header rather than the zeros reserved at the start.
+        active_capture.try(&.stop)
+        @destroyed = true
+        LibSDLMixer.destroy_mixer(@ptr)
+        Mixer.quit
+      end
+
+      private def check_open : Nil
+        raise Error.new("this Mixer has been destroyed") if @destroyed
       end
     end
   end
