@@ -63,6 +63,21 @@ lib LibSDLMixer
   fun track_ms_to_frames = MIX_TrackMSToFrames(track : Track*, ms : Int64) : Int64
   fun track_frames_to_ms = MIX_TrackFramesToMS(track : Track*, frames : Int64) : Int64
 
+  # Where the track is in its input. Needs a seekable input, so not for a
+  # track fed by an audio stream. -1 from the getter means error.
+  fun set_track_playback_position = MIX_SetTrackPlaybackPosition(track : Track*, frames : Int64) : Bool
+  fun get_track_playback_position = MIX_GetTrackPlaybackPosition(track : Track*) : Int64
+
+  # How much input is left, ignoring fades and looping. -1 when the
+  # duration is not known; 0 for a stopped track.
+  fun get_track_remaining = MIX_GetTrackRemaining(track : Track*) : Int64
+
+  # Loops still PENDING, not the number originally asked for: 0 when the
+  # current pass is the last, -1 when looping forever. The setter
+  # replaces whatever remained.
+  fun get_track_loops = MIX_GetTrackLoops(track : Track*) : LibC::Int
+  fun set_track_loops = MIX_SetTrackLoops(track : Track*, num_loops : LibC::Int) : Bool
+
   # Tags are arbitrary strings - "ui", "sfx", "ambient" - and a track may
   # carry any number. They are how a whole category of sound is acted on
   # in one call.

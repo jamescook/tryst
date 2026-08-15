@@ -149,6 +149,69 @@ module Teek
         gain
       end
 
+      # How far into its input the track has played, or nil when the
+      # input cannot say. A playing track's answer moves; a stopped or
+      # paused one reports where it halted.
+      #
+      # This is the playback position, not a position in space - see
+      # `#position_3d` for that.
+      def position_ms : Int64?
+        check_open
+        frames = LibSDLMixer.get_track_playback_position(@ptr)
+        return if frames < 0
+        LibSDLMixer.track_frames_to_ms(@ptr, frames)
+      end
+
+      # Seeks. Legal on a stopped track, though `#play` resets the start
+      # position anyway; a paused track resumes from the new spot.
+      #
+      # Needs an input that can seek, so not one fed by an audio stream,
+      # and some decoders can only land near the requested spot rather
+      # than exactly on it.
+      def position_ms=(ms : Int) : Int
+        check_open
+        frames = LibSDLMixer.track_ms_to_frames(@ptr, ms.to_i64)
+        if frames < 0
+          raise Error.new("cannot seek a track with no audio assigned yet")
+        end
+        unless LibSDLMixer.set_track_playback_position(@ptr, frames)
+          raise Error.new("MIX_SetTrackPlaybackPosition(#{ms}ms) failed: #{SDL.last_error}")
+        end
+        ms
+      end
+
+      # How much input is left to mix, or nil when the duration is not
+      # known. Zero for a stopped track.
+      #
+      # Counts the input only: a track looping forever still reports the
+      # remainder of its current pass, and a fade-out in progress does
+      # not shorten it.
+      def remaining_ms : Int64?
+        check_open
+        frames = LibSDLMixer.get_track_remaining(@ptr)
+        return if frames < 0
+        LibSDLMixer.track_frames_to_ms(@ptr, frames)
+      end
+
+      # Loops STILL TO COME, which is not what was asked for at `#play`:
+      # it counts down as they are used up, reads 0 on the final pass or
+      # when stopped, and -1 when looping forever.
+      def loops_remaining : Int32
+        check_open
+        LibSDLMixer.get_track_loops(@ptr).to_i32
+      end
+
+      # Replaces however many loops were left. -1 for forever, 0 to let
+      # the current pass be the last - which is how a looping track is
+      # brought to a graceful end rather than cut off.
+      def loops_remaining=(count : Int32) : Int32
+        check_open
+        unless LibSDLMixer.set_track_loops(@ptr, count)
+          raise Error.new("MIX_SetTrackLoops(#{count}) failed: #{SDL.last_error}")
+        end
+        count
+      end
+
       # Adds a tag - an arbitrary label like "sfx", "ui" or "ambient" -
       # so this track can be played, stopped or re-gained along with
       # every other track wearing it. See `Mixer#set_tag_gain`, which is
