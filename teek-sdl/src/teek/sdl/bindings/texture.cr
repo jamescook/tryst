@@ -18,6 +18,12 @@ lib LibSDL
 
   fun create_texture = SDL_CreateTexture(renderer : Renderer*, format : UInt32, access : LibC::Int,
                                          w : LibC::Int, h : LibC::Int) : Texture*
+
+  # For a texture built from a decoded image or a rendered-text surface,
+  # rather than a blank buffer - the surface's own format and size decide
+  # the texture's, so there is no format/access/w/h to pass.
+  fun create_texture_from_surface = SDL_CreateTextureFromSurface(renderer : Renderer*,
+                                                                 surface : Surface*) : Texture*
   fun destroy_texture = SDL_DestroyTexture(texture : Texture*)
 
   # Float, even though a texture is created with integer dimensions.

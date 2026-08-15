@@ -1,6 +1,8 @@
 require "./bindings/render"
+require "./bindings/image"
 require "./geometry"
 require "./texture"
+require "./font"
 
 module Teek
   module SDL
@@ -184,6 +186,44 @@ module Teek
       def create_texture(width : Int32, height : Int32,
                          access : Texture::Access = Texture::Access::Static) : Texture
         Texture.new(@renderer, width, height, access)
+      end
+
+      # An image file loaded straight into a GPU texture - PNG, JPG,
+      # BMP, GIF, WebP, TGA and whatever else this build's SDL3_image
+      # supports. Alpha blending is on by default, since a loaded image
+      # with transparency (a PNG sprite) is the common case and a
+      # surprising blank rect is the alternative.
+      def load_image(path : String) : Texture
+        texture = LibSDLImage.load_texture(@renderer, path)
+        if texture.null?
+          raise Error.new("IMG_LoadTexture(#{path}) failed: #{SDL.last_error}")
+        end
+        loaded = Texture.new(texture)
+        loaded.blend_mode = BlendMode::Blend
+        loaded
+      end
+
+      # A TrueType/OpenType font at the given point size, for text drawn
+      # with #draw_text or rendered directly through Font#render_text.
+      def load_font(path : String, size : Number) : Font
+        Font.new(@renderer, path, size)
+      end
+
+      # Renders `text` and draws it at (x, y) in one call.
+      #
+      # This creates a texture and destroys it again every call - fine
+      # for text that changes every frame (a score, a clock), wasteful
+      # for anything static. Render once through Font#render_text and
+      # reuse the texture instead when the text does not change.
+      def draw_text(x : Number, y : Number, text : String, font : Font,
+                    color : Color = Color::WHITE) : self
+        texture = font.render_text(text, color)
+        begin
+          copy(texture, dest: Rect.new(x, y, texture.width, texture.height))
+        ensure
+          texture.destroy
+        end
+        self
       end
 
       # Draws a texture. With no rects, the whole texture over the whole

@@ -48,6 +48,29 @@ module Teek
         @texture = texture
       end
 
+      # @api private - use Renderer#load_image or Font#render_text, which
+      # hand SDL a file or a rendered surface instead of asking for a
+      # blank texture by size. Always Static: that is what both
+      # IMG_LoadTexture and SDL_CreateTextureFromSurface produce.
+      def initialize(@texture : LibSDL::Texture*)
+        @access = Access::Static
+
+        w = 0_f32
+        h = 0_f32
+        unless LibSDL.get_texture_size(@texture, pointerof(w), pointerof(h))
+          raise Error.new("SDL_GetTextureSize failed: #{SDL.last_error}")
+        end
+        @width = w.to_i
+        @height = h.to_i
+      end
+
+      # A texture loaded straight from an image file. Shorthand for
+      # `renderer.load_image(path)`, for symmetry with the from-buffer
+      # constructors above.
+      def self.from_file(renderer : Renderer, path : String) : Texture
+        renderer.load_image(path)
+      end
+
       # @api private
       def to_unsafe : LibSDL::Texture*
         check_open

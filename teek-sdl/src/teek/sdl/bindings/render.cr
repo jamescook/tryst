@@ -80,4 +80,10 @@ lib LibSDL
   # format is, which saves this shard knowing anything about formats.
   fun read_surface_pixel = SDL_ReadSurfacePixel(surface : Surface*, x : LibC::Int, y : LibC::Int,
                                                 r : UInt8*, g : UInt8*, b : UInt8*, a : UInt8*) : Bool
+
+  # The write side of the above - same format-agnostic deal, at the same
+  # correctness-over-speed cost SDL documents for it. Fine for the
+  # one-shot premultiply Font#render_text does; not for anything per-frame.
+  fun write_surface_pixel = SDL_WriteSurfacePixel(surface : Surface*, x : LibC::Int, y : LibC::Int,
+                                                  r : UInt8, g : UInt8, b : UInt8, a : UInt8) : Bool
 end
