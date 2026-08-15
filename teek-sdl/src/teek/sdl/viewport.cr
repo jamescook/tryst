@@ -2,6 +2,7 @@ require "teek"
 
 require "./bindings/video"
 require "./bindings/events"
+require "./renderer"
 
 module Teek
   module SDL
@@ -49,6 +50,7 @@ module Teek
       @window : LibSDL::Window*
       @renderer : LibSDL::Renderer*
       @covers_toplevel : Bool
+      @renderer_api : Renderer
       @keys_down = Set(String).new
 
       # Builds the Tk frame, adopts its native window and puts a renderer
@@ -80,6 +82,7 @@ module Teek
 
         @window = create_window(handle)
         @renderer = create_renderer(vsync)
+        @renderer_api = Renderer.new(@renderer)
 
         track_keyboard
         track_resize
@@ -91,11 +94,26 @@ module Teek
         @covers_toplevel
       end
 
-      # @api private - the SDL_Renderer this viewport owns. The drawing
-      # API wraps this; nothing else should reach for it.
-      def renderer_pointer : LibSDL::Renderer*
+      # The drawing API for this viewport.
+      def renderer : Renderer
         check_open
-        @renderer
+        @renderer_api
+      end
+
+      # Draws a frame: yields the renderer, then presents.
+      #
+      # The presenting is the point. Nothing drawn appears until it
+      # happens, and forgetting it looks exactly like the renderer not
+      # working at all - a blank surface and no error anywhere.
+      #
+      # Does NOT clear first. An incremental frame that redraws only what
+      # changed is a perfectly good thing to want, so wiping the surface
+      # is left to the caller and spelled `r.clear`.
+      def render(& : Renderer -> _) : self
+        check_open
+        yield @renderer_api
+        @renderer_api.present
+        self
       end
 
       # Which renderer backend SDL chose - "metal", "opengl", "direct3d11"

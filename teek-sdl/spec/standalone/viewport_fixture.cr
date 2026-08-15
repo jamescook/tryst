@@ -71,6 +71,94 @@ unless app.interp.wait_until { viewport.keys_down.empty? }
   raise "viewport: expected FocusOut to clear held keys, got #{viewport.keys_down.inspect}"
 end
 
+# --- Renderer -------------------------------------------------------
+#
+# Read back what was actually drawn. Without this the whole drawing API
+# could be asserted only as "it returned without raising", which would
+# pass just as happily if every call drew nothing.
+#
+# Sample points are FRACTIONS of the readback surface, never absolute
+# pixels: the drawable is in real pixels and can be a multiple of the
+# requested size on a scaled display, so 25% of the way across is the
+# only thing that means the same on a retina Mac and an Xvfb screen.
+red = Teek::SDL::Color.new(255, 0, 0)
+blue = Teek::SDL::Color.new(0, 0, 255)
+renderer = viewport.renderer
+
+# Case R1: clear fills everything.
+renderer.clear(red)
+renderer.read_pixels do |pixels|
+  [{0.25, 0.25}, {0.75, 0.25}, {0.5, 0.75}].each do |across, down|
+    x = (pixels.width * across).to_i
+    y = (pixels.height * down).to_i
+    got = pixels[x, y]
+    unless got.r > 200 && got.g < 60 && got.b < 60
+      raise "renderer: expected clear to red at #{x},#{y}, got #{got}"
+    end
+  end
+end
+
+# Case R2: fill_rect covers the area it names and nothing else. The left
+# half is filled blue over the red, so the two halves must differ.
+renderer.fill_rect(0, 0, viewport.width // 2, viewport.height, color: blue)
+renderer.read_pixels do |pixels|
+  left = pixels[(pixels.width * 0.25).to_i, (pixels.height * 0.5).to_i]
+  right = pixels[(pixels.width * 0.75).to_i, (pixels.height * 0.5).to_i]
+
+  unless left.b > 200 && left.r < 60
+    raise "renderer: expected the filled half to be blue, got #{left}"
+  end
+  unless right.r > 200 && right.b < 60
+    raise "renderer: expected the untouched half to stay red, got #{right}"
+  end
+end
+
+# Case R3: the current colour is readable, and drawing with an explicit
+# colour changes it.
+renderer.color = red
+unless renderer.color == red
+  raise "renderer: expected the colour to round-trip, got #{renderer.color}"
+end
+renderer.fill_rect(0, 0, 1, 1, color: blue)
+unless renderer.color == blue
+  raise "renderer: expected drawing with a colour to set it, got #{renderer.color}"
+end
+
+# Case R4: blend mode round-trips.
+renderer.blend_mode = Teek::SDL::BlendMode::Blend
+unless renderer.blend_mode.blend?
+  raise "renderer: expected Blend, got #{renderer.blend_mode}"
+end
+renderer.blend_mode = Teek::SDL::BlendMode::None
+unless renderer.blend_mode.none?
+  raise "renderer: expected None, got #{renderer.blend_mode}"
+end
+
+# Case R5: lines and points land where they are put. A horizontal line
+# across the middle, then check the middle row differs from a row well
+# above it.
+renderer.clear(red)
+mid_y = viewport.height // 2
+renderer.draw_line(0, mid_y, viewport.width, mid_y, color: blue)
+renderer.read_pixels do |pixels|
+  scale = pixels.height / viewport.height
+  on_line = pixels[(pixels.width * 0.5).to_i, (mid_y * scale).to_i]
+  off_line = pixels[(pixels.width * 0.5).to_i, (pixels.height * 0.1).to_i]
+
+  raise "renderer: expected the line to be blue, got #{on_line}" unless on_line.b > 200
+  raise "renderer: expected off-line to stay red, got #{off_line}" unless off_line.r > 200
+end
+
+# Case R6: the render block presents, and hands back the viewport so it
+# can be chained.
+drew = false
+returned = viewport.render do |target|
+  target.clear(Teek::SDL::Color::BLACK)
+  drew = true
+end
+raise "renderer: expected the render block to run" unless drew
+raise "renderer: expected #render to return the viewport" unless returned.same?(viewport)
+
 # Case 5: destroy takes the frame and leaves the application standing.
 viewport.destroy
 app.update
