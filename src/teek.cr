@@ -2,6 +2,7 @@
 # bridge (mirrors ruby-teek's compiled C extension layer); higher-level
 # pieces (App, Widget, etc.) live in their own src/teek/*.cr files as they
 # land, one file per class - mirroring ruby-teek's lib/teek/*.rb layout.
+require "./teek/native_window"
 require "./teek/interp"
 require "./teek/values"
 require "./teek/platform"

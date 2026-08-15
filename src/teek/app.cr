@@ -413,6 +413,14 @@ module Teek
         partial_ok: partial_ok, whole_words: whole_words, at_least_one: at_least_one)
     end
 
+    # The platform window identifier behind a widget, for handing to
+    # something that draws into a window Tk owns. window accepts a Widget
+    # or a path String. Raises unless the widget is mapped - see
+    # Interp#native_window_handle.
+    def native_window_handle(window = ".") : NativeWindow
+      @interp.native_window_handle(window.to_s)
+    end
+
     # Show the busy cursor on a window while the block runs, and return
     # whatever the block returned. Defaults to the root window (".").
     # window accepts a Widget or a path String.

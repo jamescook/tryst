@@ -142,6 +142,33 @@ lib LibTk
                                       length : LibC::Int*) : LibC::Int
 end
 
+{% if flag?(:darwin) %}
+  # Turning a Tk drawable into the NSWindow behind it - see
+  # Interp#native_window_handle. macOS only; the other platforms need no
+  # C call at all, because `winfo id` already answers with the X Window
+  # ID or the HWND that an embedding API wants.
+  #
+  # WHICH SYMBOL EXISTS DEPENDS ON THE TK VERSION, and no build has both:
+  #
+  #   Tk 8.6   TkMacOSXDrawable                  exported (tkIntPlatDecls.h)
+  #            Tk_MacOSXGetNSWindowForDrawable   absent - stubs only
+  #   Tk 9.0   TkMacOSXDrawable                  absent
+  #            Tk_MacOSXGetNSWindowForDrawable   exported (tkPlatDecls.h)
+  #
+  # This binds the 8.6 one, which is what the project links. It is Tk
+  # INTERNAL API rather than public, which is not the preference - the
+  # public call is simply not reachable in 8.6 without the stub table,
+  # and that needs a C preprocessor this build has no use for anywhere
+  # else. Moving to Tk 9 means swapping this one fun and the one call to
+  # it in #native_window_handle, and nothing else.
+  #
+  # Returns Tk's own NSWindow subclass, TKWindow - confirmed by asking
+  # the returned pointer its Objective-C class, not by reading a header.
+  lib LibTkMacOSX
+    fun ns_window_for_drawable = TkMacOSXDrawable(drawable : Void*) : Void*
+  end
+{% end %}
+
 module Teek
   # Depth counter around #dispatch_callback, so .in_callback? can detect
   # "is this code running synchronously inside a Tk callback right now"
@@ -602,6 +629,49 @@ module Teek
         bytes = LibTk.measure_chars(tkfont, text, text.bytesize, max_pixels, flags, out width)
         {bytes: bytes, width: width}
       end
+    end
+
+    # The platform window identifier behind a widget path, for handing to
+    # something that draws into a window Tk owns - a GPU renderer, a
+    # video surface, a browser view.
+    #
+    # REFUSES AN UNMAPPED WIDGET, deliberately. The identifier for one is
+    # either absent or not yet usable: on X11 the window has to process
+    # MapNotify before anything can be embedded in it, and a handle taken
+    # before that point looks perfectly valid and fails later, somewhere
+    # else. Pack or grid the widget and call #update first.
+    #
+    # What comes back differs by platform, so the answer carries its own
+    # kind - see NativeWindow, and #covers_toplevel? in particular, which
+    # is the difference between a surface confined to one widget and one
+    # painting over the whole window.
+    def native_window_handle(path : String) : NativeWindow
+      # Doubles as the existence check: an unknown path is a Tcl error
+      # from winfo itself, with a better message than one written here.
+      unless tcl_invoke("winfo", "ismapped", path) == "1"
+        raise TclError.new("#{path} is not mapped, so it has no usable native window handle yet " \
+                           "(pack or grid it and call #update first)")
+      end
+
+      # `winfo id` rather than Tk_WindowId, which is a macro over
+      # Tk_FakeWin's layout and so not callable from Crystal at all. The
+      # Tcl command returns the same drawable, as hex.
+      drawable = tcl_invoke("winfo", "id", path).lchop("0x").to_u64(16)
+
+      {% if flag?(:darwin) %}
+        # Aqua gives a native window to a TOPLEVEL and none to the widgets
+        # inside it, so the drawable resolves to the enclosing window
+        # whatever path was asked about.
+        ns_window = LibTkMacOSX.ns_window_for_drawable(Pointer(Void).new(drawable))
+        if ns_window.null?
+          raise TclError.new("#{path} has no NSWindow behind it")
+        end
+        NativeWindow.new(path: path, kind: NativeWindowKind::Cocoa, value: ns_window.address.to_u64)
+      {% elsif flag?(:windows) %}
+        NativeWindow.new(path: path, kind: NativeWindowKind::Win32, value: drawable)
+      {% else %}
+        NativeWindow.new(path: path, kind: NativeWindowKind::X11, value: drawable)
+      {% end %}
     end
 
     # Resolves a font description for the duration of the block. Tk_GetFont
