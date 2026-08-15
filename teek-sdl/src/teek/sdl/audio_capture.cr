@@ -18,50 +18,121 @@ module Teek
     #     ffmpeg -i screen.mp4 -i demo.wav -c:v copy -c:a aac -shortest out.mp4
     #
     # The tap is MIX_SetPostMixCallback, which fires ON SDL'S AUDIO
-    # THREAD with the finished mix. That constrains the implementation
-    # far more than it looks: the callback below is a plain C function
-    # that allocates nothing, takes no locks, raises nothing and calls no
-    # Crystal method that might. Crystal's garbage collector knows
-    # nothing about SDL's audio thread, so anything that allocated there
-    # would be a crash waiting for a busy moment. Hence the raw write(2)
-    # and the pointer-to-struct state, rather than a closure over `self`.
+    # THREAD with the finished mix. SDL's own guidance is that a callback
+    # there should return quickly - heavy I/O belongs elsewhere. So the
+    # callback below only ever copies floats into a preallocated ring
+    # (#push on RingState): it allocates nothing, takes no locks, raises
+    # nothing and calls no Crystal method that might. A separate fiber
+    # (#drain_loop) - which is ordinary Crystal code, free of every one
+    # of those constraints - drains the ring, does the float32-to-int16
+    # conversion and writes the file.
     class AudioCapture
-      # Mutable state the audio-thread callback reaches through a raw
-      # pointer. A struct, not the AudioCapture object, so the callback
-      # never touches a Crystal object or dispatches a method on one.
+      # Shared state between the audio-thread callback (the producer,
+      # #push) and the drain fiber (the consumer, #pop). A struct, not a
+      # Crystal object, reached through a raw pointer - same reasoning as
+      # ever: the audio thread must never touch a Crystal object or
+      # dispatch a method on one.
       #
-      # Being a struct, it has VALUE semantics, and that has teeth here.
-      # `pointer.value.field = x` reads a COPY, assigns to the copy and
-      # discards it, so the write never lands - and yielding the struct
-      # to a block copies it too, so a read-modify-write helper taking a
-      # block fails the same way. Both mutators below therefore copy into
-      # a local, change that, and assign the whole struct back through
-      # the pointer, which is the one spelling that works.
+      # Every mutable field here is an Atomic, and every mutation goes
+      # through a method call on `pointer.value` (`@produced.add(...)`
+      # and friends) rather than a field assignment. That distinction
+      # matters and is not obvious: `pointer.value.field = x` and
+      # `pointer.value.field += x` both silently write to a throwaway
+      # copy and never reach the pointee (confirmed directly - Crystal's
+      # op-assign desugars to evaluating `pointer.value` once into a
+      # local temporary and never writing it back). A plain method call
+      # on that same receiver does not have this problem - Crystal passes
+      # `self` for a struct method by the address the receiver
+      # dereferenced from, so `pointer.value.push(...)` mutates the real
+      # memory in place (confirmed directly, including under genuine
+      # concurrent multi-thread stress). Every mutator on this struct is
+      # therefore a method, never a bare field write, and that rule must
+      # not be broken by future edits here.
       #
-      # The failure is silent and misleading: the audio itself keeps
-      # being written correctly and only the bookkeeping is lost, so the
-      # WAV looks right while `bytes_written` says nothing happened.
-      struct State
-        property fd : Int32
-        property data_bytes : Int64
+      # `produced` is written only by the audio thread, `consumed` only
+      # by the drain fiber - the single-writer-per-counter property that
+      # makes this lock-free. Both are monotonic counts of samples ever
+      # produced/consumed, not ring positions - `% capacity` turns one
+      # into the other where needed.
+      struct RingState
+        @produced = Atomic(Int64).new(0_i64)
+        @consumed = Atomic(Int64).new(0_i64)
+        @dropped = Atomic(Int64).new(0_i64)
+        @active = Atomic(Bool).new(true)
+        @samples : Pointer(Float32)
 
-        def initialize(@fd : Int32 = -1, @data_bytes : Int64 = 0_i64)
+        getter capacity : Int32
+
+        def initialize(@capacity : Int32)
+          @samples = Pointer(Float32).malloc(@capacity)
         end
 
-        def self.add_bytes(pointer : Pointer(State), count : Int64) : Nil
-          value = pointer.value
-          value.data_bytes += count
-          pointer.value = value
+        # Audio-thread side. `samples` counts individual floats
+        # (interleaved channels), matching how SDL_mixer's postmix
+        # callback itself counts them.
+        def push(pcm : Pointer(Float32), samples : Int32) : Nil
+          return if samples <= 0 || !@active.get(:relaxed)
+
+          produced = @produced.get(:relaxed)
+          consumed = @consumed.get(:acquire)
+          available = @capacity - (produced - consumed)
+
+          if samples > available
+            # Full - the drain fiber isn't keeping up. Drop the overflow
+            # rather than block the audio thread or overwrite unread
+            # data; #pop turns this count into an equal run of silence
+            # instead of just shortening the file, so a capture's timing
+            # keeps matching real elapsed time even under overload.
+            @dropped.add((samples - available).to_i64, :relaxed)
+            samples = available.to_i32
+            return if samples <= 0
+          end
+
+          index = (produced % @capacity).to_i32
+          first_run = samples < @capacity - index ? samples : @capacity - index
+          (@samples + index).copy_from(pcm, first_run)
+          @samples.copy_from(pcm + first_run, samples - first_run) if first_run < samples
+
+          @produced.add(samples.to_i64, :release)
         end
 
-        # Stops the callback writing. Set before the descriptor is
-        # closed, so an in-flight callback cannot write to a closed fd.
-        def self.detach(pointer : Pointer(State)) : Nil
-          value = pointer.value
-          value.fd = -1
-          pointer.value = value
+        # Drain-side. Copies whatever is newly available into `dest`
+        # (which must be at least #capacity floats) and returns
+        # {samples copied, samples dropped since the last #pop}.
+        def pop(dest : Pointer(Float32)) : {Int32, Int64}
+          produced = @produced.get(:acquire)
+          consumed = @consumed.get(:relaxed)
+          available = (produced - consumed).to_i32
+
+          if available > 0
+            index = (consumed % @capacity).to_i32
+            first_run = available < @capacity - index ? available : @capacity - index
+            dest.copy_from(@samples + index, first_run)
+            (dest + first_run).copy_from(@samples, available - first_run) if first_run < available
+            @consumed.add(available.to_i64, :release)
+          end
+
+          {available, @dropped.swap(0_i64, :relaxed)}
+        end
+
+        def active? : Bool
+          @active.get(:acquire)
+        end
+
+        # Tells the audio thread to stop accepting samples. Call only
+        # while the postmix callback cannot be running concurrently (the
+        # mixer's own audio lock, held by AudioCapture#stop) - otherwise
+        # a push already past its #active? check could still land after
+        # the drain fiber has taken this as the last word and exited.
+        def stop : Nil
+          @active.set(false, :release)
         end
       end
+
+      # Seconds of audio the ring can hold before the audio thread starts
+      # dropping samples - generously more than the drain fiber (writing
+      # to a local file) should ever need to catch up.
+      BUFFER_SECONDS = 2
 
       # Bytes of the WAV header this writes before any audio: the
       # canonical 44-byte RIFF/fmt /data layout for integer PCM.
@@ -70,7 +141,10 @@ module Teek
       @channels : Int32
       @freq : Int32
       @file : File
-      @state : Pointer(State)
+      @ring : Pointer(RingState)
+      @bytes_written = Atomic(Int64).new(0_i64)
+      @drain_done = Channel(Int64).new
+      @overrun_warned = false
 
       getter path : String
       getter mixer : Mixer
@@ -94,49 +168,50 @@ module Teek
         @freq = format.freq
 
         @file = File.new(@path, "w")
-        # Every write from here on has to reach the fd immediately: the
-        # audio thread writes to the same descriptor behind Crystal's
-        # back, so a buffer holding bytes on this side would interleave
-        # them into the wrong place.
         @file.sync = true
         @file.write(header_bytes(0_i64))
 
-        @state = Pointer(State).malloc(1)
-        @state.value = State.new(fd: @file.fd)
+        capacity = @freq * @channels * BUFFER_SECONDS
+        @ring = Pointer(RingState).malloc(1)
+        @ring.value = RingState.new(capacity)
 
         # Installed under the lock so the callback cannot already be
-        # mid-flight against a state pointer SDL has not been told about.
+        # mid-flight against a ring pointer SDL has not been told about.
         @mixer.lock do
-          unless LibSDLMixer.set_post_mix_callback(@mixer, ->teek_sdl_capture_postmix, @state.as(Void*))
+          unless LibSDLMixer.set_post_mix_callback(@mixer, ->teek_sdl_capture_postmix, @ring.as(Void*))
             @file.close
             raise Error.new("MIX_SetPostMixCallback failed: #{SDL.last_error}")
           end
         end
         @mixer.active_capture = self
+
+        start_drain_loop(capacity)
       end
 
       # Bytes of audio written so far, header excluded.
       def bytes_written : Int64
-        @state.value.data_bytes
+        @bytes_written.get(:acquire)
       end
 
-      # Removes the tap, patches the sizes into the header and closes the
-      # file. Safe to call twice; the second is a no-op.
+      # Removes the tap, waits for the drain fiber to flush everything
+      # already in the ring, patches the sizes into the header and
+      # closes the file. Safe to call twice; the second is a no-op.
       def stop : Nil
         return if @stopped
         @stopped = true
 
-        # Under the lock, and with the fd cleared before the callback is
-        # removed, so no in-flight callback can write to a descriptor
-        # this method is about to close.
+        # Under the lock, and with the ring marked inactive before the
+        # callback is removed, so no in-flight callback can push into a
+        # ring the drain fiber is about to treat as finished.
         @mixer.lock do
-          State.detach(@state)
+          @ring.value.stop
           LibSDLMixer.set_post_mix_callback(@mixer, nil, nil)
         end
         @mixer.active_capture = nil
 
+        data_bytes = @drain_done.receive
         @file.seek(0)
-        @file.write(header_bytes(@state.value.data_bytes))
+        @file.write(header_bytes(data_bytes))
         @file.close
       end
 
@@ -169,51 +244,109 @@ module Teek
 
         io.to_slice
       end
+
+      # Runs for the lifetime of this capture on its own OS thread (an
+      # Isolated execution context - the pattern this port already uses
+      # for background work that does not touch Tcl, see
+      # Teek::BackgroundWork). Ordinary Crystal code: it may allocate,
+      # raise, and call File freely, none of which the audio thread may
+      # do - that split is the entire point of the ring buffer.
+      # @bytes_written is deliberately never captured into a local here -
+      # Atomic(Int64) is a struct, so `local = @bytes_written` copies it
+      # into independent storage the getter never sees again (confirmed
+      # directly: the copy kept accumulating correctly in isolation while
+      # #bytes_written read the original, untouched, forever 0). Every
+      # mutation below goes through `@bytes_written` itself, which stays
+      # the one true instance variable because this block keeps `self`.
+      private def start_drain_loop(capacity : Int32) : Nil
+        ring = @ring
+        file = @file
+        drain_done = @drain_done
+
+        Fiber::ExecutionContext::Isolated.new("Teek::SDL::AudioCapture") do
+          scratch = Pointer(Float32).malloc(capacity)
+
+          loop do
+            available, dropped = ring.value.pop(scratch)
+            warn_overrun(dropped) if dropped > 0
+
+            written = 0_i64
+            written += write_silence(file, dropped) if dropped > 0
+            written += write_samples(file, scratch, available) if available > 0
+            @bytes_written.add(written, :release) if written > 0
+
+            if available == 0 && dropped == 0
+              break unless ring.value.active?
+              sleep 2.milliseconds
+            end
+          end
+
+          drain_done.send(@bytes_written.get(:acquire))
+        end
+      end
+
+      private def warn_overrun(dropped : Int64) : Nil
+        return if @overrun_warned
+        @overrun_warned = true
+        STDERR.puts "[Teek::SDL::AudioCapture] audio ring buffer overrun: #{dropped} samples " \
+                    "dropped and replaced with silence. The drain thread is not keeping up " \
+                    "with the audio thread."
+      end
+
+      # Signed 16-bit silence, `count` samples of it, in fixed
+      # stack-sized chunks so a large overrun doesn't need one big
+      # allocation. Returns bytes written.
+      private def write_silence(file : File, count : Int64) : Int64
+        chunk = uninitialized Int16[4096]
+        chunk.to_unsafe.clear(4096)
+        written = 0_i64
+        remaining = count
+        while remaining > 0
+          batch = remaining < 4096 ? remaining.to_i32 : 4096
+          file.write(Bytes.new(chunk.to_unsafe.as(UInt8*), batch * 2))
+          written += batch * 2
+          remaining -= batch
+        end
+        written
+      end
+
+      # Float32-to-int16 PCM conversion, moved here from the audio
+      # thread - the drain fiber is free to do this work the callback
+      # itself is not allowed to.
+      private def write_samples(file : File, pcm : Pointer(Float32), count : Int32) : Int64
+        chunk = uninitialized Int16[4096]
+        written = 0_i64
+        index = 0
+        while index < count
+          batch = Math.min(count - index, 4096)
+          batch.times do |offset|
+            sample = pcm[index + offset]
+            # Clamped before scaling: the mix can exceed full scale when
+            # several loud tracks land together, and to_i16! wraps
+            # rather than saturates, which would turn a loud moment
+            # into a burst of noise.
+            sample = -1.0_f32 if sample < -1.0_f32
+            sample = 1.0_f32 if sample > 1.0_f32
+            chunk[offset] = (sample * 32767.0_f32).to_i16!
+          end
+          file.write(Bytes.new(chunk.to_unsafe.as(UInt8*), batch * 2))
+          written += batch * 2
+          index += batch
+        end
+        written
+      end
     end
   end
 end
 
 # The postmix tap. Runs on SDL's audio thread - see the note on
-# Teek::SDL::AudioCapture. Allocates nothing and cannot raise.
-#
-# SDL_mixer always mixes in float32 whatever the device format is, so the
-# incoming samples are floats and `samples` counts floats rather than
-# sample frames. They are converted to signed 16-bit here, in fixed
-# stack-sized chunks, because that is what makes the result an ordinary
-# PCM WAV that anything at all will open.
+# Teek::SDL::AudioCapture::RingState. Allocates nothing, raises nothing,
+# blocks on nothing: it does exactly one thing, copy floats into the
+# ring, and leaves every other bit of work (conversion, file I/O) to the
+# drain fiber.
 fun teek_sdl_capture_postmix(userdata : Void*, mixer : LibSDLMixer::Mixer*,
                              spec : LibSDL::AudioSpec*, pcm : Float32*,
                              samples : LibC::Int)
-  state = userdata.as(Teek::SDL::AudioCapture::State*)
-  fd = state.value.fd
-  return if fd < 0 || samples <= 0
-
-  chunk = uninitialized Int16[1024]
-  index = 0
-  total = 0_i64
-  while index < samples
-    count = samples - index
-    count = 1024 if count > 1024
-
-    offset = 0
-    while offset < count
-      sample = pcm[index + offset]
-      # Clamped before scaling: the mix can exceed full scale when
-      # several loud tracks land together, and to_i16! wraps rather than
-      # saturates, which would turn a loud moment into a burst of noise.
-      sample = -1.0_f32 if sample < -1.0_f32
-      sample = 1.0_f32 if sample > 1.0_f32
-      chunk[offset] = (sample * 32767.0_f32).to_i16!
-      offset += 1
-    end
-
-    written = LibC.write(fd, chunk.to_unsafe.as(Void*), LibC::SizeT.new(count * 2))
-    break if written <= 0
-    total += written
-    index += count
-  end
-
-  # Once, at the end, rather than per chunk - it is a read-modify-write
-  # through a pointer, not an increment in place.
-  Teek::SDL::AudioCapture::State.add_bytes(state, total) if total > 0
+  ring = userdata.as(Teek::SDL::AudioCapture::RingState*)
+  ring.value.push(pcm, samples)
 end
