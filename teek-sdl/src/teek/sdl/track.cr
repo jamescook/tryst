@@ -17,12 +17,6 @@ module Teek
     # and `Music` make them - but doing so is legal and is how a caller
     # would reuse one slot for a series of different sounds.
     class Track
-      # Property names MIX_PlayTrack reads its options out of. Spelled
-      # here because Crystal never sees the MIX_PROP_PLAY_* macros.
-      PROP_LOOPS      = "SDL_mixer.play.loops"
-      PROP_FADE_IN_MS = "SDL_mixer.play.fade_in_milliseconds"
-      PROP_START_MS   = "SDL_mixer.play.start_millisecond"
-
       @ptr : LibSDLMixer::Track*
 
       getter mixer : Mixer
@@ -56,13 +50,10 @@ module Teek
       # plays three times, -1 repeats forever.
       def play(loops : Int32 = 0, fade_ms : Int32 = 0, start_ms : Int32 = 0) : self
         check_open
-        options = build_options(loops, fade_ms, start_ms)
-        begin
+        PlayOptions.with(loops, fade_ms, start_ms) do |options|
           unless LibSDLMixer.play_track(@ptr, options)
             raise Error.new("MIX_PlayTrack failed: #{SDL.last_error}")
           end
-        ensure
-          LibSDL.destroy_properties(options) unless options.zero?
         end
         self
       end
@@ -134,25 +125,50 @@ module Teek
         gain
       end
 
+      # Adds a tag - an arbitrary label like "sfx", "ui" or "ambient" -
+      # so this track can be played, stopped or re-gained along with
+      # every other track wearing it. See `Mixer#set_tag_gain`, which is
+      # what makes an independent effects volume possible.
+      #
+      # A track may carry any number of tags, and adding one twice is
+      # legal and does nothing.
+      def tag(name : String) : self
+        check_open
+        raise Error.new("MIX_TagTrack(#{name.inspect}) failed: #{SDL.last_error}") unless LibSDLMixer.tag_track(@ptr, name)
+        self
+      end
+
+      # Removes a tag. Removing one the track does not have is fine.
+      def untag(name : String) : self
+        check_open
+        LibSDLMixer.untag_track(@ptr, name)
+        self
+      end
+
+      # The track's tags, in no guaranteed order.
+      def tags : Array(String)
+        check_open
+        count = 0
+        raw = LibSDLMixer.get_track_tags(@ptr, pointerof(count))
+        return [] of String if raw.null?
+
+        begin
+          Array(String).new(count) { |index| String.new(raw[index]) }
+        ensure
+          # One allocation for the whole array, so one free - the strings
+          # inside it are not separately owned.
+          LibSDL.free(raw.as(Void*))
+        end
+      end
+
+      def tagged?(name : String) : Bool
+        tags.includes?(name)
+      end
+
       def destroy : Nil
         return if @destroyed
         @destroyed = true
         LibSDLMixer.destroy_track(@ptr)
-      end
-
-      # Builds the SDL_PropertiesID MIX_PlayTrack takes its options from,
-      # or 0 when every option is at its default - SDL reads 0 as "use
-      # the defaults", which saves creating and destroying a bag for the
-      # common case.
-      private def build_options(loops : Int32, fade_ms : Int32, start_ms : Int32) : LibSDL::PropertiesID
-        return 0_u32 if loops.zero? && fade_ms.zero? && start_ms.zero?
-
-        props = LibSDL.create_properties
-        raise Error.new("SDL_CreateProperties failed: #{SDL.last_error}") if props.zero?
-        LibSDL.set_number_property(props, PROP_LOOPS, loops.to_i64) unless loops.zero?
-        LibSDL.set_number_property(props, PROP_FADE_IN_MS, fade_ms.to_i64) unless fade_ms.zero?
-        LibSDL.set_number_property(props, PROP_START_MS, start_ms.to_i64) unless start_ms.zero?
-        props
       end
 
       private def check_open : Nil

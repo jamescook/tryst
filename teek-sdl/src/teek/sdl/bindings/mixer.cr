@@ -65,8 +65,26 @@ lib LibSDLMixer
   fun track_ms_to_frames = MIX_TrackMSToFrames(track : Track*, ms : Int64) : Int64
   fun track_frames_to_ms = MIX_TrackFramesToMS(track : Track*, frames : Int64) : Int64
 
+  # Tags are arbitrary strings - "ui", "sfx", "ambient" - and a track may
+  # carry any number. They replace SDL2_mixer's integer channel groups,
+  # and they are how a whole category of sound gets its own volume.
+  fun tag_track = MIX_TagTrack(track : Track*, tag : LibC::Char*) : Bool
+  fun untag_track = MIX_UntagTrack(track : Track*, tag : LibC::Char*)
+
+  # A NULL-terminated array of C strings in ONE allocation, released with
+  # a single SDL_free of the outer pointer. count may be null.
+  fun get_track_tags = MIX_GetTrackTags(track : Track*, count : LibC::Int*) : LibC::Char**
+
   # options is an SDL_PropertiesID; 0 means "defaults for everything".
   fun play_track = MIX_PlayTrack(track : Track*, options : LibSDL::PropertiesID) : Bool
+
+  # The tag-wide counterparts. Each acts on every track carrying the tag,
+  # and MIX_PlayTag starts them all at the same instant in the mix.
+  fun play_tag = MIX_PlayTag(mixer : Mixer*, tag : LibC::Char*, options : LibSDL::PropertiesID) : Bool
+  fun stop_tag = MIX_StopTag(mixer : Mixer*, tag : LibC::Char*, fade_out_ms : Int64) : Bool
+  fun pause_tag = MIX_PauseTag(mixer : Mixer*, tag : LibC::Char*) : Bool
+  fun resume_tag = MIX_ResumeTag(mixer : Mixer*, tag : LibC::Char*) : Bool
+  fun set_tag_gain = MIX_SetTagGain(mixer : Mixer*, tag : LibC::Char*, gain : Float32) : Bool
   fun play_audio = MIX_PlayAudio(mixer : Mixer*, audio : Audio*) : Bool
   fun stop_track = MIX_StopTrack(track : Track*, fade_out_frames : Int64) : Bool
   fun stop_all_tracks = MIX_StopAllTracks(mixer : Mixer*, fade_out_ms : Int64) : Bool

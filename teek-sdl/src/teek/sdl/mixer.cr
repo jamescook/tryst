@@ -213,6 +213,71 @@ module Teek
         raise Error.new("MIX_ResumeAllTracks failed: #{SDL.last_error}") unless LibSDLMixer.resume_all_tracks(@ptr)
       end
 
+      # --- Tags -----------------------------------------------------------
+      #
+      # A tag is an arbitrary label a Track wears - "sfx", "ui", "music".
+      # They replace SDL2_mixer's integer channel groups, and they are how
+      # a whole category of sound gets its own volume:
+      #
+      # ```
+      # shot.play_track.tag("sfx")
+      # theme.track.tag("music")
+      # mixer.set_tag_gain("sfx", 0.3) # effects quieter, music untouched
+      # ```
+
+      # ASSIGNS the gain of every track carrying `tag`. It is a bulk
+      # write to each track's own gain, not a group fader layered over
+      # the top - SDL3_mixer has no such thing, and `Track#gain` reads
+      # back whatever was set here.
+      #
+      # Which means a tag alone cannot be an effects slider that keeps
+      # sounds at their relative volumes: setting the tag flattens every
+      # tagged track to the same gain. An application that mixes a quiet
+      # footstep against a loud explosion has to keep each sound's base
+      # gain itself and set them individually, or re-tag by loudness.
+      #
+      # No matching getter, because SDL keeps no per-tag value to read.
+      def set_tag_gain(tag : String, gain : Float32 | Float64) : Float32
+        check_open
+        value = gain.to_f32
+        unless LibSDLMixer.set_tag_gain(@ptr, tag, value)
+          raise Error.new("MIX_SetTagGain(#{tag.inspect}, #{value}) failed: #{SDL.last_error}")
+        end
+        value
+      end
+
+      # Starts every track carrying `tag`, all at the same instant in the
+      # mix. Same options as `Track#play`, applied to each.
+      def play_tag(tag : String, loops : Int32 = 0, fade_ms : Int32 = 0, start_ms : Int32 = 0) : Nil
+        check_open
+        PlayOptions.with(loops, fade_ms, start_ms) do |options|
+          unless LibSDLMixer.play_tag(@ptr, tag, options)
+            raise Error.new("MIX_PlayTag(#{tag.inspect}) failed: #{SDL.last_error}")
+          end
+        end
+      end
+
+      def stop_tag(tag : String, fade_ms : Int32 = 0) : Nil
+        check_open
+        unless LibSDLMixer.stop_tag(@ptr, tag, fade_ms.to_i64)
+          raise Error.new("MIX_StopTag(#{tag.inspect}) failed: #{SDL.last_error}")
+        end
+      end
+
+      def pause_tag(tag : String) : Nil
+        check_open
+        unless LibSDLMixer.pause_tag(@ptr, tag)
+          raise Error.new("MIX_PauseTag(#{tag.inspect}) failed: #{SDL.last_error}")
+        end
+      end
+
+      def resume_tag(tag : String) : Nil
+        check_open
+        unless LibSDLMixer.resume_tag(@ptr, tag)
+          raise Error.new("MIX_ResumeTag(#{tag.inspect}) failed: #{SDL.last_error}")
+        end
+      end
+
       # Stops the mixer running for the duration of the block, so its
       # state can be changed without racing the audio thread. Nestable.
       def lock(&)
