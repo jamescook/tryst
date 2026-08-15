@@ -100,6 +100,12 @@ lib LibSDLMixer
   fun set_track_gain = MIX_SetTrackGain(track : Track*, gain : Float32) : Bool
   fun get_track_gain = MIX_GetTrackGain(track : Track*) : Float32
 
+  # Fires ON THE AUDIO THREAD when a track completes or is explicitly
+  # stopped. Not on pause, and not when a playing track is destroyed.
+  alias TrackStoppedCallback = (Void*, Track*) -> Void
+  fun set_track_stopped_callback = MIX_SetTrackStoppedCallback(track : Track*, cb : TrackStoppedCallback,
+                                                               userdata : Void*) : Bool
+
   # Fires on the audio thread with the finished mix, immediately before
   # it goes to the device - the tap AudioCapture writes from. Always
   # float32 regardless of the device format, and `samples` counts floats,

@@ -278,6 +278,48 @@ module Teek
         end
       end
 
+      # --- Stopped-track notifications --------------------------------------
+
+      # Tracks with an `on_stopped` block waiting to be delivered. On the
+      # mixer instance rather than a class variable, so two mixers do not
+      # share a queue and nothing survives the mixer being destroyed.
+      @stop_watchers = [] of Track
+
+      # @api private - Track#on_stopped registers itself here.
+      def watch_stopped(track : Track) : Nil
+        @stop_watchers << track unless @stop_watchers.includes?(track)
+      end
+
+      # @api private
+      def unwatch_stopped(track : Track) : Nil
+        @stop_watchers.delete(track)
+      end
+
+      # Runs the `on_stopped` block of every track that has finished
+      # since the last call, and reports how many were delivered.
+      #
+      # This exists because SDL fires its stopped callback ON THE AUDIO
+      # THREAD, where running arbitrary Crystal is not safe. The audio
+      # thread only bumps a counter; this is what turns those counters
+      # into calls, on whichever thread calls it. An application drives
+      # it from its own loop - in a Tk program, a timer:
+      #
+      # ```
+      # session.every(50) { mixer.dispatch_stopped }
+      # ```
+      #
+      # Cheap to call with nothing pending. A block that raises
+      # propagates and leaves the rest undelivered until the next call.
+      def dispatch_stopped : Int32
+        return 0 if @stop_watchers.empty?
+
+        # Over a copy: a block is free to stop, destroy or register more
+        # tracks, and would otherwise mutate the array being walked.
+        @stop_watchers.dup.sum do |track|
+          track.destroyed? ? 0 : track.deliver_stopped
+        end
+      end
+
       # Stops the mixer running for the duration of the block, so its
       # state can be changed without racing the audio thread. Nestable.
       def lock(&)

@@ -12,7 +12,39 @@ module Teek
     # and `Music` make them - but doing so is legal and is how a caller
     # would reuse one slot for a series of different sounds.
     class Track
+      # How many times the audio thread has seen this track stop.
+      #
+      # A counter rather than a flag so that a track which stops, is
+      # replayed and stops again between two dispatches reports both,
+      # instead of the second one being swallowed.
+      #
+      # Exactly one writer - the audio thread, through `increment` - and
+      # exactly one reader, the main thread in `deliver_stopped`. That is
+      # what makes a plain aligned Int32 enough here without atomics: no
+      # two threads ever write it, so the worst case is the main thread
+      # reading a value one behind and delivering on the next dispatch.
+      #
+      # A struct behind a pointer has VALUE semantics, so `pointer.value
+      # .count += 1` would increment a copy and discard it. `increment`
+      # copies into a local, changes that, and writes the whole struct
+      # back, which is the one spelling that works.
+      struct StopSignal
+        property count : Int32
+
+        def initialize(@count : Int32 = 0)
+        end
+
+        def self.increment(pointer : Pointer(StopSignal)) : Nil
+          value = pointer.value
+          value.count += 1
+          pointer.value = value
+        end
+      end
+
       @ptr : LibSDLMixer::Track*
+      @stop_signal : Pointer(StopSignal)? = nil
+      @stop_delivered : Int32 = 0
+      @on_stopped : Proc(Track, Nil)? = nil
 
       getter mixer : Mixer
       getter? destroyed : Bool = false
@@ -157,8 +189,72 @@ module Teek
         tags.includes?(name)
       end
 
+      # Runs `block` after this track finishes - either because it played
+      # to the end, or because something stopped it. Pausing does not
+      # count, and neither does destroying a playing track.
+      #
+      # NOT called from the audio thread. SDL fires its own callback
+      # there, where allocating or running arbitrary Crystal is not safe;
+      # all that happens then is a counter being bumped. The block runs
+      # later, on whichever thread calls `Mixer#dispatch_stopped` - so
+      # an application has to call that periodically, typically from a
+      # timer in its event loop:
+      #
+      # ```
+      # track.on_stopped { |finished| play_next_after(finished) }
+      # session.every(50) { mixer.dispatch_stopped }
+      # ```
+      #
+      # Setting a second block replaces the first.
+      def on_stopped(&block : Track ->) : self
+        check_open
+        unless @stop_signal
+          signal = Pointer(StopSignal).malloc(1)
+          signal.value = StopSignal.new
+          unless LibSDLMixer.set_track_stopped_callback(@ptr, ->teek_sdl_track_stopped, signal.as(Void*))
+            raise Error.new("MIX_SetTrackStoppedCallback failed: #{SDL.last_error}")
+          end
+          @stop_signal = signal
+          @mixer.watch_stopped(self)
+        end
+        @on_stopped = block
+        self
+      end
+
+      # Removes the block, and the SDL callback behind it.
+      def clear_on_stopped : self
+        return self unless @stop_signal
+        LibSDLMixer.set_track_stopped_callback(@ptr, nil, nil) unless @destroyed
+        @stop_signal = nil
+        @on_stopped = nil
+        @stop_delivered = 0
+        @mixer.unwatch_stopped(self)
+        self
+      end
+
+      # @api private - `Mixer#dispatch_stopped` calls this on the main
+      # thread. Returns how many stops it delivered, which is more than
+      # one when the track stopped several times since the last call.
+      def deliver_stopped : Int32
+        signal = @stop_signal
+        block = @on_stopped
+        return 0 if signal.nil? || block.nil?
+
+        pending = signal.value.count - @stop_delivered
+        return 0 if pending <= 0
+
+        @stop_delivered += pending
+        pending.times { block.call(self) }
+        pending
+      end
+
       def destroy : Nil
         return if @destroyed
+        # Before the pointer goes: SDL does not fire the callback for a
+        # destroyed track, but the mixer would keep polling this one.
+        @mixer.unwatch_stopped(self)
+        @stop_signal = nil
+        @on_stopped = nil
         @destroyed = true
         LibSDLMixer.destroy_track(@ptr)
       end
@@ -168,4 +264,12 @@ module Teek
       end
     end
   end
+end
+
+# Fires on SDL's audio thread when a track stops - see Track#on_stopped.
+# Bumps a counter and does nothing else: no allocation, no Crystal method
+# dispatch on an object, nothing that can raise. The user's block runs
+# later, from Mixer#dispatch_stopped.
+fun teek_sdl_track_stopped(userdata : Void*, track : LibSDLMixer::Track*)
+  Teek::SDL::Track::StopSignal.increment(userdata.as(Teek::SDL::Track::StopSignal*))
 end
