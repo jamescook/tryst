@@ -100,6 +100,32 @@ lib LibTcl
 
   # From tcl.h - see #tcl_get_var/#tcl_set_var.
   TCL_GLOBAL_ONLY = 1
+
+  # Event classes the notifier services, from tcl.h. TCL_ALL_EVENTS above
+  # is ~TCL_DONT_WAIT, so it covers these and anything added later.
+  TCL_FILE_EVENTS = 1 << 3
+
+  # Tcl_Time (tcl.h) - a duration here rather than a moment, since the
+  # only use below is Tcl_SetMaxBlockTime.
+  struct Time
+    sec : LibC::Long
+    usec : LibC::Long
+  end
+
+  # An external event source: setup runs before the notifier blocks,
+  # check runs after it wakes. Both are called on every pass of the event
+  # loop, so they are raw C function pointers - see Teek::EventSource.
+  alias EventSetupProc = (Void*, LibC::Int) -> Void
+  alias EventCheckProc = (Void*, LibC::Int) -> Void
+
+  fun create_event_source = Tcl_CreateEventSource(setup : EventSetupProc, check : EventCheckProc,
+                                                  client_data : Void*)
+  fun delete_event_source = Tcl_DeleteEventSource(setup : EventSetupProc, check : EventCheckProc,
+                                                  client_data : Void*)
+
+  # Caps how long the notifier may block before running check procs
+  # again. Only meaningful from inside a setup proc.
+  fun set_max_block_time = Tcl_SetMaxBlockTime(time : Time*)
 end
 
 lib LibTk
@@ -263,6 +289,10 @@ module Teek
     @callbacks = {} of String => CallbackEntry
     @next_callback_id = 1
     @main_queue = Channel(Proc(Nil)).new(64)
+
+    # Held so #delete can take them back down, and so nothing collects
+    # the State the notifier holds a raw pointer to.
+    @event_sources = [] of EventSource
 
     def initialize
       LibTcl.find_executable("crystal_teek")
@@ -581,7 +611,35 @@ module Teek
     end
 
     def delete : Nil
+      # Event sources belong to the THREAD's notifier, not to this
+      # interpreter, so deleting the interp would leave any still
+      # registered - and Tcl would go on calling them against state
+      # nothing owns any more.
+      @event_sources.each(&.unregister)
+      @event_sources.clear
       LibTcl.delete_interp(@ptr)
+    end
+
+    # Registers a callback Tcl will run on every pass of its event loop,
+    # for pumping a library that has an event queue of its own.
+    #
+    # `check` must be a plain function pointer rather than a closure, and
+    # state reaches it through `data`. See Teek::EventSource for why, and
+    # for what the callback may and may not do.
+    #
+    # The source is unregistered automatically when this interpreter is
+    # deleted; #unregister on the returned object does it sooner.
+    def register_event_source(check : EventSource::Check,
+                              data : Void* = Pointer(Void).null,
+                              interval : Time::Span = EventSource::DEFAULT_INTERVAL) : EventSource
+      source = EventSource.new(check, data, interval)
+      @event_sources << source
+      source
+    end
+
+    # The sources registered through this interpreter and still live.
+    def event_sources : Array(EventSource)
+      @event_sources.select(&.registered?)
     end
 
     # -- font measurement --

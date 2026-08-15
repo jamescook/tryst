@@ -3,6 +3,7 @@
 # pieces (App, Widget, etc.) live in their own src/teek/*.cr files as they
 # land, one file per class - mirroring ruby-teek's lib/teek/*.rb layout.
 require "./teek/native_window"
+require "./teek/event_source"
 require "./teek/interp"
 require "./teek/values"
 require "./teek/platform"
