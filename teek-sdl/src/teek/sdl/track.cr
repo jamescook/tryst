@@ -212,6 +212,75 @@ module Teek
         count
       end
 
+      # --- Placing the sound ------------------------------------------
+      #
+      # Stereo panning and 3D positioning are two modes of ONE setting,
+      # not two settings: switching to either replaces the other, and
+      # `#unplace` turns both off. That is SDL's shape, not a choice
+      # made here.
+
+      # Forces the track to stereo and mixes it only onto the front left
+      # and right speakers, with each side scaled by its own gain.
+      #
+      # ```
+      # track.stereo(left: 1.0, right: 0.0) # hard left
+      # track.stereo(left: 0.7, right: 0.7) # centred, quieter
+      # ```
+      #
+      # Negative gains clamp to zero; there is no ceiling, so above 1.0
+      # makes a side louder. Deliberately no single `pan` knob wrapping
+      # this: turning one number into a pair means picking a pan law, and
+      # the two reasonable choices disagree about how loud the centre is.
+      #
+      # Resets the 3D position to the origin, since it replaces 3D mode.
+      def stereo(left : Number, right : Number) : self
+        check_open
+        gains = LibSDLMixer::StereoGains.new(left: left.to_f32, right: right.to_f32)
+        unless LibSDLMixer.set_track_stereo(@ptr, pointerof(gains))
+          raise Error.new("MIX_SetTrackStereo(#{left}, #{right}) failed: #{SDL.last_error}")
+        end
+        self
+      end
+
+      # Places the track in space relative to the listener, who sits at
+      # the origin and cannot move. Further away is quieter, and the
+      # direction is rendered onto whatever speakers there are.
+      #
+      # The track's input is converted to MONO to be placed, so a stereo
+      # source loses its own left/right in exchange for a position.
+      def position_3d=(point : Point3D) : Point3D
+        check_open
+        raw = point.to_unsafe
+        unless LibSDLMixer.set_track_3d_position(@ptr, pointerof(raw))
+          raise Error.new("MIX_SetTrack3DPosition(#{point}) failed: #{SDL.last_error}")
+        end
+        point
+      end
+
+      # Where the track sits in space.
+      #
+      # Answers the origin both for a track placed at the origin and for
+      # one that was never placed at all - SDL keeps no way to tell those
+      # apart, so this cannot be used to ask whether placement is on.
+      def position_3d : Point3D
+        check_open
+        raw = LibSDLMixer::Point3D.new
+        unless LibSDLMixer.get_track_3d_position(@ptr, pointerof(raw))
+          raise Error.new("MIX_GetTrack3DPosition failed: #{SDL.last_error}")
+        end
+        Point3D.from_unsafe(raw)
+      end
+
+      # Turns off placement of every kind - forced stereo and 3D alike -
+      # and returns the track to mixing normally across all speakers.
+      def unplace : self
+        check_open
+        unless LibSDLMixer.set_track_stereo(@ptr, nil)
+          raise Error.new("MIX_SetTrackStereo(nil) failed: #{SDL.last_error}")
+        end
+        self
+      end
+
       # Adds a tag - an arbitrary label like "sfx", "ui" or "ambient" -
       # so this track can be played, stopped or re-gained along with
       # every other track wearing it. See `Mixer#set_tag_gain`, which is

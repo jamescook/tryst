@@ -108,6 +108,32 @@ lib LibSDLMixer
   fun track_playing = MIX_TrackPlaying(track : Track*) : Bool
   fun track_paused = MIX_TrackPaused(track : Track*) : Bool
 
+  # Per-channel gains for forced-stereo mode.
+  struct StereoGains
+    left : Float32
+    right : Float32
+  end
+
+  # Right-handed, listener fixed at the origin: x is right, y is up,
+  # z is back.
+  struct Point3D
+    x : Float32
+    y : Float32
+    z : Float32
+  end
+
+  # Two modes of ONE spatialization setting. A non-null argument to
+  # either switches the track into that mode; a NULL argument to either
+  # turns spatialization off entirely, including the other mode.
+  #
+  # Forced stereo also resets the 3D position to the origin, and 3D mode
+  # converts the track's input to mono. The getter answers (0,0,0) both
+  # when the track really is at the origin and when 3D is not enabled at
+  # all, so it cannot be used to ask which mode is active.
+  fun set_track_stereo = MIX_SetTrackStereo(track : Track*, gains : StereoGains*) : Bool
+  fun set_track_3d_position = MIX_SetTrack3DPosition(track : Track*, position : Point3D*) : Bool
+  fun get_track_3d_position = MIX_GetTrack3DPosition(track : Track*, position : Point3D*) : Bool
+
   # Gain, not "volume": a float where 1.0 is unchanged, 0.0 is silence,
   # and above 1.0 amplifies. There is no upper bound.
   fun set_mixer_gain = MIX_SetMixerGain(mixer : Mixer*, gain : Float32) : Bool
