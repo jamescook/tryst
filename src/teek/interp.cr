@@ -3,17 +3,34 @@
 # indirection is implemented via C preprocessor macros in tcl.h/tk.h (e.g.
 # `Tcl_CreateInterp` expands to `tclStubsPtr->tcl_CreateInterp` when
 # `USE_TCL_STUBS` is defined) - Crystal has no C preprocessor and never reads
-# tcl.h, so it can't benefit from that macro indirection at all. Since we're
-# scoped to Tcl/Tk 8.6 only for now, we link straight against the real
-# libtcl8.6/libtk8.6 exported symbols instead. This also means none of
-# ruby-teek's Tcl_InitStubs/Tk_InitStubs bootstrap dance
+# tcl.h, so it can't benefit from that macro indirection at all. We link
+# straight against the real libtcl/libtk exported symbols instead. This also
+# means none of ruby-teek's Tcl_InitStubs/Tk_InitStubs bootstrap dance
 # (ext/teek/tcltkbridge.c) is needed here.
 #
-# Prefers pkg-config; falls back to Homebrew's keg-only tcl-tk@8 (macOS);
-# falls back to plain -l flags (Linux, where apt's tcl-dev/tk-dev already
-# installs into the linker's default search path). Fully self-contained
-# (no reference to an external script file) since Crystal shells this out
-# from its own build/cache directory, not the project's working directory.
+# WHICH VERSION is still a compile-time choice, though, and has to be - Tcl
+# 8.x and 9.x ship under different library names specifically so both can be
+# installed side by side (confirmed via `nm` on both, see ctk-jrf.8), and
+# even Tcl's own stub-version negotiation (Tcl_InitStubs) explicitly refuses
+# to bridge the major-version boundary (ruby-teek's tcl9compat.h comment:
+# "9.x won't satisfy '8.6'"). So there is no dynamic-linking trick that
+# makes one binary transparently run against either - `TCL_VERSION=9` at
+# build time is what ruby-teek's own per-install native-extension compile
+# achieves by simply finding Tcl 9 headers instead of 8.6 ones. Default
+# (TCL_VERSION unset or anything but "9") is 8.6, unchanged from before this
+# existed. Interp#initialize double-checks the *runtime* library's own
+# version against this choice and raises a friendly error on a mismatch -
+# see TCL_MAJOR_VERSION below - since the lookups here are heuristic (e.g.
+# Homebrew's unversioned tcl-tk/tcl-tk@9 publishes plain tcl.pc/tk.pc, which
+# a system that also has 8.6 registered could plausibly resolve wrong).
+#
+# Prefers pkg-config; falls back to Homebrew (keg-only tcl-tk@8 on macOS,
+# where 8.6 needs an explicit prefix; tcl-tk/tcl-tk@9 is not keg-only but
+# the fallback still covers it); falls back to plain -l flags (Linux, where
+# apt's tcl-dev/tk-dev already installs into the linker's default search
+# path). Fully self-contained (no reference to an external script file)
+# since Crystal shells this out from its own build/cache directory, not the
+# project's working directory.
 #
 # -Wl,-rpath bakes the Homebrew path into the compiled binary so it finds
 # the dylib at runtime without extra env vars. `crystal i`/`crystal eval`
@@ -21,10 +38,36 @@
 # -Wl,-rpath at all and crashes trying to dlopen the literal string as a
 # path, so it gets the plain flags instead and relies on
 # DYLD_LIBRARY_PATH/LD_LIBRARY_PATH being set in the environment instead.
-{% if flag?(:interpreted) %}
-  @[Link(ldflags: "`command -v pkg-config >/dev/null && pkg-config --exists tcl8.6 tk8.6 2>/dev/null && pkg-config --libs tcl8.6 tk8.6 || sh -c 'p=$(brew --prefix tcl-tk@8 2>/dev/null) && echo -L$p/lib -ltcl8.6 -ltk8.6 || echo -ltcl8.6 -ltk8.6'`")]
+{% if env("TCL_VERSION") == "9" %}
+  {% if flag?(:interpreted) %}
+    @[Link(ldflags: "`
+      if command -v pkg-config >/dev/null && pkg-config --exists tcl9.0 tk9.0 2>/dev/null; then
+        pkg-config --libs tcl9.0 tk9.0
+      elif command -v pkg-config >/dev/null && pkg-config --exists tcl tk 2>/dev/null; then
+        pkg-config --libs tcl tk
+      else
+        p=$(brew --prefix tcl-tk@9 2>/dev/null || brew --prefix tcl-tk 2>/dev/null)
+        if [ -n \"$p\" ]; then echo -L$p/lib -ltcl9.0 -ltcl9tk9.0; else echo -ltcl9.0 -ltcl9tk9.0; fi
+      fi
+    `")]
+  {% else %}
+    @[Link(ldflags: "`
+      if command -v pkg-config >/dev/null && pkg-config --exists tcl9.0 tk9.0 2>/dev/null; then
+        pkg-config --libs tcl9.0 tk9.0
+      elif command -v pkg-config >/dev/null && pkg-config --exists tcl tk 2>/dev/null; then
+        pkg-config --libs tcl tk
+      else
+        p=$(brew --prefix tcl-tk@9 2>/dev/null || brew --prefix tcl-tk 2>/dev/null)
+        if [ -n \"$p\" ]; then echo -L$p/lib -Wl,-rpath,$p/lib -ltcl9.0 -ltcl9tk9.0; else echo -ltcl9.0 -ltcl9tk9.0; fi
+      fi
+    `")]
+  {% end %}
 {% else %}
-  @[Link(ldflags: "`command -v pkg-config >/dev/null && pkg-config --exists tcl8.6 tk8.6 2>/dev/null && pkg-config --libs tcl8.6 tk8.6 || sh -c 'p=$(brew --prefix tcl-tk@8 2>/dev/null) && echo -L$p/lib -Wl,-rpath,$p/lib -ltcl8.6 -ltk8.6 || echo -ltcl8.6 -ltk8.6'`")]
+  {% if flag?(:interpreted) %}
+    @[Link(ldflags: "`command -v pkg-config >/dev/null && pkg-config --exists tcl8.6 tk8.6 2>/dev/null && pkg-config --libs tcl8.6 tk8.6 || sh -c 'p=$(brew --prefix tcl-tk@8 2>/dev/null) && echo -L$p/lib -ltcl8.6 -ltk8.6 || echo -ltcl8.6 -ltk8.6'`")]
+  {% else %}
+    @[Link(ldflags: "`command -v pkg-config >/dev/null && pkg-config --exists tcl8.6 tk8.6 2>/dev/null && pkg-config --libs tcl8.6 tk8.6 || sh -c 'p=$(brew --prefix tcl-tk@8 2>/dev/null) && echo -L$p/lib -Wl,-rpath,$p/lib -ltcl8.6 -ltk8.6 || echo -ltcl8.6 -ltk8.6'`")]
+  {% end %}
 {% end %}
 lib LibTcl
   alias Interp = Void
@@ -37,16 +80,37 @@ lib LibTcl
   # That lets Obj stay fully opaque here.
   alias Obj = Void
 
+  # Width of every length/count parameter Tcl 9 widened to Tcl_Size
+  # (verified against tcl.h: `typedef ptrdiff_t Tcl_Size;` on 9.x,
+  # `typedef int Tcl_Size;` on 8.x) - one alias instead of repeating the
+  # {% if %} at every fun below that takes one.
+  {% if env("TCL_VERSION") == "9" %}
+    alias TclSize = LibC::SSizeT
+  {% else %}
+    alias TclSize = LibC::Int
+  {% end %}
+
   fun find_executable = Tcl_FindExecutable(argv0 : LibC::Char*)
   fun create_interp = Tcl_CreateInterp : Interp*
   fun init = Tcl_Init(interp : Interp*) : LibC::Int
-  fun eval = Tcl_Eval(interp : Interp*, script : LibC::Char*) : LibC::Int
-  fun get_string_result = Tcl_GetStringResult(interp : Interp*) : LibC::Char*
   fun delete_interp = Tcl_DeleteInterp(interp : Interp*)
 
-  fun new_string_obj = Tcl_NewStringObj(bytes : LibC::Char*, length : LibC::Int) : Obj*
-  fun get_string_from_obj = Tcl_GetStringFromObj(obj : Obj*, length : LibC::Int*) : LibC::Char*
-  fun eval_objv = Tcl_EvalObjv(interp : Interp*, objc : LibC::Int, objv : Obj**, flags : LibC::Int) : LibC::Int
+  # Tcl_Eval/Tcl_GetVar/Tcl_SetVar/Tcl_GetStringResult are gone as real
+  # exported symbols in Tcl 9 (confirmed via `nm` on libtcl9.0.dylib -
+  # only reachable through the stub table this project doesn't use, see
+  # the @[Link] comment above) - the modern replacements below exist as
+  # real exports in BOTH 8.6 and 9.x (also confirmed via `nm`, on
+  # libtcl8.6.dylib), so binding those instead covers both versions with
+  # one set of names rather than branching per Tcl major version. Only
+  # #eval's third parameter is Tcl_Size-shaped; everything else here is
+  # plain int/pointer in both versions.
+  fun eval = Tcl_EvalEx(interp : Interp*, script : LibC::Char*, num_bytes : TclSize, flags : LibC::Int) : LibC::Int
+  fun get_obj_result = Tcl_GetObjResult(interp : Interp*) : Obj*
+  fun get_string = Tcl_GetString(obj : Obj*) : LibC::Char*
+
+  fun new_string_obj = Tcl_NewStringObj(bytes : LibC::Char*, length : TclSize) : Obj*
+  fun get_string_from_obj = Tcl_GetStringFromObj(obj : Obj*, length : TclSize*) : LibC::Char*
+  fun eval_objv = Tcl_EvalObjv(interp : Interp*, objc : TclSize, objv : Obj**, flags : LibC::Int) : LibC::Int
   fun db_incr_ref_count = Tcl_DbIncrRefCount(obj : Obj*, file : LibC::Char*, line : LibC::Int)
   fun db_decr_ref_count = Tcl_DbDecrRefCount(obj : Obj*, file : LibC::Char*, line : LibC::Int)
   fun get_return_options = Tcl_GetReturnOptions(interp : Interp*, code : LibC::Int) : Obj*
@@ -59,8 +123,13 @@ lib LibTcl
   # read-only or nonexistent array). TCL_GLOBAL_ONLY (below) - a plain
   # #defined flag, not a stub-table entry - makes both operate on the
   # global variable table regardless of the interp's current call frame.
-  fun get_var = Tcl_GetVar(interp : Interp*, var_name : LibC::Char*, flags : LibC::Int) : LibC::Char*
-  fun set_var = Tcl_SetVar(interp : Interp*, var_name : LibC::Char*, new_value : LibC::Char*, flags : LibC::Int) : LibC::Char*
+  # Tcl_GetVar/Tcl_SetVar - see the #eval comment above for why these
+  # bind the *2 forms instead - are a "part1"/"part2" pair rather than
+  # one combined name because that's how Tcl represents `arr(elem)`
+  # array access; a plain scalar variable is part1 with part2 NULL,
+  # which is the only shape #tcl_get_var/#tcl_set_var ever need.
+  fun get_var = Tcl_GetVar2(interp : Interp*, part1 : LibC::Char*, part2 : LibC::Char*, flags : LibC::Int) : LibC::Char*
+  fun set_var = Tcl_SetVar2(interp : Interp*, part1 : LibC::Char*, part2 : LibC::Char*, new_value : LibC::Char*, flags : LibC::Int) : LibC::Char*
 
   # ObjCmdProc/CmdDeleteProc: the C signatures Tcl_CreateObjCommand expects
   # for a custom command's handler and (optional) cleanup callback. Crystal
@@ -155,17 +224,36 @@ lib LibTk
   fun init_console_channels = Tk_InitConsoleChannels(interp : LibTcl::Interp*)
   fun create_console_window = Tk_CreateConsoleWindow(interp : LibTcl::Interp*) : LibC::Int
 
-  # Font measurement - see Interp#text_width and friends. Tk 8.6 spells
-  # every length here as int; Tcl 9 switched several to Tcl_Size, so these
-  # signatures are 8.6-specific (which is all this port targets).
+  # Font measurement - see Interp#text_width and friends. None of these
+  # five need a version branch except the two below: main_window/get_font/
+  # free_font/get_font_metrics were checked directly against Tk 9.0.3's
+  # real tkDecls.h (/opt/homebrew/Cellar/tcl-tk/9.0.3/include/tcl-tk/), not
+  # assumed - Tk_FontMetrics is still three plain ints in 9.0, and none of
+  # these four take a length/count parameter at all.
   fun main_window = Tk_MainWindow(interp : LibTcl::Interp*) : Window
   fun get_font = Tk_GetFont(interp : LibTcl::Interp*, tkwin : Window, str : LibC::Char*) : Font
   fun free_font = Tk_FreeFont(font : Font)
-  fun text_width = Tk_TextWidth(font : Font, str : LibC::Char*, num_bytes : LibC::Int) : LibC::Int
   fun get_font_metrics = Tk_GetFontMetrics(font : Font, metrics : FontMetrics*)
-  fun measure_chars = Tk_MeasureChars(font : Font, source : LibC::Char*, num_bytes : LibC::Int,
-                                      max_pixels : LibC::Int, flags : LibC::Int,
-                                      length : LibC::Int*) : LibC::Int
+
+  # Tk_TextWidth/Tk_MeasureChars DO change shape in 9.0 - confirmed against
+  # the same header: `numBytes` becomes Tcl_Size (ptrdiff_t-width, LibC::
+  # SSizeT here) in both, while MeasureChars's other three int params and
+  # both functions' plain-int return stay exactly as they were. Passing an
+  # 8.6-shaped LibC::Int argument where the callee reads a 64-bit Tcl_Size
+  # would leave the upper bits garbage rather than fail loudly, which is
+  # worse than not linking at all - hence the version branch here rather
+  # than one signature reused for both.
+  {% if env("TCL_VERSION") == "9" %}
+    fun text_width = Tk_TextWidth(font : Font, str : LibC::Char*, num_bytes : LibC::SSizeT) : LibC::Int
+    fun measure_chars = Tk_MeasureChars(font : Font, source : LibC::Char*, num_bytes : LibC::SSizeT,
+                                        max_pixels : LibC::Int, flags : LibC::Int,
+                                        length : LibC::Int*) : LibC::Int
+  {% else %}
+    fun text_width = Tk_TextWidth(font : Font, str : LibC::Char*, num_bytes : LibC::Int) : LibC::Int
+    fun measure_chars = Tk_MeasureChars(font : Font, source : LibC::Char*, num_bytes : LibC::Int,
+                                        max_pixels : LibC::Int, flags : LibC::Int,
+                                        length : LibC::Int*) : LibC::Int
+  {% end %}
 end
 
 {% if flag?(:darwin) %}
@@ -178,24 +266,51 @@ end
   #
   #   Tk 8.6   TkMacOSXDrawable                  exported (tkIntPlatDecls.h)
   #            Tk_MacOSXGetNSWindowForDrawable   absent - stubs only
-  #   Tk 9.0   TkMacOSXDrawable                  absent
+  #   Tk 9.0   TkMacOSXDrawable                  absent (a header-only
+  #                                              macro alias to the name
+  #                                              below - tkIntPlatDecls.h)
   #            Tk_MacOSXGetNSWindowForDrawable   exported (tkPlatDecls.h)
   #
-  # This binds the 8.6 one, which is what the project links. It is Tk
-  # INTERNAL API rather than public, which is not the preference - the
-  # public call is simply not reachable in 8.6 without the stub table,
-  # and that needs a C preprocessor this build has no use for anywhere
-  # else. Moving to Tk 9 means swapping this one fun and the one call to
-  # it in #native_window_handle, and nothing else.
+  # Confirmed via `nm` on both libraries (ctk-jrf.8) and directly against
+  # Tk 9.0.3's real tkPlatDecls.h - both take a Drawable and return the
+  # toplevel's NSWindow, so the surrounding code and the NativeWindow
+  # value #native_window_handle builds are unaffected by the branch. The
+  # 8.6 arm binds Tk INTERNAL API rather than public, which is not the
+  # preference - the public call is simply not reachable in 8.6 without
+  # the stub table, and that needs a C preprocessor this build has no use
+  # for anywhere else.
   #
-  # Returns Tk's own NSWindow subclass, TKWindow - confirmed by asking
-  # the returned pointer its Objective-C class, not by reading a header.
+  # Returns Tk's own NSWindow subclass, TKWindow - confirmed on the 8.6
+  # symbol by asking the returned pointer its Objective-C class, not by
+  # reading a header (the 9.0 arm is untested against a live NSWindow as
+  # of this writing - same shape, same header-documented contract, but
+  # worth another live check the first time it's actually exercised).
   lib LibTkMacOSX
-    fun ns_window_for_drawable = TkMacOSXDrawable(drawable : Void*) : Void*
+    {% if env("TCL_VERSION") == "9" %}
+      fun ns_window_for_drawable = Tk_MacOSXGetNSWindowForDrawable(drawable : Void*) : Void*
+    {% else %}
+      fun ns_window_for_drawable = TkMacOSXDrawable(drawable : Void*) : Void*
+    {% end %}
   end
 {% end %}
 
 module Teek
+  # Which Tcl/Tk major version this build was compiled to link against -
+  # see the @[Link] lines at the top of this file for why that has to be
+  # a compile-time choice rather than something one binary picks at
+  # runtime. `TCL_VERSION=9 crystal build/spec` (or ./scripts/docker-test.sh
+  # with that in the environment) targets 9.x; anything else targets 8.6.
+  #
+  # Interp#initialize cross-checks this against the version the runtime
+  # library actually reports and raises a friendly TclError on a mismatch
+  # - the lookups the @[Link] ldflags do to find the right library are
+  # heuristic (a system with both installed could resolve the "wrong" one,
+  # particularly on the 9.x arm - see the comment there), so this is the
+  # backstop that turns a silent ABI mismatch into an immediate, readable
+  # error instead of undefined behavior the first time a version-sensitive
+  # call is made.
+  TCL_MAJOR_VERSION = {{ env("TCL_VERSION") == "9" ? 9 : 8 }}
+
   # Depth counter around #dispatch_callback, so .in_callback? can detect
   # "is this code running synchronously inside a Tk callback right now"
   # - used to auto-detect unsafe operations (e.g. Handle#destroy!
@@ -300,10 +415,12 @@ module Teek
       @ptr = LibTcl.create_interp
       raise TclError.new("Tcl_CreateInterp returned NULL") if @ptr.null?
 
+      check_tcl_major_version
+
       # Some Tcl init scripts reference $argv/$argv0; set them even though
       # we're not a real command-line Tcl app (mirrors ruby-teek's
       # interp_initialize).
-      LibTcl.eval(@ptr, "set argc 0; set argv {}; set argv0 crystal_teek")
+      LibTcl.eval(@ptr, "set argc 0; set argv {}; set argv0 crystal_teek", -1, 0)
 
       raise_unless_ok("Tcl_Init") { LibTcl.init(@ptr) }
       raise_unless_ok("Tk_Init") { LibTk.init(@ptr) }
@@ -313,7 +430,7 @@ module Teek
       # the process was launched. "catch" handles Linux, where the
       # console command doesn't exist at all. Mirrors ruby-teek's C ext
       # (tcltkbridge.c interp_initialize).
-      LibTcl.eval(@ptr, "catch {console hide}")
+      LibTcl.eval(@ptr, "catch {console hide}", -1, 0)
 
       # client_data is this Interp itself (boxed), recovered in
       # teek_crystal_callback_dispatch so it can reach @callbacks. Kept
@@ -331,7 +448,7 @@ module Teek
     # use #tcl_invoke instead, which quotes each argument as a distinct
     # Tcl_Obj rather than relying on Tcl's string-quoting rules.
     def tcl_eval(script : String) : String
-      raise_unless_ok("Tcl_Eval(#{script.inspect})") { LibTcl.eval(@ptr, script) }
+      raise_unless_ok("Tcl_Eval(#{script.inspect})") { LibTcl.eval(@ptr, script, -1, 0) }
       result
     end
 
@@ -345,13 +462,13 @@ module Teek
 
     def tcl_invoke(args : Enumerable(String)) : String
       objv = args.map do |arg|
-        obj = LibTcl.new_string_obj(arg, arg.bytesize)
+        obj = LibTcl.new_string_obj(arg, LibTcl::TclSize.new(arg.bytesize))
         LibTcl.db_incr_ref_count(obj, __FILE__, __LINE__)
         obj
       end
 
       begin
-        code = LibTcl.eval_objv(@ptr, objv.size, objv.to_unsafe, 0)
+        code = LibTcl.eval_objv(@ptr, LibTcl::TclSize.new(objv.size), objv.to_unsafe, 0)
         raise_tcl_error(code) unless code == TCL_OK
         result
       ensure
@@ -363,7 +480,7 @@ module Teek
     # work), or nil if it doesn't exist. Mirrors ruby-teek's
     # Interp#tcl_get_var.
     def tcl_get_var(name : String) : String?
-      ptr = LibTcl.get_var(@ptr, name, LibTcl::TCL_GLOBAL_ONLY)
+      ptr = LibTcl.get_var(@ptr, name, nil, LibTcl::TCL_GLOBAL_ONLY)
       return if ptr.null?
       String.new(ptr)
     end
@@ -373,7 +490,7 @@ module Teek
     # needs escaping - braces, backslashes, $, [, whatever, all safe.
     # Mirrors ruby-teek's Interp#tcl_set_var.
     def tcl_set_var(name : String, value : String) : String
-      ptr = LibTcl.set_var(@ptr, name, value, LibTcl::TCL_GLOBAL_ONLY)
+      ptr = LibTcl.set_var(@ptr, name, nil, value, LibTcl::TCL_GLOBAL_ONLY)
       raise TclError.new("failed to set variable '#{name}'") if ptr.null?
       value
     end
@@ -751,7 +868,32 @@ module Teek
     end
 
     private def result : String
-      String.new(LibTcl.get_string_result(@ptr))
+      String.new(LibTcl.get_string(LibTcl.get_obj_result(@ptr)))
+    end
+
+    # The @[Link] lines' library lookup (top of this file) is heuristic,
+    # not a guarantee - particularly the Tcl 9.x arm, which falls back to
+    # Homebrew's unversioned tcl.pc/tk.pc that a system with both 8.6 and
+    # 9.x installed could plausibly resolve to the wrong one. tcl_patchLevel
+    # is a core interpreter global Tcl_CreateInterp itself sets up, so it's
+    # readable this early - no need to wait for Tcl_Init. A mismatch here
+    # means every version-shaped fun signature in this file (Tk_TextWidth's
+    # Tcl_Size parameter, the macOS window-handle symbol, ...) is wrong for
+    # what actually got linked, which is worse silently than loudly, so
+    # this runs before anything else touches the interpreter.
+    private def check_tcl_major_version : Nil
+      patch_level = LibTcl.get_var(@ptr, "tcl_patchLevel", nil, LibTcl::TCL_GLOBAL_ONLY)
+      return if patch_level.null?
+
+      loaded = String.new(patch_level)
+      major = loaded.split('.').first?.try(&.to_i?)
+      return if major.nil? || major == TCL_MAJOR_VERSION
+
+      raise TclError.new(
+        "this build targets Tcl/Tk #{TCL_MAJOR_VERSION}.x (TCL_VERSION=#{TCL_MAJOR_VERSION} " \
+        "at build time) but the Tcl library actually loaded is #{loaded} - rebuild with " \
+        "TCL_VERSION=#{major} to match what's installed and found first, or make sure a " \
+        "Tcl/Tk #{TCL_MAJOR_VERSION}.x install is what this build's linker finds")
     end
 
     private def raise_unless_ok(what : String, & : -> LibC::Int) : Nil
@@ -771,7 +913,7 @@ module Teek
     end
 
     private def dict_get(dict : LibTcl::Obj*, key : String) : String?
-      key_obj = LibTcl.new_string_obj(key, key.bytesize)
+      key_obj = LibTcl.new_string_obj(key, LibTcl::TclSize.new(key.bytesize))
       LibTcl.db_incr_ref_count(key_obj, __FILE__, __LINE__)
       LibTcl.dict_obj_get(@ptr, dict, key_obj, out value_ptr)
       LibTcl.db_decr_ref_count(key_obj, __FILE__, __LINE__)
@@ -780,7 +922,7 @@ module Teek
 
     private def obj_to_string(obj : LibTcl::Obj*) : String?
       return if obj.null?
-      len = 0
+      len = LibTcl::TclSize.new(0)
       ptr = LibTcl.get_string_from_obj(obj, pointerof(len))
       String.new(ptr, len)
     end
@@ -797,19 +939,19 @@ fun teek_crystal_callback_dispatch(client_data : Void*, interp : LibTcl::Interp*
 
   wrapper = Box(Teek::Interp).unbox(client_data)
 
-  len = 0
+  len = LibTcl::TclSize.new(0)
   id_ptr = LibTcl.get_string_from_obj(objv[1], pointerof(len))
   id = String.new(id_ptr, len)
 
   args = (2...objc).map do |i|
-    arg_len = 0
+    arg_len = LibTcl::TclSize.new(0)
     ptr = LibTcl.get_string_from_obj(objv[i], pointerof(arg_len))
     String.new(ptr, arg_len)
   end
 
   code, error = wrapper.dispatch_callback(id, args)
   if error
-    err_obj = LibTcl.new_string_obj(error, error.bytesize)
+    err_obj = LibTcl.new_string_obj(error, LibTcl::TclSize.new(error.bytesize))
     LibTcl.set_obj_result(interp, err_obj)
   end
   code

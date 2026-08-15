@@ -1,9 +1,12 @@
 require "./interp"
 
 lib LibTcl
-  fun new_list_obj = Tcl_NewListObj(objc : LibC::Int, objv : Obj**) : Obj*
+  # objc is TclSize-shaped in both - see interp.cr's TclSize/#eval comment.
+  # list_obj_append_element/get_boolean_from_obj are plain int in both
+  # versions (checked directly against Tcl 9.0.3's tclDecls.h).
+  fun new_list_obj = Tcl_NewListObj(objc : TclSize, objv : Obj**) : Obj*
   fun list_obj_append_element = Tcl_ListObjAppendElement(interp : Interp*, list_ptr : Obj*, obj : Obj*) : LibC::Int
-  fun list_obj_get_elements = Tcl_ListObjGetElements(interp : Interp*, list_ptr : Obj*, objc : LibC::Int*, objv : Obj***) : LibC::Int
+  fun list_obj_get_elements = Tcl_ListObjGetElements(interp : Interp*, list_ptr : Obj*, objc : TclSize*, objv : Obj***) : LibC::Int
   fun get_boolean_from_obj = Tcl_GetBooleanFromObj(interp : Interp*, obj : Obj*, value : LibC::Int*) : LibC::Int
 end
 
@@ -30,6 +33,18 @@ module Teek
     LibTcl.find_executable("crystal_teek")
     ptr = LibTcl.create_interp
     raise TclError.new("Tcl_CreateInterp returned NULL (utility interp)") if ptr.null?
+
+    # Tcl_Init was skipped here for a long time since a bare interp
+    # doesn't need init.tcl's library procs for pure Tcl_Obj value
+    # conversion - but ruby-teek calls it (ext/teek/tcltkbridge.c,
+    # Init_tcltklib) on this exact kind of bare utility interp too, not
+    # only its Tk-backed ones, and skipping it here is what a Tcl 9
+    # allocator segfault in Tcl_NewStringObj traced back to (a
+    # process/interp-scoped step Tcl 9's threading-aware allocator
+    # depends on that 8.6 tolerated going without).
+    code = LibTcl.init(ptr)
+    raise TclError.new("Tcl_Init failed (utility interp)") unless code == Interp::TCL_OK
+
     @@utility_interp = ptr
   end
 
@@ -40,18 +55,26 @@ module Teek
     return [] of String if str.nil? || str.empty?
 
     @@utility_mutex.synchronize do
-      obj = LibTcl.new_string_obj(str, str.bytesize)
+      # utility_interp first, even though Tcl_NewStringObj takes no interp
+      # argument and doesn't look like it needs one forced into existence -
+      # on Tcl 9 it crashes in Tcl_Alloc if no interpreter has ever been
+      # created in this process yet (its threading-aware allocator turns
+      # out to be interp-creation-initialized; 8.6's tolerates going
+      # without). Confirmed directly: calling Tcl_NewStringObj before any
+      # Tcl_CreateInterp segfaults under Tcl 9, works fine under 8.6.
+      interp = utility_interp
+      obj = LibTcl.new_string_obj(str, LibTcl::TclSize.new(str.bytesize))
       LibTcl.db_incr_ref_count(obj, __FILE__, __LINE__)
 
-      code = LibTcl.list_obj_get_elements(utility_interp, obj, out objc, out objv)
+      code = LibTcl.list_obj_get_elements(interp, obj, out objc, out objv)
       if code != 0
-        message = String.new(LibTcl.get_string_result(utility_interp))
+        message = String.new(LibTcl.get_string(LibTcl.get_obj_result(interp)))
         LibTcl.db_decr_ref_count(obj, __FILE__, __LINE__)
         raise TclError.new("invalid Tcl list: #{message}")
       end
 
       result = (0...objc).map do |i|
-        len = 0
+        len = LibTcl::TclSize.new(0)
         ptr = LibTcl.get_string_from_obj(objv[i], pointerof(len))
         String.new(ptr, len)
       end
@@ -84,15 +107,17 @@ module Teek
     return "" if args.empty?
 
     @@utility_mutex.synchronize do
+      # See split_list's comment on why utility_interp is forced first.
+      interp = utility_interp
       list_obj = LibTcl.new_list_obj(0, Pointer(Pointer(LibTcl::Obj)).null)
       LibTcl.db_incr_ref_count(list_obj, __FILE__, __LINE__)
 
       args.each do |arg|
-        elem = LibTcl.new_string_obj(arg, arg.bytesize)
-        LibTcl.list_obj_append_element(utility_interp, list_obj, elem)
+        elem = LibTcl.new_string_obj(arg, LibTcl::TclSize.new(arg.bytesize))
+        LibTcl.list_obj_append_element(interp, list_obj, elem)
       end
 
-      len = 0
+      len = LibTcl::TclSize.new(0)
       ptr = LibTcl.get_string_from_obj(list_obj, pointerof(len))
       result = String.new(ptr, len)
       LibTcl.db_decr_ref_count(list_obj, __FILE__, __LINE__)
@@ -105,12 +130,14 @@ module Teek
   # ruby-teek's Teek.tcl_to_bool (ext/teek/tcltkbridge.c).
   def self.tcl_to_bool(str : String) : Bool
     @@utility_mutex.synchronize do
-      obj = LibTcl.new_string_obj(str, str.bytesize)
+      # See split_list's comment on why utility_interp is forced first.
+      interp = utility_interp
+      obj = LibTcl.new_string_obj(str, LibTcl::TclSize.new(str.bytesize))
       LibTcl.db_incr_ref_count(obj, __FILE__, __LINE__)
 
-      code = LibTcl.get_boolean_from_obj(utility_interp, obj, out bval)
+      code = LibTcl.get_boolean_from_obj(interp, obj, out bval)
       if code != 0
-        message = String.new(LibTcl.get_string_result(utility_interp))
+        message = String.new(LibTcl.get_string(LibTcl.get_obj_result(interp)))
         LibTcl.db_decr_ref_count(obj, __FILE__, __LINE__)
         raise TclError.new(message)
       end
