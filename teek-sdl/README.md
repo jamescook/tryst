@@ -3,22 +3,34 @@
 SDL3 rendering, audio and gamepad input for [teek](../), Crystal's Tcl/Tk
 binding.
 
-A separate shard rather than part of teek itself, which is the same split
-ruby-teek uses between its `teek` and `teek-sdl2` gems: teek gains no SDL
-dependency, and nothing here is reachable from a plain `require "teek"`.
-It lives in this repo, next to the shard it depends on, for the same
-reason `teek-sdl2` lives inside the ruby-teek repo.
-
-Targets **SDL3**, not SDL2. ruby-teek's `teek-sdl2` is on SDL2 only
-because SDL3_mixer was still a release candidate at the time; it has
-since shipped.
+A separate shard rather than part of teek itself, so that teek gains no
+SDL dependency: nothing here is reachable from a plain `require "teek"`,
+and a project that only wants Tk never pays for SDL. It lives in this
+repo, next to the shard it depends on, and points at it with a `path`
+dependency.
 
 ## Status
 
-Foundation only: the shard builds, links against all four SDL3 libraries,
-and can bring each of them up and back down beside a live Tk interpreter.
-No viewport, renderer, textures, image loading, text, audio playback or
-gamepad support yet.
+Audio works. Sound effects, streaming music, tags for grouping, gain,
+fades, capture of the mixed output to a WAV, and push-based PCM output
+for generated audio — see below. The shard also links and initialises
+all four SDL3 libraries beside a live Tk interpreter.
+
+No viewport, renderer, textures, image loading, text or gamepad support
+yet.
+
+```crystal
+require "teek-sdl"
+
+click = Teek::SDL::Sound.new("click.wav")
+click.play             # overlaps freely
+click.play(gain: 0.25) # quieter
+
+music = Teek::SDL::Music.new("theme.ogg")
+music.gain = 0.4
+music.play             # loops forever by default
+music.fade_out(1500)
+```
 
 ## Requirements
 

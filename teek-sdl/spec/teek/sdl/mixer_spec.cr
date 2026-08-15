@@ -100,8 +100,8 @@ describe Teek::SDL::Mixer do
           track.paused?.should be_true
           # Paused is its own state, distinct from both of the others:
           # not playing, but not stopped either, so it can be resumed.
-          # SDL2_mixer's Mix_Playing stayed true here, which is the trap
-          # for anything ported over from teek-sdl2.
+          # Worth pinning, because "paused implies playing" is the
+          # intuition most audio APIs teach.
           track.playing?.should be_false
           track.stopped?.should be_false
           silent?(mixer.generate(128)).should be_true

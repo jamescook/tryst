@@ -8,7 +8,7 @@ module Teek
     #
     # Where Sound and Music play audio that already exists, this is for
     # audio that does not - a synthesiser, a decoder, an emulator's sound
-    # chip. ruby-teek's theremin sample is the case it exists for.
+    # chip.
     #
     # ```
     # stream = Teek::SDL::AudioStream.new(
@@ -105,9 +105,6 @@ module Teek
       # Sample FRAMES still waiting - one frame being one sample per
       # channel. The number to pace generation against: keep a few
       # thousand frames buffered and the output never gaps.
-      #
-      # ruby-teek calls this `queued_samples`, but it counts frames there
-      # too; the name is the only thing that changed.
       def queued_frames : Int32
         queued_bytes // @spec.frame_size
       end

@@ -16,8 +16,8 @@ require "./sdl/ttf"
 
 module Teek
   # SDL3 rendering, audio and input for teek. A separate shard so that
-  # teek itself never grows an SDL dependency - the same split ruby-teek
-  # uses between the teek and teek-sdl2 gems.
+  # teek itself never grows an SDL dependency: nothing here is reachable
+  # from a plain `require "teek"`.
   module SDL
     # Any SDL call that reports failure. SDL's own convention is a false
     # return plus a message parked in SDL_GetError, which is easy to drop

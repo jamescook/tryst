@@ -2,9 +2,8 @@ require "./core"
 require "./audio"
 require "./properties"
 
-# SDL3_mixer. Note the prefix: MIX_, not SDL2_mixer's Mix_ - this is a
-# redesigned API rather than renamed calls, and the shouty form is used
-# throughout. Linked by core.cr's @[Link], which names all four packages.
+# SDL3_mixer. Note the prefix is the shouty MIX_ throughout, not Mix_.
+# Linked by core.cr's @[Link], which names all four packages.
 lib LibSDLMixer
   fun version = MIX_Version : LibC::Int
 
@@ -13,10 +12,9 @@ lib LibSDLMixer
   fun init = MIX_Init : Bool
   fun quit = MIX_Quit
 
-  # The three opaque types the whole API is built from. SDL2_mixer's
-  # Mix_Chunk / Mix_Music / numbered-channel trio is gone: one Audio type
-  # covers effects and music alike, and a Track is an explicit playback
-  # slot the caller holds rather than an integer index into a pool.
+  # The three opaque types the whole API is built from. One Audio type
+  # covers effects and music alike, and a Track is a playback slot the
+  # caller holds - allocated one at a time, not indexed out of a pool.
   alias Mixer = Void
   alias Audio = Void
   alias Track = Void
@@ -66,8 +64,8 @@ lib LibSDLMixer
   fun track_frames_to_ms = MIX_TrackFramesToMS(track : Track*, frames : Int64) : Int64
 
   # Tags are arbitrary strings - "ui", "sfx", "ambient" - and a track may
-  # carry any number. They replace SDL2_mixer's integer channel groups,
-  # and they are how a whole category of sound gets its own volume.
+  # carry any number. They are how a whole category of sound is acted on
+  # in one call.
   fun tag_track = MIX_TagTrack(track : Track*, tag : LibC::Char*) : Bool
   fun untag_track = MIX_UntagTrack(track : Track*, tag : LibC::Char*)
 
@@ -96,7 +94,7 @@ lib LibSDLMixer
   fun track_paused = MIX_TrackPaused(track : Track*) : Bool
 
   # Gain, not "volume": a float where 1.0 is unchanged, 0.0 is silence,
-  # and above 1.0 amplifies. SDL2_mixer's 0-128 integer volume is gone.
+  # and above 1.0 amplifies. There is no upper bound.
   fun set_mixer_gain = MIX_SetMixerGain(mixer : Mixer*, gain : Float32) : Bool
   fun get_mixer_gain = MIX_GetMixerGain(mixer : Mixer*) : Float32
   fun set_track_gain = MIX_SetTrackGain(track : Track*, gain : Float32) : Bool

@@ -4,16 +4,12 @@ require "./audio_spec"
 
 module Teek
   module SDL
-    # Audio loaded into a mixer - a MIX_Audio. Shared between Sound and
-    # Music, which in SDL3_mixer differ only in how they are loaded and
-    # how they are played, not in what they are.
+    # Audio loaded into a mixer. Shared between Sound and Music, which
+    # are the same kind of thing underneath and differ only in how they
+    # are loaded and how they are played.
     #
-    # That is the biggest departure from teek-sdl2: SDL2_mixer had two
-    # unrelated types, Mix_Chunk for effects and Mix_Music for streaming,
-    # with separate calls for each and only one music able to play at a
-    # time. SDL3_mixer has one type, and the only real choice left is
-    # whether to decode the file up front or stream it - which is what
-    # `predecode` below is.
+    # The one real choice is whether to decode the file up front or
+    # stream it, which is what `predecode` below is.
     abstract class AudioSource
       @ptr : LibSDLMixer::Audio*
 

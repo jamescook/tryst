@@ -12,8 +12,8 @@ module Teek
     # capture.stop
     # ```
     #
-    # What ruby-teek uses to record a demo with sound, pairing the WAV
-    # with a screen recording afterwards:
+    # For recording a demo with sound, pairing the WAV with a screen
+    # recording afterwards:
     #
     #     ffmpeg -i screen.mp4 -i demo.wav -c:v copy -c:a aac -shortest out.mp4
     #
@@ -180,8 +180,7 @@ end
 # incoming samples are floats and `samples` counts floats rather than
 # sample frames. They are converted to signed 16-bit here, in fixed
 # stack-sized chunks, because that is what makes the result an ordinary
-# PCM WAV that anything at all will open - the same format ruby-teek's
-# capture produces.
+# PCM WAV that anything at all will open.
 fun teek_sdl_capture_postmix(userdata : Void*, mixer : LibSDLMixer::Mixer*,
                              spec : LibSDL::AudioSpec*, pcm : Float32*,
                              samples : LibC::Int)

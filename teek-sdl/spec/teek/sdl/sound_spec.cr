@@ -160,6 +160,68 @@ describe Teek::SDL::Sound do
   end
 end
 
+describe "Teek::SDL::Sound#play with a gain" do
+  it "plays quieter without handing back anything to clean up" do
+    with_mixer do |mixer|
+      path = WavFixture.square(WavFixture.path("pg.wav"), ms: 500)
+      sound = Teek::SDL::Sound.new(path, mixer)
+      begin
+        sound.play
+        full = peak(mixer.generate(256), mixer.format)
+        mixer.stop_all
+
+        sound.play(gain: 0.25)
+        quiet = peak(mixer.generate(256), mixer.format)
+
+        quiet.should be < full
+        quiet.should be > 0.0
+      ensure
+        sound.destroy
+      end
+    end
+  end
+
+  it "still overlaps with itself" do
+    with_mixer do |mixer|
+      path = WavFixture.square(WavFixture.path("pgo.wav"), ms: 500)
+      sound = Teek::SDL::Sound.new(path, mixer)
+      begin
+        sound.play(gain: 0.2)
+        one = peak(mixer.generate(256), mixer.format)
+
+        3.times { sound.play(gain: 0.2) }
+        many = peak(mixer.generate(256), mixer.format)
+
+        # Each overlapping copy needs a track of its own, so this is also
+        # the evidence that the pool grows rather than restarting one.
+        many.should be > one
+      ensure
+        sound.destroy
+      end
+    end
+  end
+
+  it "does not carry a previous gain over to a reused track" do
+    with_mixer do |mixer|
+      path = WavFixture.square(WavFixture.path("pgr.wav"), ms: 20)
+      sound = Teek::SDL::Sound.new(path, mixer)
+      begin
+        sound.play(gain: 0.05)
+        mixer.generate(44_100 // 10) # let it finish, so the track is free
+
+        sound.play(gain: 1.0)
+        loud = peak(mixer.generate(256), mixer.format)
+
+        # A reused track still holds whatever gain it was last given,
+        # which is exactly the bug pooling invites.
+        loud.should be > 0.5
+      ensure
+        sound.destroy
+      end
+    end
+  end
+end
+
 # Largest absolute sample in a mixed buffer, as a float, so two mixes can
 # be compared for loudness. Reads whichever of the two formats these
 # specs produce - the mixer's own float32, or integer PCM if a spec asked

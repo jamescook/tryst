@@ -11,9 +11,8 @@ require "./support/wav_fixture"
 # what they set up themselves.
 #
 # The lowest supported version of all four libraries, matching the
-# `libraries:` block in shard.yml. Below this, SDL3_mixer is still the
-# release-candidate API that ruby-teek's teek-sdl2 avoided by staying on
-# SDL2 - which is the whole reason this port targets SDL3 at all.
+# `libraries:` block in shard.yml. Below this, SDL3_mixer's API was still
+# a release candidate and does not match what this shard binds.
 SDL3_FLOOR = Teek::SDL::Version.new(major: 3, minor: 2, micro: 0)
 
 # The suite runs silent, and not by accident.

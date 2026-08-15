@@ -13,11 +13,9 @@ module Teek
     # music.fade_out(1500)
     # ```
     #
-    # SDL2_mixer allowed exactly one music at a time, and ruby-teek's
-    # Music says so. That limit is gone: a Music here is an ordinary
-    # audio source on an ordinary track, so several can play at once.
-    # An application is free to keep the old discipline, but it is now
-    # the application's choice rather than the library's.
+    # Nothing here limits playback to one music at a time - a Music is an
+    # ordinary audio source on an ordinary track, so several can run at
+    # once. Keeping to one is the application's choice, not a rule.
     class Music < AudioSource
       # The track this music plays on, for the things Track can do that
       # Music does not wrap - starting part-way in, say.
@@ -38,8 +36,7 @@ module Teek
       end
 
       # Starts, or restarts, playback. loops counts EXTRA passes, so the
-      # default of -1 repeats forever and 0 plays through once - the same
-      # meaning ruby-teek's Music#play gives it.
+      # default of -1 repeats forever and 0 plays through once.
       def play(loops : Int32 = -1, fade_ms : Int32 = 0) : self
         @track.play(loops: loops, fade_ms: fade_ms)
         self
@@ -51,10 +48,8 @@ module Teek
         self
       end
 
-      # Fades out over `ms` and stops. ruby-teek spells this
-      # `Teek::SDL2.fade_out_music(ms)` - a module function, because
-      # SDL2_mixer had a single global music for it to apply to. Here it
-      # belongs to the music being faded.
+      # Fades out over `ms` and stops. The same thing as `stop(ms)`,
+      # named for how it reads at the call site.
       def fade_out(ms : Int32) : self
         stop(ms)
       end
@@ -69,10 +64,9 @@ module Teek
         self
       end
 
-      # Playing, paused and stopped are mutually exclusive in SDL3_mixer,
-      # so a PAUSED MUSIC IS NOT PLAYING. ruby-teek's `playing?` answers
-      # true while paused, because SDL2_mixer's Mix_PlayingMusic did;
-      # ported code that asks "has this been started" wants `!stopped?`.
+      # Playing, paused and stopped are mutually exclusive, so a PAUSED
+      # MUSIC IS NOT PLAYING. To ask "has this been started at all", use
+      # `!stopped?`.
       def playing? : Bool
         @track.playing?
       end

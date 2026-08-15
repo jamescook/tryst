@@ -13,9 +13,9 @@ module Teek
     #   when `#generate` asks, as fast as it is asked. What a test wants:
     #   no hardware, no waiting, and the mixed samples in hand.
     #
-    # SDL2_mixer had one implicit global mixer and a fixed pool of
-    # numbered channels. Neither survives here: a mixer is an object you
-    # make and own, and `Track` replaces the numbered channels.
+    # A mixer is an object you make and own; there is no implicit global
+    # one. `Mixer.default` is a settable convenience for code that does
+    # not want to name one, and nothing else reaches for it.
     class Mixer
       # --- The library, as opposed to any one mixer ---------------------
 
@@ -148,8 +148,8 @@ module Teek
       end
 
       # Master gain over everything this mixer plays: 1.0 unchanged, 0.0
-      # silent, above 1.0 amplifies. SDL2_mixer's 0-128 integer volume
-      # has no equivalent here and is deliberately not emulated.
+      # silent, above 1.0 amplifies. A multiplier, not a 0-100 volume -
+      # there is no upper bound, and it gets loud fast.
       def gain : Float32
         check_open
         LibSDLMixer.get_mixer_gain(@ptr)
@@ -215,9 +215,9 @@ module Teek
 
       # --- Tags -----------------------------------------------------------
       #
-      # A tag is an arbitrary label a Track wears - "sfx", "ui", "music".
-      # They replace SDL2_mixer's integer channel groups, and they are how
-      # a whole category of sound gets its own volume:
+      # A tag is an arbitrary label a Track wears - "sfx", "ui", "music" -
+      # and a track can wear several. They are how a whole category of
+      # sound is played, stopped or re-gained in one call:
       #
       # ```
       # shot.play_track.tag("sfx")

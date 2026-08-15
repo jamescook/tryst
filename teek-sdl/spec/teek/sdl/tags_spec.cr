@@ -1,9 +1,8 @@
 require "../../spec_helper"
 
-# Tags are what SDL3_mixer offers in place of SDL2_mixer's integer
-# channel groups, and the thing they exist for is the pair of volume
-# sliders every application with sound ends up wanting: turn the effects
-# down without touching the music.
+# Tags exist for the pair of volume controls every application with
+# sound ends up wanting: turn the effects down without touching the
+# music, in one call rather than by holding every track.
 describe "track tags" do
   describe Teek::SDL::Track do
     it "carries any number of tags, and reports them" do

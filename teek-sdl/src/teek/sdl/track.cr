@@ -4,14 +4,9 @@ require "./audio_source"
 
 module Teek
   module SDL
-    # One playback slot on a mixer: what SDL2_mixer called a channel,
-    # except that it is an object the caller holds rather than an integer
-    # index into a fixed pool, and there is no limit on how many exist.
-    #
-    # This is what replaces teek-sdl2's channel-oriented module functions.
-    # `SDL2.halt(channel)` becomes `track.stop`, `SDL2.playing?(channel)`
-    # becomes `track.playing?`, `SDL2.channel_volume(channel, v)` becomes
-    # `track.gain = g`, and so on down the list.
+    # One playback slot on a mixer: an object the caller holds, carrying
+    # a single audio input, its own gain, and its own play/pause/stop
+    # state. There is no limit on how many can exist at once.
     #
     # A track is not usually constructed directly - `Sound#play_track`
     # and `Music` make them - but doing so is legal and is how a caller
@@ -46,8 +41,8 @@ module Teek
 
       # Starts, or restarts, playback.
       #
-      # loops counts EXTRA passes, matching ruby-teek: 0 plays once, 2
-      # plays three times, -1 repeats forever.
+      # loops counts EXTRA passes: 0 plays once, 2 plays three times, -1
+      # repeats forever.
       def play(loops : Int32 = 0, fade_ms : Int32 = 0, start_ms : Int32 = 0) : self
         check_open
         PlayOptions.with(loops, fade_ms, start_ms) do |options|
@@ -88,11 +83,8 @@ module Teek
 
       # A track is in exactly one of three states: playing, paused or
       # stopped. They are mutually exclusive, so a PAUSED TRACK IS NOT
-      # PLAYING - which is a real change from SDL2_mixer, where
-      # Mix_Playing stayed true across a pause and ruby-teek's
-      # `playing?` inherited that. Code carried over from teek-sdl2 that
-      # asks `playing?` to mean "has been started" wants
-      # `playing? || paused?`, or `!stopped?`.
+      # PLAYING. To ask "has this been started at all", which is the
+      # usual intent, use `!stopped?`.
       def playing? : Bool
         check_open
         LibSDLMixer.track_playing(@ptr)
