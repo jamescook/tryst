@@ -56,4 +56,25 @@ lib LibSDL
   # A null texture puts drawing back on the window.
   fun set_render_target = SDL_SetRenderTarget(renderer : Renderer*, texture : Texture*) : Bool
   fun get_render_target = SDL_GetRenderTarget(renderer : Renderer*) : Texture*
+
+  struct FColor
+    r : Float32
+    g : Float32
+    b : Float32
+    a : Float32
+  end
+
+  struct Vertex
+    position : FPoint
+    color : FColor
+    tex_coord : FPoint
+  end
+
+  # A null texture draws flat-coloured, untextured triangles. A null
+  # indices means every num_vertices vertices in order, one triangle
+  # per three - SDL's own default when nothing indexes into the vertex
+  # array.
+  fun render_geometry = SDL_RenderGeometry(renderer : Renderer*, texture : Texture*,
+                                           vertices : Vertex*, num_vertices : LibC::Int,
+                                           indices : LibC::Int*, num_indices : LibC::Int) : Bool
 end

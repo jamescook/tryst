@@ -171,6 +171,34 @@ module Teek
         self
       end
 
+      # Draws an arbitrary list of coloured (and, with a texture,
+      # textured) triangles - the one primitive #fill_rect/#draw_line/
+      # #copy don't cover, since all of them are axis-aligned or whole-
+      # texture. Gradients, polygons, particle fans, custom meshes.
+      #
+      # With no indices, every three vertices in order become one
+      # triangle - SDL's own default. With indices, each group of three
+      # indexes into vertices instead, so a shared vertex (a fan's
+      # centre, an edge shared between two triangles) is written once
+      # and reused rather than duplicated.
+      def draw_geometry(vertices : Array(Vertex), texture : Texture? = nil,
+                        indices : Array(Int32)? = nil) : self
+        raw_vertices = vertices.map(&.to_unsafe)
+        texture_ptr = texture ? texture.to_unsafe : Pointer(LibSDL::Texture).null
+
+        ok =
+          if indices
+            LibSDL.render_geometry(@renderer, texture_ptr, raw_vertices.to_unsafe, raw_vertices.size,
+              indices.to_unsafe, indices.size)
+          else
+            LibSDL.render_geometry(@renderer, texture_ptr, raw_vertices.to_unsafe, raw_vertices.size,
+              nil, 0)
+          end
+
+        raise Error.new("SDL_RenderGeometry failed: #{SDL.last_error}") unless ok
+        self
+      end
+
       # Puts everything drawn since the last present on screen.
       #
       # Nothing appears without this, which is the single most common

@@ -307,6 +307,93 @@ rescue ex : Teek::SDL::Error
   raise "texture: expected 'destroyed', got #{ex.message.inspect}" unless ex.message.to_s.includes?("destroyed")
 end
 
+# --- Geometry ----------------------------------------------------------
+
+# Case G1: draw_geometry with no indices - two triangles per half,
+# sequential triangulation, flat colours (no texture). red/blue are the
+# same colours the renderer cases above already defined.
+w = viewport.width.to_f32
+h = viewport.height.to_f32
+mid = w / 2
+
+renderer.clear(Teek::SDL::Color::BLACK)
+renderer.draw_geometry([
+  # Left half, red, as two triangles.
+  Teek::SDL::Vertex.new(Teek::SDL::Point.new(0, 0), red),
+  Teek::SDL::Vertex.new(Teek::SDL::Point.new(mid, 0), red),
+  Teek::SDL::Vertex.new(Teek::SDL::Point.new(0, h), red),
+  Teek::SDL::Vertex.new(Teek::SDL::Point.new(mid, 0), red),
+  Teek::SDL::Vertex.new(Teek::SDL::Point.new(mid, h), red),
+  Teek::SDL::Vertex.new(Teek::SDL::Point.new(0, h), red),
+  # Right half, blue, as two triangles.
+  Teek::SDL::Vertex.new(Teek::SDL::Point.new(mid, 0), blue),
+  Teek::SDL::Vertex.new(Teek::SDL::Point.new(w, 0), blue),
+  Teek::SDL::Vertex.new(Teek::SDL::Point.new(mid, h), blue),
+  Teek::SDL::Vertex.new(Teek::SDL::Point.new(w, 0), blue),
+  Teek::SDL::Vertex.new(Teek::SDL::Point.new(w, h), blue),
+  Teek::SDL::Vertex.new(Teek::SDL::Point.new(mid, h), blue),
+])
+renderer.read_pixels do |pixels|
+  left = pixels[(pixels.width * 0.25).to_i, (pixels.height * 0.5).to_i]
+  right = pixels[(pixels.width * 0.75).to_i, (pixels.height * 0.5).to_i]
+  unless left.r > 200 && left.b < 60
+    raise "geometry: expected the left half to be red, got #{left}"
+  end
+  unless right.b > 200 && right.r < 60
+    raise "geometry: expected the right half to be blue, got #{right}"
+  end
+end
+
+# Case G2: the same left half, this time built from 4 distinct vertices
+# and an explicit indices array (0,1,2, 1,3,2) rather than 6 duplicated
+# ones - the shared-vertex path #fill_rect/#draw_line have no equivalent
+# for.
+renderer.clear(Teek::SDL::Color::BLACK)
+renderer.draw_geometry(
+  [
+    Teek::SDL::Vertex.new(Teek::SDL::Point.new(0, 0), red),
+    Teek::SDL::Vertex.new(Teek::SDL::Point.new(mid, 0), red),
+    Teek::SDL::Vertex.new(Teek::SDL::Point.new(0, h), red),
+    Teek::SDL::Vertex.new(Teek::SDL::Point.new(mid, h), red),
+  ],
+  indices: [0, 1, 2, 1, 3, 2],
+)
+renderer.read_pixels do |pixels|
+  left = pixels[(pixels.width * 0.25).to_i, (pixels.height * 0.5).to_i]
+  right = pixels[(pixels.width * 0.75).to_i, (pixels.height * 0.5).to_i]
+  unless left.r > 200 && left.b < 60
+    raise "geometry: expected the indexed left half to be red, got #{left}"
+  end
+  unless right.r < 60 && right.g < 60 && right.b < 60
+    raise "geometry: expected the untouched right half to stay black, got #{right}"
+  end
+end
+
+# Case G3: textured - a single green texture sampled across two
+# triangles covering the whole viewport, tex_coord mapping each corner
+# to the texture's own corners.
+textured = renderer.create_texture(2, 2)
+begin
+  textured.update(argb_buffer(2, 2, 0_u8, 255_u8, 0_u8))
+  renderer.clear(red)
+  renderer.draw_geometry([
+    Teek::SDL::Vertex.new(Teek::SDL::Point.new(0, 0), Teek::SDL::Color::WHITE, Teek::SDL::Point.new(0, 0)),
+    Teek::SDL::Vertex.new(Teek::SDL::Point.new(w, 0), Teek::SDL::Color::WHITE, Teek::SDL::Point.new(1, 0)),
+    Teek::SDL::Vertex.new(Teek::SDL::Point.new(0, h), Teek::SDL::Color::WHITE, Teek::SDL::Point.new(0, 1)),
+    Teek::SDL::Vertex.new(Teek::SDL::Point.new(w, 0), Teek::SDL::Color::WHITE, Teek::SDL::Point.new(1, 0)),
+    Teek::SDL::Vertex.new(Teek::SDL::Point.new(w, h), Teek::SDL::Color::WHITE, Teek::SDL::Point.new(1, 1)),
+    Teek::SDL::Vertex.new(Teek::SDL::Point.new(0, h), Teek::SDL::Color::WHITE, Teek::SDL::Point.new(0, 1)),
+  ], texture: textured)
+  renderer.read_pixels do |pixels|
+    got = pixels[(pixels.width * 0.5).to_i, (pixels.height * 0.5).to_i]
+    unless got.g > 200 && got.r < 60
+      raise "geometry: expected the textured triangles to be green, got #{got}"
+    end
+  end
+ensure
+  textured.destroy
+end
+
 # Case 5: destroy takes the frame and leaves the application standing.
 viewport.destroy
 app.update

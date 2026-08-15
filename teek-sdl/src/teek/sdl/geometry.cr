@@ -1,4 +1,5 @@
 require "./bindings/render"
+require "./bindings/texture"
 
 module Teek
   module SDL
@@ -44,6 +45,25 @@ module Teek
 
       def to_unsafe : LibSDL::FPoint
         LibSDL::FPoint.new(x: x, y: y)
+      end
+    end
+
+    # One corner of a triangle passed to Renderer#draw_geometry: where
+    # it is, what colour it is, and (only for a textured call) where in
+    # the texture it samples from. tex_coord defaults to the origin so a
+    # flat-coloured, untextured caller never has to touch it.
+    record Vertex, position : Point, color : Color, tex_coord : Point = Point.new(0, 0) do
+      def to_unsafe : LibSDL::Vertex
+        LibSDL::Vertex.new(
+          position: position.to_unsafe,
+          color: LibSDL::FColor.new(
+            r: color.r / 255.0_f32,
+            g: color.g / 255.0_f32,
+            b: color.b / 255.0_f32,
+            a: color.a / 255.0_f32,
+          ),
+          tex_coord: tex_coord.to_unsafe,
+        )
       end
     end
 
