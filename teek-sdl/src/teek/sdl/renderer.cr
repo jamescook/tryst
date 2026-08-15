@@ -1,5 +1,6 @@
 require "./bindings/render"
 require "./geometry"
+require "./texture"
 
 module Teek
   module SDL
@@ -175,6 +176,60 @@ module Teek
       # `Viewport#render` exists so it cannot be forgotten.
       def present : self
         raise Error.new("SDL_RenderPresent failed: #{SDL.last_error}") unless LibSDL.render_present(@renderer)
+        self
+      end
+
+      # A new texture belonging to this renderer. See Texture for which
+      # access to pick; the caller owns it and should #destroy it.
+      def create_texture(width : Int32, height : Int32,
+                         access : Texture::Access = Texture::Access::Static) : Texture
+        Texture.new(@renderer, width, height, access)
+      end
+
+      # Draws a texture. With no rects, the whole texture over the whole
+      # target; `src` takes part of the texture, `dest` places it.
+      def copy(texture : Texture, src : Rect? = nil, dest : Rect? = nil) : self
+        zero = LibSDL::FRect.new(x: 0, y: 0, w: 0, h: 0)
+        src_raw = src.try(&.to_unsafe) || zero
+        dest_raw = dest.try(&.to_unsafe) || zero
+
+        ok =
+          if src && dest
+            LibSDL.render_texture(@renderer, texture, pointerof(src_raw), pointerof(dest_raw))
+          elsif src
+            LibSDL.render_texture(@renderer, texture, pointerof(src_raw), nil)
+          elsif dest
+            LibSDL.render_texture(@renderer, texture, nil, pointerof(dest_raw))
+          else
+            LibSDL.render_texture(@renderer, texture, nil, nil)
+          end
+
+        raise Error.new("SDL_RenderTexture failed: #{SDL.last_error}") unless ok
+        self
+      end
+
+      # Draws into a texture instead of the window, for the duration of
+      # the block.
+      #
+      # The previous target is restored afterwards even if the block
+      # raises - forgetting to put it back leaves every later draw going
+      # somewhere invisible, which presents as the whole program having
+      # stopped rendering.
+      def draw_to(texture : Texture, & : Renderer -> _) : self
+        unless texture.access.target?
+          raise Error.new("only a Target texture can be drawn into, this one is #{texture.access}")
+        end
+
+        previous = LibSDL.get_render_target(@renderer)
+        unless LibSDL.set_render_target(@renderer, texture)
+          raise Error.new("SDL_SetRenderTarget failed: #{SDL.last_error}")
+        end
+
+        begin
+          yield self
+        ensure
+          LibSDL.set_render_target(@renderer, previous)
+        end
         self
       end
 
