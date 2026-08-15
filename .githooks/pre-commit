@@ -11,7 +11,7 @@ set -eu
 # lib/ is deliberately not passed - those are vendored dependencies.
 ameba_bin="lib/ameba/bin/ameba"
 if [ -x "$ameba_bin" ]; then
-  if ! "$ameba_bin" src/ spec/ examples/ teek-sdl/src/ teek-sdl/spec/; then
+  if ! "$ameba_bin" src/ spec/ examples/ teek-sdl/src/ teek-sdl/spec/ teek-sdl/examples/; then
     echo "pre-commit: ameba found issues (see above) - fix or run 'crystal tool format' first." >&2
     exit 1
   fi
@@ -46,14 +46,29 @@ if ! command -v crystal >/dev/null 2>&1; then
   exit 1
 fi
 
+# Each shard's examples are checked FROM ITS OWN DIRECTORY. A shard-name
+# require like `require "teek/ui"` resolves against the lib/ of whatever
+# directory crystal runs in, and teek-sdl has its own - checking its
+# examples from the repo root would look in the root's lib/ and fail to
+# find teek at all.
 example_failures=""
-for f in $(find examples -name '*.cr' | sort); do
-  if ! out=$(crystal build --no-codegen "$f" 2>&1); then
-    example_failures="$example_failures
---- $f
-$out"
+check_examples() {
+  dir=$1
+  if [ ! -d "$dir/lib" ]; then
+    echo "pre-commit: $dir/lib is missing - run 'shards install' in $dir." >&2
+    exit 1
   fi
-done
+  for f in $( (cd "$dir" && find examples -name '*.cr' | sort) ); do
+    if ! out=$( (cd "$dir" && crystal build --no-codegen "$f") 2>&1 ); then
+      example_failures="$example_failures
+--- $dir/$f
+$out"
+    fi
+  done
+}
+
+check_examples .
+check_examples teek-sdl
 
 if [ -n "$example_failures" ]; then
   echo "pre-commit: example(s) failed to compile:" >&2

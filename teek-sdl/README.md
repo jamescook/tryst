@@ -61,6 +61,28 @@ that is easy to misread: pkg-config contributes nothing to the link line
 and the build dies later in a pile of undefined `_MIX_*` references
 rather than saying the package is missing.
 
+## Examples
+
+Run these **from this directory**, not the repo root — Crystal resolves
+`require "teek"` against the `lib/` of wherever it runs, and only
+`teek-sdl/lib` has teek in it. From elsewhere they fail with
+`can't find file 'teek'`.
+
+```
+cd teek-sdl
+crystal run examples/sound_effects.cr   # overlapping clips, per-play gain, tags
+crystal run examples/music.cr           # loop, pause, seek, graceful end, fade out
+crystal run examples/panning.cr         # hard pans, a sweep, and a 3D orbit
+crystal run examples/capture.cr         # record the mix to a WAV
+crystal run examples/theremin.cr        # Tk sliders driving generated audio
+```
+
+These make sound — which is the point of them, since the specs run on a
+device-less mixer and never do. They generate the audio they need at
+runtime, so there is nothing to download and no binary asset in the repo.
+`theremin.cr` opens a window and needs a display; the rest are console
+only.
+
 ## Tests
 
 ```

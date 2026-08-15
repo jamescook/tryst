@@ -80,6 +80,35 @@ module Teek
         @track.stopped?
       end
 
+      # How far in it has played, or nil if the input cannot say - the
+      # number a progress bar wants.
+      def position_ms : Int64?
+        @track.position_ms
+      end
+
+      # Seeks. Needs a seekable input, which a streamed file normally is.
+      def position_ms=(ms : Int) : Int
+        @track.position_ms = ms
+      end
+
+      # How much of the current pass is left, or nil if unknown. Looping
+      # does not extend it - it is the remainder of this pass.
+      def remaining_ms : Int64?
+        @track.remaining_ms
+      end
+
+      # Passes still to come, counting down; -1 while looping forever.
+      def loops_remaining : Int32
+        @track.loops_remaining
+      end
+
+      # Setting this to 0 is how an endless music is brought to a
+      # graceful end: the current pass finishes rather than being cut off
+      # mid-sample the way `#stop` would.
+      def loops_remaining=(count : Int32) : Int32
+        @track.loops_remaining = count
+      end
+
       # Gain for this music alone, multiplied with the mixer's: 1.0
       # unchanged, 0.0 silent.
       def gain : Float32
