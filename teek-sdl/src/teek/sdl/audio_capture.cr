@@ -140,10 +140,10 @@ module Teek
 
       @channels : Int32
       @freq : Int32
-      @file : File
       @ring : Pointer(RingState)
       @bytes_written = Atomic(Int64).new(0_i64)
       @drain_done = Channel(Int64).new
+      @open_result = Channel(String?).new
       @overrun_warned = false
 
       getter path : String
@@ -167,25 +167,38 @@ module Teek
         @channels = format.channels
         @freq = format.freq
 
-        @file = File.new(@path, "w")
-        @file.sync = true
-        @file.write(header_bytes(0_i64))
-
         capacity = @freq * @channels * BUFFER_SECONDS
         @ring = Pointer(RingState).malloc(1)
         @ring.value = RingState.new(capacity)
+
+        # Opens the file and starts the drain loop before installing the
+        # callback, not after - the open (and every later write/close)
+        # must happen on the drain fiber's own OS thread, never on this
+        # (the caller's) one. This caller's fiber lives in the same
+        # execution context as anything touching a live Teek::App, and
+        # Crystal's default context does not pin a fiber to its OS thread
+        # across a File.open - confirmed directly (open() alone in a
+        # loop, no concurrency involved at all, measurably migrates the
+        # calling fiber's thread over enough iterations). Moving the
+        # syscall off this fiber entirely, rather than detecting the
+        # fallout afterwards, is what keeps a live Teek::App's Aqua/Tk
+        # calls safely pinned to the thread that created them.
+        start_drain_loop(capacity)
+        if err = @open_result.receive
+          raise Error.new(err)
+        end
 
         # Installed under the lock so the callback cannot already be
         # mid-flight against a ring pointer SDL has not been told about.
         @mixer.lock do
           unless LibSDLMixer.set_post_mix_callback(@mixer, ->teek_sdl_capture_postmix, @ring.as(Void*))
-            @file.close
-            raise Error.new("MIX_SetPostMixCallback failed: #{SDL.last_error}")
+            message = "MIX_SetPostMixCallback failed: #{SDL.last_error}"
+            @ring.value.stop
+            @drain_done.receive
+            raise Error.new(message)
           end
         end
         @mixer.active_capture = self
-
-        start_drain_loop(capacity)
       end
 
       # Bytes of audio written so far, header excluded.
@@ -209,10 +222,11 @@ module Teek
         end
         @mixer.active_capture = nil
 
-        data_bytes = @drain_done.receive
-        @file.seek(0)
-        @file.write(header_bytes(data_bytes))
-        @file.close
+        # The drain fiber patches the header and closes the file itself,
+        # on its own thread, as the last thing it does before sending
+        # here - not this (the caller's) fiber; see the comment in
+        # #initialize on why that File I/O can never happen on this one.
+        @drain_done.receive
       end
 
       # A 44-byte RIFF header for signed 16-bit little-endian PCM.
@@ -250,20 +264,34 @@ module Teek
       # for background work that does not touch Tcl, see
       # Teek::BackgroundWork). Ordinary Crystal code: it may allocate,
       # raise, and call File freely, none of which the audio thread may
-      # do - that split is the entire point of the ring buffer.
-      # @bytes_written is deliberately never captured into a local here -
-      # Atomic(Int64) is a struct, so `local = @bytes_written` copies it
-      # into independent storage the getter never sees again (confirmed
-      # directly: the copy kept accumulating correctly in isolation while
-      # #bytes_written read the original, untouched, forever 0). Every
-      # mutation below goes through `@bytes_written` itself, which stays
-      # the one true instance variable because this block keeps `self`.
+      # do - that split is the entire point of the ring buffer. It also
+      # opens, patches and closes the file itself, start to finish - see
+      # #initialize's comment on why that File I/O belongs here and
+      # nowhere else. @bytes_written is deliberately never captured into
+      # a local here - Atomic(Int64) is a struct, so
+      # `local = @bytes_written` copies it into independent storage the
+      # getter never sees again (confirmed directly: the copy kept
+      # accumulating correctly in isolation while #bytes_written read the
+      # original, untouched, forever 0). Every mutation below goes
+      # through `@bytes_written` itself, which stays the one true
+      # instance variable because this block keeps `self`.
       private def start_drain_loop(capacity : Int32) : Nil
         ring = @ring
-        file = @file
+        open_result = @open_result
         drain_done = @drain_done
 
         Fiber::ExecutionContext::Isolated.new("Teek::SDL::AudioCapture") do
+          file = begin
+            f = File.new(@path, "w")
+            f.sync = true
+            f.write(header_bytes(0_i64))
+            f
+          rescue ex
+            open_result.send(ex.message || ex.class.name)
+            next
+          end
+          open_result.send(nil)
+
           scratch = Pointer(Float32).malloc(capacity)
 
           loop do
@@ -281,7 +309,11 @@ module Teek
             end
           end
 
-          drain_done.send(@bytes_written.get(:acquire))
+          data_bytes = @bytes_written.get(:acquire)
+          file.seek(0)
+          file.write(header_bytes(data_bytes))
+          file.close
+          drain_done.send(data_bytes)
         end
       end
 
