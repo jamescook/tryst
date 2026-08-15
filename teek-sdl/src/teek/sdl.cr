@@ -12,6 +12,7 @@ require "./sdl/sound"
 require "./sdl/music"
 require "./sdl/audio_capture"
 require "./sdl/audio_stream"
+require "./sdl/viewport"
 require "./sdl/image"
 require "./sdl/ttf"
 

@@ -10,6 +10,7 @@ lib LibSDL
   fun create_properties = SDL_CreateProperties : PropertiesID
   fun destroy_properties = SDL_DestroyProperties(props : PropertiesID)
   fun set_number_property = SDL_SetNumberProperty(props : PropertiesID, name : LibC::Char*, value : Int64) : Bool
+  fun set_pointer_property = SDL_SetPointerProperty(props : PropertiesID, name : LibC::Char*, value : Void*) : Bool
   fun set_float_property = SDL_SetFloatProperty(props : PropertiesID, name : LibC::Char*, value : Float32) : Bool
   fun set_boolean_property = SDL_SetBooleanProperty(props : PropertiesID, name : LibC::Char*, value : Bool) : Bool
 end
