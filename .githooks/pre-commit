@@ -6,9 +6,12 @@ set -eu
 # Runs over the whole tree rather than just staged files - simplest
 # option at this project's size, and it means a lint issue introduced by
 # an uncommitted change elsewhere can't slip through unnoticed either.
+# teek-sdl/ is listed explicitly: it is a separate shard with its own
+# shard.yml, but it lives in this repo and shares its lint rules. Its
+# lib/ is deliberately not passed - those are vendored dependencies.
 ameba_bin="lib/ameba/bin/ameba"
 if [ -x "$ameba_bin" ]; then
-  if ! "$ameba_bin" src/ spec/ examples/; then
+  if ! "$ameba_bin" src/ spec/ examples/ teek-sdl/src/ teek-sdl/spec/; then
     echo "pre-commit: ameba found issues (see above) - fix or run 'crystal tool format' first." >&2
     exit 1
   fi
@@ -97,7 +100,7 @@ fi
 # matching an unrelated literal string that merely starts with the same
 # prefix (e.g. a test fixture's own "ctk-test-*" labels).
 if [ -n "$staged" ]; then
-  hits=$(git grep -n --cached -E 'ctk-[a-z][0-9]+(\.[0-9]+)*' -- 'src/*' 'spec/*' 'examples/*' 2>/dev/null || true)
+  hits=$(git grep -n --cached -E 'ctk-[a-z][0-9]+(\.[0-9]+)*' -- 'src/*' 'spec/*' 'examples/*' 'teek-sdl/*' 2>/dev/null || true)
   if [ -n "$hits" ]; then
     echo "pre-commit: refusing to commit bead/tracker id(s) in code:" >&2
     printf '%s\n' "$hits" >&2
