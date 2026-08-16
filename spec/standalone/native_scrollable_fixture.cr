@@ -11,6 +11,7 @@ require "../../src/teek/ui"
 
 session = Teek::UI.app(title: "native scrollable fixture") do |builder|
   builder.list(:log, height: 3)
+  builder.panel(:host)
 end
 
 app = session.realize
@@ -68,6 +69,28 @@ raise "scrollable: expected the view scrolled off the top, got #{first}" unless 
 sb_first, _sb_last = app.split_list(app.command(".log.vsb", :get))
 unless (sb_first.to_f - first.to_f).abs < 0.001
   raise "scrollable: expected the scrollbar to track the view, got #{sb_first} vs #{first}"
+end
+
+# Case 6: destroying a natively-scrollable widget must not leave its
+# wrapper frame or scrollbar(s) behind - the "list in a panel, rebuilt
+# every refresh" scenario. #destroy! has to tear down the wrapper
+# (RealizedNode#arrange_path), not just the inner listbox
+# (RealizedNode#path): the wrapper isn't a descendant of the inner
+# widget, so Tk's implicit subtree destroy never reaches it on its own,
+# and it's what the parent's geometry manager actually placed.
+host = session[:host]
+baseline_children = app.split_list(app.tcl_eval("winfo children #{host.path}"))
+
+10.times do
+  session.add(:host, &.list(:cycled, height: 3))
+  app.update
+  session[:cycled].destroy!(defer: false)
+  app.update
+end
+
+after_children = app.split_list(app.tcl_eval("winfo children #{host.path}"))
+unless after_children == baseline_children
+  raise "expected winfo children #{host.path} to return to #{baseline_children} after 10 build/destroy cycles, got #{after_children}"
 end
 
 app.destroy

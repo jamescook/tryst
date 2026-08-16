@@ -559,11 +559,19 @@ module Teek
       # The actual teardown #destroy! defers or runs immediately - clears
       # the pending flag first so a LATER, genuinely fresh destroy!
       # (after a rebuild) is never mistaken for a still-pending one.
+      #
+      # Destroys arrange_path, not path - for a natively-scrollable node
+      # (see Realizer#create_native_scrollable), path is the inner widget
+      # but arrange_path is the wrapper frame holding it plus the
+      # scrollbar(s); the wrapper isn't a descendant of the inner widget,
+      # so destroying path alone leaves it (and the scrollbar) behind as
+      # an orphaned, still-packed empty frame. arrange_path == path for
+      # every other node, so this is a strict superset of destroying path.
       private def perform_destroy! : Nil
         @node.pending_destroy = false
         r = realized
         app_ref = r.app || raise NotRealizedError.new
-        app_ref.destroy(r.path)
+        app_ref.destroy(r.arrange_path)
         @node.realized = nil
         unlink!
       end
