@@ -196,5 +196,29 @@ leak_item.delete
 after_delete = app.interp.callback_ids.size
 raise "expected deleting the item to release its on_click callback, got #{after_delete} (baseline #{baseline})" unless after_delete == baseline
 
+# Case 18: a canvas tag with Tcl-special characters is bound safely - not
+# interpolated into a script the way CanvasBindInterceptor's post-bind
+# requery once did (`#{path} bind #{tag_or_id} #{seq}`), which let a tag
+# like this one perform Tcl command substitution as a side effect.
+app.tcl_eval(%(set ::injection_probe none))
+injection_tag = %(evil tag [set ::injection_probe hit] ${bad} } ; set ::injection_probe hit)
+injection_hits = 0
+injection_baseline = app.interp.callback_ids.size
+
+injection_item = board.oval(10, 10, 30, 30, tags: injection_tag)
+board.tagged(injection_tag).on_click { |_args, _signal| injection_hits += 1 }
+
+unless app.interp.callback_ids.size == injection_baseline + 1
+  raise "expected exactly one new callback to be tracked for the injected tag, got #{app.interp.callback_ids.size - injection_baseline}"
+end
+raise "expected the injected tag fragment to not run" unless app.tcl_eval("set ::injection_probe") == "none"
+
+injection_script = app.tcl_invoke(board.path, "bind", injection_tag, "<Button-1>")
+app.tcl_eval(injection_script)
+raise "expected the binding to fire despite the tag's special characters" unless injection_hits == 1
+raise "expected the injected tag fragment to still not run after the binding fired" unless app.tcl_eval("set ::injection_probe") == "none"
+
+injection_item.delete
+
 app.destroy
 puts "OK"

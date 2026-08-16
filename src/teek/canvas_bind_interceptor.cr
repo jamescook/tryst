@@ -58,7 +58,7 @@ module Teek
         # returning empty, so a deleted item's binding has to be dropped
         # via rescue, not by checking the result.
         current = begin
-          app.tcl_eval("#{path} bind #{tag_or_id} #{seq}")
+          app.tcl_invoke(path, "bind", tag_or_id, seq)
         rescue Teek::TclError
           ""
         end
