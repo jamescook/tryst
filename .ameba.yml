@@ -3,7 +3,7 @@
 # spec/standalone/ holds standalone test programs, not spec files - each is
 # run as its own `crystal run` process by assert_tk_subprocess (Tcl/Tk's
 # interpreter is a one-shot singleton per process, so anything constructing
-# its own Teek::App needs a fresh one). They must NOT be named *_spec.cr:
+# its own Tryst::App needs a fresh one). They must NOT be named *_spec.cr:
 # `crystal spec` globs that pattern and would try to run them in-process.
 #
 # Ameba's own default list already exempts spec/support/**, spec/fixtures/**

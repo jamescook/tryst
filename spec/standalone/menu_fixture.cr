@@ -1,21 +1,21 @@
-require "../../src/teek/ui"
+require "../../src/tryst/ui"
 
 # Standalone verification for menu_bar/context_menu/MenuBuilder/
 # MenuEntryAddressing's real Tk behavior - needs its own subprocess for
 # the same reason grid_fixture.cr/overlay_fixture.cr do (Session#realize
-# always constructs a brand-new Teek::App). The exact Tcl commands
+# always constructs a brand-new Tryst::App). The exact Tcl commands
 # create_menu_tree builds are already covered headlessly against FakeApp
-# (spec/teek/ui/realizer_spec.cr); this confirms Tk's own menu actually
-# behaves as expected - matching ruby-teek's teek-ui/test/
+# (spec/tryst/ui/realizer_spec.cr); this confirms Tk's own menu actually
+# behaves as expected - matching ruby-tryst's tryst-ui/test/
 # test_menu_realize.rb, minus its ui.window-hosted case (which lives in
 # spec/standalone/ui_window_fixture.cr instead, alongside the rest of
 # :window's own coverage) and its session.add-based menu rebuild case,
 # which is simply not covered here yet - Session#add itself does exist.
 
 new_fired = false
-handles = {} of Symbol => Teek::UI::Handle
+handles = {} of Symbol => Tryst::UI::Handle
 
-session = Teek::UI.app(title: "menu fixture") do |builder|
+session = Tryst::UI.app(title: "menu fixture") do |builder|
   wrap = builder.var(false)
   size = builder.var("small")
 
@@ -93,7 +93,7 @@ raise "expected #{virtual_path} to equal #{file.path}!quick_load" unless virtual
 begin
   app.tcl_eval("#{virtual_path} entrycget 0 -label")
   raise "expected a raw call against the virtual path to raise"
-rescue Teek::TclError
+rescue Tryst::TclError
   # expected
 end
 

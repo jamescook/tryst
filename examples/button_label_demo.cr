@@ -3,10 +3,10 @@
 # click updating a label) are covered by real specs
 # (spec/support/tk_cases.cr) - this is kept as the canonical "hello
 # world" for anyone reading the codebase, not for coverage.
-require "../src/teek"
+require "../src/tryst"
 
-interp = Teek::Interp.new
-interp.tcl_invoke("wm", "title", ".", "crystal-teek")
+interp = Tryst::Interp.new
+interp.tcl_invoke("wm", "title", ".", "crystal-tryst")
 interp.bring_to_front
 
 interp.create_widget("label", ".l", text: "no clicks yet")

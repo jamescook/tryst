@@ -1,13 +1,13 @@
-require "../../src/teek/ui"
+require "../../src/tryst/ui"
 
 # Standalone verification for the Session helpers that need a real
 # interpreter but aren't dialogs or timers: #clipboard, #busy,
 # #find_by_path, #debug_info and #toast.
 #
-# Needs its own subprocess (see spec/teek/ui/session_realtk_spec.cr) -
-# Session#realize always constructs a brand-new Teek::App, which the
+# Needs its own subprocess (see spec/tryst/ui/session_realtk_spec.cr) -
+# Session#realize always constructs a brand-new Tryst::App, which the
 # shared tk_worker can't host. The NotRealizedError guard each of these
-# checks first is headless, and lives in spec/teek/ui/session_spec.cr.
+# checks first is headless, and lives in spec/tryst/ui/session_spec.cr.
 
 # Whether Tk currently considers window busy - `tk busy status` answers
 # with a Tcl boolean. Same helper tk_cases.cr uses for App#busy.
@@ -19,9 +19,9 @@ private def mapped?(app, path : String) : Bool
   app.winfo.ismapped?(path)
 end
 
-handles = {} of Symbol => Teek::UI::Handle
+handles = {} of Symbol => Tryst::UI::Handle
 
-session = Teek::UI.app(title: "session helpers fixture") do |builder|
+session = Tryst::UI.app(title: "session helpers fixture") do |builder|
   handles[:hello] = builder.label(:hello, text: "Hello")
   handles[:go] = builder.button(:go, text: "Go").on_action { }
   handles[:clicky] = builder.button(:clicky, text: "Click").on_click { }
@@ -103,7 +103,7 @@ session.toast("Copied", duration: 60_000)
 app.update
 text = app.tcl_invoke(toast_path, "cget", "-text")
 raise "toast: expected \"Copied\", got #{text.inspect}" unless text == "Copied"
-toast_children = Teek.split_list(app.tcl_eval("winfo children .")).select(&.starts_with?(".toast"))
+toast_children = Tryst.split_list(app.tcl_eval("winfo children .")).select(&.starts_with?(".toast"))
 raise "toast: expected exactly one toast widget, got #{toast_children}" unless toast_children.size == 1
 
 # Case 11: replacing a toast cancels the earlier one's pending

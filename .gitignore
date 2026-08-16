@@ -24,7 +24,7 @@ desktop.ini
 
 # Crystal (matches `crystal init`'s own template, which also skips
 # shard.lock for libraries - dependency locking is for the applications
-# that consume a shard, not the shard itself; ruby-teek does the same
+# that consume a shard, not the shard itself; ruby-tryst does the same
 # with Gemfile.lock)
 /docs/
 /lib/

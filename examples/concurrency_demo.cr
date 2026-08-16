@@ -3,7 +3,7 @@
 # a real, indefinitely-blocking #mainloop to demonstrate that the main
 # thread staying blocked doesn't stall the Isolated ticker context, and
 # the persistent test worker never calls #mainloop at all.
-require "../src/teek"
+require "../src/tryst"
 
 # On macOS, Tk's Aqua backend sits on Cocoa/AppKit, which requires all UI
 # calls to happen on the process's actual main thread - not just "a"
@@ -14,8 +14,8 @@ require "../src/teek"
 # earlier demo in this project), and the BACKGROUND work gets its own
 # Isolated context. Same property being demonstrated (Tk's blocking wait
 # doesn't stall the rest of the program), opposite placement.
-interp = Teek::Interp.new
-interp.tcl_invoke("wm", "title", ".", "crystal-teek concurrency spike")
+interp = Tryst::Interp.new
+interp.tcl_invoke("wm", "title", ".", "crystal-tryst concurrency spike")
 interp.bring_to_front
 interp.create_widget("label", ".l", text: "Tk on the main thread; ticker on its own Isolated thread")
 interp.pack(".l", pady: 20, padx: 20)

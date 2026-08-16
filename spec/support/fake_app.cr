@@ -1,21 +1,21 @@
-require "../../src/teek/ui/app_contract"
+require "../../src/tryst/ui/app_contract"
 
-# A minimal stand-in for Teek::App/Teek::Window, for headless specs that
+# A minimal stand-in for Tryst::App/Tryst::Window, for headless specs that
 # need something Realizer/Handle-shaped without a real Tk interpreter -
 # Realizer#create/#link/#realize_subtree only ever call #command/#bind/
 # #on_close (and, for a menu/window handle, #popup_menu/#window) on
 # whatever app they're given, so a fake recording every call is enough to
 # assert on exactly what WOULD have happened against real Tk. Shared
 # across every headless suite that needs one, so there's a single
-# definition to keep in sync with the real Teek::App/Teek::Window
-# signatures - see src/teek/ui/app_contract.cr's AppContract/
+# definition to keep in sync with the real Tryst::App/Tryst::Window
+# signatures - see src/tryst/ui/app_contract.cr's AppContract/
 # WindowContract modules (production code - Realizer holds its app as
 # `@app : AppContract`, dispatched dynamically, which is what actually
-# lets FakeApp stand in for a real Teek::App) for how.
+# lets FakeApp stand in for a real Tryst::App) for how.
 
-# See Teek::UI::WindowContract - a plain recorder, not a real Tk window.
+# See Tryst::UI::WindowContract - a plain recorder, not a real Tk window.
 class FakeWindow
-  include Teek::UI::WindowContract
+  include Tryst::UI::WindowContract
 
   record ModalCall, global : Bool
   record ResizableCall, width : Bool, height : Bool
@@ -80,16 +80,16 @@ class FakeWindow
   end
 end
 
-# See Teek::UI::AppContract - a plain recorder, not a real Tk app. Every
+# See Tryst::UI::AppContract - a plain recorder, not a real Tk app. Every
 # call is appended to its own log (#calls/#binds/#on_closes/#popups/
 # #windows) for later assertions in headless specs.
 class FakeApp
-  include Teek::UI::AppContract
+  include Tryst::UI::AppContract
 
-  record CommandCall, cmd : String, args : Array(Teek::TclArgValue), kwargs : Hash(String, Teek::TclArgValue)
+  record CommandCall, cmd : String, args : Array(Tryst::TclArgValue), kwargs : Hash(String, Tryst::TclArgValue)
   record BindCall, widget : String, event : String, subs : Array(String),
-    block : Proc(Array(String), Teek::CallbackSignal, Nil), owner : String? = nil
-  record OnCloseCall, window : String, block : Proc(Array(String), Teek::CallbackSignal, Nil)
+    block : Proc(Array(String), Tryst::CallbackSignal, Nil), owner : String? = nil
+  record OnCloseCall, window : String, block : Proc(Array(String), Tryst::CallbackSignal, Nil)
   record PopupCall, menu : String, x : Int32, y : Int32, entry : String?
   record IdleCall, block : Proc(Nil)
 
@@ -115,26 +115,26 @@ class FakeApp
   property command_result = ""
 
   # **kwargs is deliberately left untyped (unlike *args) - matching
-  # Teek::App's own real #command - a typed double-splat fails to
+  # Tryst::App's own real #command - a typed double-splat fails to
   # resolve ANY call passing zero matching keyword arguments (confirmed
   # directly: CanvasItem#move's own `@app.command(path, :move, id, dx,
   # dy)`, with no kwargs at all, failed to compile against this method
-  # with `**kwargs : Teek::TclArgValue` still in place).
-  def command(cmd, *args : Teek::TclArgValue, **kwargs)
-    # Array(Teek::TclArgValue).new + push, not args.to_a directly - a
+  # with `**kwargs : Tryst::TclArgValue` still in place).
+  def command(cmd, *args : Tryst::TclArgValue, **kwargs)
+    # Array(Tryst::TclArgValue).new + push, not args.to_a directly - a
     # splat parameter's actual argument types are inferred per call
     # site (e.g. all-String args here become Array(String), not
     # Array(TclArgValue)), and Array isn't covariant in Crystal even
     # when every element type is itself a TclArgValue member (same
     # issue as EventBus#emit - see its own comment).
-    arg_list = Array(Teek::TclArgValue).new
+    arg_list = Array(Tryst::TclArgValue).new
     args.each { |arg| arg_list << arg }
-    kwarg_hash = Hash(String, Teek::TclArgValue).new
+    kwarg_hash = Hash(String, Tryst::TclArgValue).new
     kwargs.each { |key, value| kwarg_hash[key.to_s] = value }
     command(cmd, arg_list, kwarg_hash)
   end
 
-  def command(cmd, args : Array(Teek::TclArgValue), kwargs : Hash(String, Teek::TclArgValue)) : String
+  def command(cmd, args : Array(Tryst::TclArgValue), kwargs : Hash(String, Tryst::TclArgValue)) : String
     @calls << CommandCall.new(cmd.to_s, args, kwargs)
     # A real String, not nil - AppContract declares no return type
     # (dispatched dynamically), so Crystal infers #command's actual
@@ -147,12 +147,12 @@ class FakeApp
   end
 
   def bind(widget, event : String, *subs, owner : String? = nil,
-           &block : Array(String), Teek::CallbackSignal -> Nil) : String
+           &block : Array(String), Tryst::CallbackSignal -> Nil) : String
     bind(widget, event, subs, owner: owner, &block)
   end
 
   def bind(widget, event : String, subs : Enumerable, *, owner : String? = nil,
-           &block : Array(String), Teek::CallbackSignal -> Nil) : String
+           &block : Array(String), Tryst::CallbackSignal -> Nil) : String
     # Built element-wise rather than subs.to_a.map(&.to_s): a bind with
     # NO subs at all reaches the splat overload above as an empty Tuple,
     # whose #to_a is an Array(NoReturn) - #map over it then has no
@@ -166,7 +166,7 @@ class FakeApp
     "" # see #command's own comment - same reasoning, App#bind returns String too
   end
 
-  def on_close(window = ".", &block : Array(String), Teek::CallbackSignal -> Nil)
+  def on_close(window = ".", &block : Array(String), Tryst::CallbackSignal -> Nil)
     @on_closes << OnCloseCall.new(window.to_s, block)
     nil
   end
@@ -177,7 +177,7 @@ class FakeApp
   end
 
   # A fresh recorder per call, matching the real App#window (which also
-  # builds a new Teek::Window each time rather than caching one). A spec
+  # builds a new Tryst::Window each time rather than caching one). A spec
   # asserting on window calls therefore aggregates across #windows rather
   # than holding one instance.
   def window(path = ".")
@@ -188,14 +188,14 @@ class FakeApp
   end
 
   # A plain whitespace split, NOT real Tcl-list parsing - deliberately
-  # not delegating to the FFI-backed Teek.split_list (App#split_list's
+  # not delegating to the FFI-backed Tryst.split_list (App#split_list's
   # own implementation), so FakeApp stays genuinely backend-free (no Tcl
   # interpreter of any kind, not even the bare Tk-free utility one).
   # Doesn't handle brace-quoted or backslash-escaped elements - fine for
   # FakeApp-driven tests, which control their own simple fixture strings;
   # anything that needs real Tcl-list correctness (parsing an actual
   # `configure` dump for WidgetAddressing#option_dump) is only ever
-  # meaningful against a real Teek::App anyway, and is tested through the
+  # meaningful against a real Tryst::App anyway, and is tested through the
   # tk_test harness instead. Add real brace/escape handling here later if
   # a FakeApp-driven test genuinely needs it.
   def split_list(str : String?) : Array(String)
@@ -212,8 +212,8 @@ class FakeApp
   # own). A headless test wanting to simulate the idle firing calls the
   # recorded block itself, e.g. app.idles.last.block.call - same pattern
   # already used for app.binds/app.on_closes's own captured blocks.
-  def after_idle(&block : -> Nil) : Teek::AfterHandle
+  def after_idle(&block : -> Nil) : Tryst::AfterHandle
     @idles << IdleCall.new(block)
-    Teek::AfterHandle.new("fake_idle#{@idles.size}")
+    Tryst::AfterHandle.new("fake_idle#{@idles.size}")
   end
 end

@@ -1,0 +1,90 @@
+require "tryst"
+
+require "./sdl/lib_sdl"
+require "./sdl/version"
+require "./sdl/audio_spec"
+require "./sdl/play_options"
+require "./sdl/spatial"
+require "./sdl/mixer"
+require "./sdl/audio_source"
+require "./sdl/track"
+require "./sdl/sound"
+require "./sdl/music"
+require "./sdl/audio_capture"
+require "./sdl/audio_stream"
+require "./sdl/gamepad"
+require "./sdl/geometry"
+require "./sdl/texture"
+require "./sdl/font"
+require "./sdl/renderer"
+require "./sdl/viewport"
+require "./sdl/image"
+require "./sdl/ttf"
+
+module Tryst
+  # SDL3 rendering, audio and input for tryst. A separate shard so that
+  # tryst itself never grows an SDL dependency: nothing here is reachable
+  # from a plain `require "tryst"`.
+  module SDL
+    # Any SDL call that reports failure. SDL's own convention is a false
+    # return plus a message parked in SDL_GetError, which is easy to drop
+    # on the floor; every wrapper here turns that into this instead.
+    class Error < Exception
+    end
+
+    # SDL_INIT_* . Only the subsystems this shard has a use for, rather
+    # than every bit SDL defines: video for the embedded surface, audio
+    # for the mixer, and joystick/gamepad for controller input. Events is
+    # here because it is what the others imply, so it shows up in
+    # `initialized` whether or not anyone asked for it.
+    @[Flags]
+    enum Subsystem : UInt32
+      Audio    = 0x00000010
+      Video    = 0x00000020
+      Joystick = 0x00000200
+      Events   = 0x00004000
+      Gamepad  = 0x00002000
+    end
+
+    # SDL's message for the most recent failing call. Empty when SDL has
+    # nothing to say - it is only meaningful right after a call that
+    # actually reported failure, never as a way to ask "did that work?".
+    def self.last_error : String
+      String.new(LibSDL.get_error)
+    end
+
+    # Brings up `subsystems`, raising rather than returning a bool -
+    # there is nothing a caller can do with a failed init except stop.
+    # Safe to call repeatedly: SDL reference-counts subsystems, so a
+    # second init of an already-live one succeeds and adds a count.
+    def self.init(subsystems : Subsystem) : Nil
+      return if LibSDL.init(subsystems.value)
+      raise Error.new("SDL_Init(#{subsystems}) failed: #{last_error}")
+    end
+
+    # Shuts down every subsystem regardless of how many times each was
+    # initialized - SDL_Quit is the big hammer, not a matching decrement.
+    def self.quit : Nil
+      LibSDL.quit
+    end
+
+    # Shuts down only `subsystems`, leaving everything else running - the
+    # counterpart to #init when the big #quit hammer would be too broad
+    # (Gamepad.shutdown_subsystem, for one, must not tear down audio or
+    # video another part of the same program still has up).
+    def self.quit_subsystem(subsystems : Subsystem) : Nil
+      LibSDL.quit_sub_system(subsystems.value)
+    end
+
+    # Everything currently up, as flags. Subsystems SDL brought up
+    # implicitly are included, so asking for Audio also reports Events.
+    def self.initialized : Subsystem
+      Subsystem.new(LibSDL.was_init(0))
+    end
+
+    # The SDL3 core library actually loaded into this process.
+    def self.version : Version
+      Version.from_versionnum(LibSDL.get_version)
+    end
+  end
+end

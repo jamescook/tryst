@@ -1,17 +1,17 @@
-require "../../src/teek/ui"
+require "../../src/tryst/ui"
 
 # Standalone regression check: a ui.every timer's on_error: :raise
 # exception must surface from Session#run (the DSL's own event-loop
 # driver), not just from App#update - the exact "run rather than driving
 # update by hand" scenario the bug report described. Session#run always
-# constructs its own Teek::App, hence its own subprocess (see
-# spec/teek/ui/session_realtk_spec.cr).
+# constructs its own Tryst::App, hence its own subprocess (see
+# spec/tryst/ui/session_realtk_spec.cr).
 #
 # A safety-net timer destroys the window if the exception never
 # surfaces, so a regression back to the pre-fix "silently swallowed"
 # behavior fails this fixture instead of hanging the suite forever.
 
-session = Teek::UI.app(title: "session run pending exception fixture")
+session = Tryst::UI.app(title: "session run pending exception fixture")
 
 count = 0
 session.every(30) do

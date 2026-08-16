@@ -1,6 +1,6 @@
 # Interactive example - run with `crystal run examples/dialogs_demo_ui.cr`.
 #
-# The Teek::UI DSL twin of examples/dialogs_demo.cr, and worth reading
+# The Tryst::UI DSL twin of examples/dialogs_demo.cr, and worth reading
 # next to it. They are NOT two spellings of the same calls: this one goes
 # through Session's dialog helpers (#open_file/#save_file/#message/
 # #choose_color/#choose_dir), while the original calls App's wrappers
@@ -18,7 +18,7 @@
 # filename with a space in it, a `}` inside a title, and multi-pattern
 # filetypes. If any of those come back mangled, the option quoting is
 # wrong somewhere underneath.
-require "../src/teek/ui"
+require "../src/tryst/ui"
 
 IMAGE_FILETYPES = [
   {"Images", [".png", ".jpg", ".gif"]},
@@ -26,7 +26,7 @@ IMAGE_FILETYPES = [
   {"All Files", "*"},
 ]
 
-session = Teek::UI.app(title: "Dialog Wrappers Demo (UI DSL)") do |builder|
+session = Tryst::UI.app(title: "Dialog Wrappers Demo (UI DSL)") do |builder|
   # Every dialog reports back through this one var, bound to the label at
   # the bottom - no widget reconfiguring by hand anywhere in this file.
   # Setting .value is the whole of "show the result".

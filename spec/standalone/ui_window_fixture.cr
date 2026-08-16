@@ -1,26 +1,26 @@
-require "../../src/teek/ui"
+require "../../src/tryst/ui"
 
 # Standalone verification for the :window widget type against real Tk -
 # that a declared window is a genuine toplevel, starts withdrawn, carries
 # its wm setup, hosts its own menu bar, and maps/unmaps on Handle#show/
-# #hide. Needs its own subprocess (see spec/teek/ui/session_realtk_spec.cr):
-# Session#realize always constructs a brand-new Teek::App.
+# #hide. Needs its own subprocess (see spec/tryst/ui/session_realtk_spec.cr):
+# Session#realize always constructs a brand-new Tryst::App.
 #
 # The exact wm calls post_create makes are covered headlessly against
-# FakeApp (spec/teek/ui/window_spec.cr), as is #show's placement
-# arithmetic (spec/teek/ui/handle_spec.cr). Placement deliberately isn't
+# FakeApp (spec/tryst/ui/window_spec.cr), as is #show's placement
+# arithmetic (spec/tryst/ui/handle_spec.cr). Placement deliberately isn't
 # re-checked here: bare Xvfb runs no window manager, so where a toplevel
 # actually lands is not a stable thing to assert on.
 #
 # Includes the ui.window-hosted menu bar case that menu_fixture.cr had to
 # skip while :window was unported, and the macOS shared-menu-bar quirk
 # (Case 6a) - asserted as a per-platform expectation rather than skipped
-# off macOS, so both halves of WindowRealize's `if Teek.platform.darwin?`
+# off macOS, so both halves of WindowRealize's `if Tryst.platform.darwin?`
 # are checked by whichever machine runs this.
 
-handles = {} of Symbol => Teek::UI::Handle
+handles = {} of Symbol => Tryst::UI::Handle
 
-session = Teek::UI.app(title: "ui window fixture") do |builder|
+session = Tryst::UI.app(title: "ui window fixture") do |builder|
   # Declared first so it's attached to the root before any window's
   # post_create asks the root what its menu is (Case 6a).
   builder.menu_bar(:app_menu) do |menu_bar|
@@ -109,7 +109,7 @@ raise "window: expected the root to keep .app_menu, got #{root_menu.inspect}" un
 # each window its own menu bar and must be left alone. Both are asserted
 # here, one per platform, because the branch only exists on one of them.
 plain_menu = app.command(".plain", :cget, "-menu")
-if Teek.platform.darwin?
+if Tryst.platform.darwin?
   unless plain_menu == ".app_menu"
     raise "window: expected .plain to share the root's menu on macOS, got #{plain_menu.inspect}"
   end

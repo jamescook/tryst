@@ -1,4 +1,4 @@
-require "../../src/teek/ui"
+require "../../src/tryst/ui"
 
 # Standalone verification for Session#every/#after and the TimerHandle
 # they hand back - that a timer declared in the build block really does
@@ -6,11 +6,11 @@ require "../../src/teek/ui"
 # phases (before realize, so it never registers at all; after, so the
 # live timer stops).
 #
-# Needs its own subprocess (see spec/teek/ui/session_realtk_spec.cr) -
-# Session#realize always constructs a brand-new Teek::App, which the
+# Needs its own subprocess (see spec/tryst/ui/session_realtk_spec.cr) -
+# Session#realize always constructs a brand-new Tryst::App, which the
 # shared tk_worker can't host. Queueing itself, and cancelling a
 # still-queued timer, need no interpreter and are covered headlessly in
-# spec/teek/ui/session_spec.cr.
+# spec/tryst/ui/session_spec.cr.
 #
 # Every "it never fired" assertion here is about an ABSENCE, which can't
 # be polled for. Each one instead schedules a TRACER timer after the
@@ -24,7 +24,7 @@ cancelled_queued_hits = 0
 cancelled_live_hits = 0
 order = [] of String
 
-session = Teek::UI.app(title: "session timers fixture")
+session = Tryst::UI.app(title: "session timers fixture")
 
 # Declared during the build block, before any interpreter exists.
 #

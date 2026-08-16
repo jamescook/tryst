@@ -3,10 +3,10 @@
 # which the persistent test worker (spec/support/tk_worker.cr) can't do
 # without hanging its per-test dispatch loop - it never calls #mainloop
 # at all. This demo is currently the only thing exercising it.
-require "../src/teek"
+require "../src/tryst"
 
-interp = Teek::Interp.new
-interp.tcl_invoke("wm", "title", ".", "crystal-teek mainloop spike")
+interp = Tryst::Interp.new
+interp.tcl_invoke("wm", "title", ".", "crystal-tryst mainloop spike")
 
 # A bare CLI-launched Tk process doesn't automatically get foreground
 # focus on macOS - without this the window exists but sits unfocused,

@@ -1,10 +1,10 @@
-require "../../src/teek/ui"
+require "../../src/tryst/ui"
 
 # Standalone verification that a destroy Tk initiates itself - not one
 # routed through Handle#destroy! - still reaches the retained tree.
 # Needs its own subprocess for the same reason grid_fixture.cr/
 # overlay_fixture.cr do (Session#realize always constructs a brand-new
-# Teek::App).
+# Tryst::App).
 #
 # ui.window sets no on_close handler by default (widget_types/window.cr),
 # so Tk's own default WM_DELETE_WINDOW action - destroy the toplevel -
@@ -15,7 +15,7 @@ require "../../src/teek/ui"
 # exercises exactly the same "Tk destroyed this, nobody called
 # Handle#destroy!" path a real WM close would.
 
-session = Teek::UI.app(title: "implicit destroy fixture") { |builder| builder.panel(:host) }
+session = Tryst::UI.app(title: "implicit destroy fixture") { |builder| builder.panel(:host) }
 app = session.realize
 app.show
 app.update
@@ -38,14 +38,14 @@ app.update
 begin
   ok.configure(text: "Save")
   raise "expected NotRealizedError from configuring a destroyed child, got no exception"
-rescue Teek::UI::NotRealizedError
+rescue Tryst::UI::NotRealizedError
 end
 
 # Case 2: same for the window itself.
 begin
   prefs.show
   raise "expected NotRealizedError from #show on a destroyed window, got no exception"
-rescue Teek::UI::NotRealizedError
+rescue Tryst::UI::NotRealizedError
 end
 
 # Case 3: the path index no longer resolves either.

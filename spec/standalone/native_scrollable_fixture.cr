@@ -1,15 +1,15 @@
-require "../../src/teek/ui"
+require "../../src/tryst/ui"
 
 # Standalone verification that a natively_scrollable widget really gets a
 # working scrollbar against real Tk, and that the scrollbar hides itself
 # while the content fits. The exact commands Realizer builds are covered
-# headlessly against FakeApp (spec/teek/ui/native_scrollable_spec.cr);
+# headlessly against FakeApp (spec/tryst/ui/native_scrollable_spec.cr);
 # this is the half that can only be answered by a live geometry pass.
 #
-# Needs its own subprocess (see spec/teek/ui/session_realtk_spec.cr):
-# Session#realize always constructs a brand-new Teek::App.
+# Needs its own subprocess (see spec/tryst/ui/session_realtk_spec.cr):
+# Session#realize always constructs a brand-new Tryst::App.
 
-session = Teek::UI.app(title: "native scrollable fixture") do |builder|
+session = Tryst::UI.app(title: "native scrollable fixture") do |builder|
   builder.list(:log, height: 3)
   builder.panel(:host)
 end

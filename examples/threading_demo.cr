@@ -1,6 +1,6 @@
 # Interactive example - run with `crystal run examples/threading_demo.cr`.
-# Port of ruby-teek's sample/threading_demo.rb (a file hasher that
-# exercises Teek::BackgroundWork end to end: combobox/scale/checkbutton/
+# Port of ruby-tryst's sample/threading_demo.rb (a file hasher that
+# exercises Tryst::BackgroundWork end to end: combobox/scale/checkbutton/
 # progressbar/labelframe/separator/scrollbar+text widgets, live progress
 # via a Tcl variable, pause/resume/stop). The main real-world proof that
 # the Fiber::ExecutionContext-based BackgroundWork works for something
@@ -16,12 +16,12 @@
 # prep) is dropped. What remains is the single background-thread path,
 # unconditionally.
 #
-# Also drops ruby-teek's own demo_support.rb-driven automated test/record
-# mode block (TeekDemo.testing?/recording?, TK_READY_PORT/TK_RECORD env
-# vars) at the very end - that's tooling for ruby-teek's own
+# Also drops ruby-tryst's own demo_support.rb-driven automated test/record
+# mode block (TrystDemo.testing?/recording?, TK_READY_PORT/TK_RECORD env
+# vars) at the very end - that's tooling for ruby-tryst's own
 # video-recording/smoke-test pipeline, with no Crystal-side counterpart
 # and no other example in this repo relies on it either.
-require "../src/teek"
+require "../src/tryst"
 require "openssl"
 
 ALGORITHMS = %w[SHA256 SHA512 SHA384 SHA1 MD5]
@@ -52,7 +52,7 @@ class HashMetrics
 end
 
 class ThreadingDemo
-  getter app : Teek::App
+  getter app : Tryst::App
 
   # Widgets built by helper methods (not assigned inline in #initialize)
   # need an explicit type here - Crystal only tracks an instance
@@ -63,21 +63,21 @@ class ThreadingDemo
   # directly - the same underlying Crystal quirk, worked around here by
   # declaring the type instead of restructuring away from helper
   # methods).
-  @start_btn : Teek::Widget
-  @pause_btn : Teek::Widget
-  @algo_combo : Teek::Widget
-  @batch_val : Teek::Widget
-  @status_label : Teek::Widget
-  @file_label : Teek::Widget
-  @files_label : Teek::Widget
-  @log_text : Teek::Widget
+  @start_btn : Tryst::Widget
+  @pause_btn : Tryst::Widget
+  @algo_combo : Tryst::Widget
+  @batch_val : Tryst::Widget
+  @status_label : Tryst::Widget
+  @file_label : Tryst::Widget
+  @files_label : Tryst::Widget
+  @log_text : Tryst::Widget
   @files : Array(String)
 
-  @background_task : Teek::BackgroundWork(HashJob, HashProgress)?
+  @background_task : Tryst::BackgroundWork(HashJob, HashProgress)?
   @metrics : HashMetrics?
 
   def initialize
-    @app = Teek::App.new
+    @app = Tryst::App.new
     @paused = false
     @stop_requested = false
     @running = false
@@ -137,7 +137,7 @@ class ThreadingDemo
       justify: :left).pack(fill: :x, padx: 10, pady: 10)
   end
 
-  private def build_controls : {Teek::Widget, Teek::Widget, Teek::Widget, Teek::Widget, Teek::Widget}
+  private def build_controls : {Tryst::Widget, Tryst::Widget, Tryst::Widget, Tryst::Widget, Tryst::Widget}
     ctrl = @app.create_widget("ttk::frame")
     ctrl.pack(fill: :x, padx: 10, pady: 5)
 
@@ -156,7 +156,7 @@ class ThreadingDemo
 
     algo_combo = @app.create_widget("ttk::combobox", parent: ctrl,
       textvariable: "::algorithm",
-      values: Teek.make_list(ALGORITHMS),
+      values: Tryst.make_list(ALGORITHMS),
       width: 8,
       state: :readonly)
     algo_combo.pack(side: :left)
@@ -182,7 +182,7 @@ class ThreadingDemo
     {start_btn, pause_btn, reset_btn, algo_combo, batch_val}
   end
 
-  private def build_statusbar : {Teek::Widget, Teek::Widget, Teek::Widget}
+  private def build_statusbar : {Tryst::Widget, Tryst::Widget, Tryst::Widget}
     status = @app.create_widget("ttk::frame")
     status.pack(side: :bottom, fill: :x, padx: 5, pady: 5)
 
@@ -222,7 +222,7 @@ class ThreadingDemo
     {status_label, file_label, files_label}
   end
 
-  private def build_log : Teek::Widget
+  private def build_log : Tryst::Widget
     log = @app.create_widget("ttk::labelframe", text: "Output")
     log.pack(fill: :both, expand: 1, padx: 10, pady: 5)
 
@@ -255,7 +255,7 @@ class ThreadingDemo
     files
   end
 
-  private def set_combo_enabled(widget : Teek::Widget) : Nil
+  private def set_combo_enabled(widget : Tryst::Widget) : Nil
     @app.tcl_eval("#{widget} state {!disabled readonly}")
   end
 
@@ -373,9 +373,9 @@ class ThreadingDemo
     job = HashJob.new(files, algo_name, chunk_size, base_dir, allow_pause)
 
     # Each progress value has unique log text - don't drop any.
-    Teek::BackgroundWork.drop_intermediate = false
+    Tryst::BackgroundWork.drop_intermediate = false
 
-    task = Teek::BackgroundWork(HashJob, HashProgress).new(@app, job) do |ctx, data|
+    task = Tryst::BackgroundWork(HashJob, HashProgress).new(@app, job) do |ctx, data|
       total = data.files.size
       pending = [] of String
 

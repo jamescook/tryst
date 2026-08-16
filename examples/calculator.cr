@@ -1,21 +1,21 @@
 # Calculator - a simple desktop calculator.
 #
 # Run: crystal run examples/calculator.cr
-require "../src/teek"
+require "../src/tryst"
 
 class Calculator
-  getter app : Teek::App
+  getter app : Tryst::App
 
   @pending_op : Symbol?
   @accumulator : Float64?
 
   def initialize
-    @app = Teek::App.new
+    @app = Tryst::App.new
     @display_value = "0"
     @pending_op = nil
     @accumulator = nil
     @reset_on_next = false
-    @buttons = {} of String => Teek::Widget
+    @buttons = {} of String => Tryst::Widget
 
     build_ui
   end

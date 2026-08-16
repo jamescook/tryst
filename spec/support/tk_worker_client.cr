@@ -6,7 +6,7 @@ require "./tk_worker_protocol"
 # example in the whole crystal spec run (never one spawn per test - that
 # defeats the point of a persistent worker, see tk_test_registry.cr),
 # and shuts it down once via Spec.after_suite - the equivalent of
-# ruby-teek's Minitest.after_run stopping Teek::TestWorker.
+# ruby-tryst's Minitest.after_run stopping Tryst::TestWorker.
 module TkWorkerClient
   @@process : Process? = nil
 

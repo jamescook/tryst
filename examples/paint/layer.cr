@@ -1,10 +1,10 @@
-require "../../src/teek"
+require "../../src/tryst"
 require "./sparse_pixel_buffer"
 
 # A drawing layer with both a pixel (raster) and a canvas item (vector)
 # sub-layer.
 #
-# Pixels are stored sparsely; the backing Teek::Photo is created lazily,
+# Pixels are stored sparsely; the backing Tryst::Photo is created lazily,
 # the first time something actually needs to be drawn.
 #
 # Canvas items belonging to this layer are tracked so they can be shown
@@ -22,10 +22,10 @@ class Layer
   property? visible : Bool
   property opacity : Float64
 
-  @photo : Teek::Photo?
+  @photo : Tryst::Photo?
   @photo_item : String?
 
-  def initialize(@app : Teek::App, @canvas : Teek::Widget,
+  def initialize(@app : Tryst::App, @canvas : Tryst::Widget,
                  @width : Int32, @height : Int32,
                  @name : String = "Layer", @background : Bool = false)
     @id = object_id.to_s(16)
@@ -45,11 +45,11 @@ class Layer
   end
 
   # Create the photo image and put it on the canvas, once.
-  def ensure_photo! : Teek::Photo
+  def ensure_photo! : Tryst::Photo
     existing = @photo
     return existing if existing
 
-    photo = Teek::Photo.new(@app, width: @width, height: @height)
+    photo = Tryst::Photo.new(@app, width: @width, height: @height)
     @photo = photo
     @photo_item = @canvas.command(:create, :image, 0, 0, image: photo.name, anchor: :nw)
 

@@ -1,19 +1,19 @@
 #!/bin/sh
 # Builds the Docker test image, runs the spec suite under Xvfb (see
 # Dockerfile), and always cleans up dangling images left behind by
-# previous builds - `docker build -t crystal-teek-test .` re-tagging the
+# previous builds - `docker build -t crystal-tryst-test .` re-tagging the
 # same name leaves the previous image dangling (<none>:<none>) every
 # time, and these pile up fast across repeated runs. Labeled so cleanup
 # only ever touches this project's own images, never unrelated dangling
-# images from other projects on the same machine. Mirrors ruby-teek's
+# images from other projects on the same machine. Mirrors ruby-tryst's
 # `rake docker:test` / `docker:prune` (lib/tasks/docker.rake).
 #
 # Any arguments are passed straight through to `crystal spec` inside the
 # container, so a focused run works here as well as on the host:
 #
 #   ./scripts/docker-test.sh                                  # everything
-#   ./scripts/docker-test.sh spec/teek/ui/split_spec.cr       # one file
-#   ./scripts/docker-test.sh spec/teek/ui/split_spec.cr:42    # one example
+#   ./scripts/docker-test.sh spec/tryst/ui/split_spec.cr       # one file
+#   ./scripts/docker-test.sh spec/tryst/ui/split_spec.cr:42    # one example
 #   ./scripts/docker-test.sh -e "weight:"                     # by name
 #
 # The image still has to build either way, which is most of the wall time
@@ -22,8 +22,8 @@
 # come here for the real-Tk tiers and the pre-commit check.
 set -eu
 
-IMAGE=crystal-teek-test
-LABEL=project=crystal-teek
+IMAGE=crystal-tryst-test
+LABEL=project=crystal-tryst
 
 docker build --label "$LABEL" -t "$IMAGE" .
 

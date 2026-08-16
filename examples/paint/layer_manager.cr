@@ -11,7 +11,7 @@ class LayerManager
   getter height : Int32
   getter active_index : Int32
 
-  def initialize(@app : Teek::App, @canvas : Teek::Widget, @width : Int32, @height : Int32)
+  def initialize(@app : Tryst::App, @canvas : Tryst::Widget, @width : Int32, @height : Int32)
     @layers = [] of Layer
     @active_index = 0
 

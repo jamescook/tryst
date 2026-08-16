@@ -1,5 +1,5 @@
 # Interactive example - run with `crystal run examples/dialogs_demo.cr`.
-# Port of ruby-teek's sample/dialogs/dialogs_demo.rb - exercises every
+# Port of ruby-tryst's sample/dialogs/dialogs_demo.rb - exercises every
 # safe Tk dialog wrapper (choose_open_file, choose_save_file,
 # message_box, choose_color, popup_menu) so a human can click through
 # each one and visually confirm it opens correctly and the wrapper
@@ -11,22 +11,22 @@
 # a filename like "my file.png") and to show multi-pattern filetypes
 # work.
 #
-# Drops ruby-teek's own demo_support.rb-driven automated smoke-test block
-# at the end (TeekDemo.active?/on_visible) - tooling for ruby-teek's own
+# Drops ruby-tryst's own demo_support.rb-driven automated smoke-test block
+# at the end (TrystDemo.active?/on_visible) - tooling for ruby-tryst's own
 # test/record pipeline with no Crystal-side counterpart, same as every
 # other example in this repo.
-require "../src/teek"
+require "../src/tryst"
 
 class DialogsDemo
-  getter app : Teek::App
+  getter app : Tryst::App
 
   # Assigned directly in #initialize (not via a helper method) - see the
   # comment above the button/menu wiring below for why.
-  @log : Teek::Widget
-  @context_menu : Teek::Widget
+  @log : Tryst::Widget
+  @context_menu : Tryst::Widget
 
   def initialize
-    @app = Teek::App.new(title: "Dialog Wrappers Demo")
+    @app = Tryst::App.new(title: "Dialog Wrappers Demo")
     @app.set_window_geometry("480x360")
 
     @app.create_widget("ttk::label",
@@ -84,7 +84,7 @@ class DialogsDemo
     @app.mainloop
   end
 
-  private def plain_button(parent : Teek::Widget, label : String) : Teek::Widget
+  private def plain_button(parent : Tryst::Widget, label : String) : Tryst::Widget
     btn = @app.create_widget("ttk::button", parent: parent, text: label)
     btn.pack(side: :top, fill: :x, padx: 4, pady: 2)
     btn

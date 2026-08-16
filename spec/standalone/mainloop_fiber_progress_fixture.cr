@@ -1,12 +1,12 @@
-require "../../src/teek"
+require "../../src/tryst"
 
 # Standalone regression check: a fiber spawned before #mainloop is
 # entered must keep making progress while it runs, not just resume once
 # mainloop finally returns. Same "own subprocess" reasoning
-# as mainloop_destroy_fixture.cr - constructing Teek::App does a real
+# as mainloop_destroy_fixture.cr - constructing Tryst::App does a real
 # Tk_Init, and #mainloop blocks until every toplevel is gone.
 
-app = Teek::App.new(title: "mainloop fiber progress fixture")
+app = Tryst::App.new(title: "mainloop fiber progress fixture")
 
 counter = 0
 spawn do

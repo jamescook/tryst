@@ -1,8 +1,8 @@
 # The calculator itself: arithmetic, keypad dispatch, and the display
 # string.
 #
-# Note what this file does NOT require: there is no `require "teek"` here,
-# no Teek::UI, no Tk of any kind. It knows nothing about how it's shown -
+# Note what this file does NOT require: there is no `require "tryst"` here,
+# no Tryst::UI, no Tk of any kind. It knows nothing about how it's shown -
 # it just owns a display string and announces when that string changes.
 # Which means it can be exercised in a plain spec with no interpreter
 # running, and the UI file next door is the only thing that has to care

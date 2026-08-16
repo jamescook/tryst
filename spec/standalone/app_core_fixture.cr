@@ -1,17 +1,17 @@
-require "../../src/teek"
+require "../../src/tryst"
 
-# Standalone verification for Teek::App core (bootstrap, tcl_eval/tcl_invoke,
+# Standalone verification for Tryst::App core (bootstrap, tcl_eval/tcl_invoke,
 # destroy, register_callback/unregister_callback, update/update_idletasks,
-# ensure_tcl_helper). Run as its own subprocess (see spec/teek/app_spec.cr)
-# because constructing Teek::App creates a real Tcl/Tk interpreter - can't
+# ensure_tcl_helper). Run as its own subprocess (see spec/tryst/app_spec.cr)
+# because constructing Tryst::App creates a real Tcl/Tk interpreter - can't
 # run inside the shared crystal spec process without risking two Tk_Init
 # calls across different spec examples. #mainloop itself isn't exercised
 # here - a real blocking mainloop needs its own dedicated subprocess
-# mechanism (see spec/teek/mainloop_spec.cr), not a single shared fixture
+# mechanism (see spec/tryst/mainloop_spec.cr), not a single shared fixture
 # like this one.
 
-app = Teek::App.new(title: "app core fixture")
-raise "expected an Interp" unless app.interp.is_a?(Teek::Interp)
+app = Tryst::App.new(title: "app core fixture")
+raise "expected an Interp" unless app.interp.is_a?(Tryst::Interp)
 
 result = app.tcl_eval("set greeting hello")
 raise "tcl_eval failed, got #{result.inspect}" unless result == "hello"
@@ -33,7 +33,7 @@ app.unregister_callback(id)
 begin
   app.tcl_invoke(".b", "invoke")
   raise "expected a TclError after unregister_callback, got none"
-rescue Teek::TclError
+rescue Tryst::TclError
   # expected - crystal_callback should now report "unknown callback id"
 end
 raise "callback fired after unregister_callback" if fired

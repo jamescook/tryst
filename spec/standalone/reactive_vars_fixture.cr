@@ -1,19 +1,19 @@
-require "../../src/teek/ui"
+require "../../src/tryst/ui"
 
 # Standalone verification for Var's real Tk behavior - needs its own
 # subprocess for the same reason grid_fixture.cr/overlay_fixture.cr do
-# (Session#realize always constructs a brand-new Teek::App). Var's
-# pre-realize surface is already covered headlessly (spec/teek/ui/
+# (Session#realize always constructs a brand-new Tryst::App). Var's
+# pre-realize surface is already covered headlessly (spec/tryst/ui/
 # var_spec.cr); this confirms the real Tcl variable/trace/bind: wiring
 # actually works - a Var and its bound widgets staying in sync in both
 # directions, on_change firing with a coerced value, and Boolean's 1/0
-# convention - matching ruby-teek's teek-ui/test/test_reactive_vars.rb.
+# convention - matching ruby-tryst's tryst-ui/test/test_reactive_vars.rb.
 
-handles = {} of Symbol => Teek::UI::Handle
-vars = {} of Symbol => Teek::UI::Var
-changes = [] of Teek::UI::VarValue
+handles = {} of Symbol => Tryst::UI::Handle
+vars = {} of Symbol => Tryst::UI::Var
+changes = [] of Tryst::UI::VarValue
 
-session = Teek::UI.app(title: "reactive vars fixture") do |builder|
+session = Tryst::UI.app(title: "reactive vars fixture") do |builder|
   vars[:speed] = builder.var(5)
   vars[:speed].on_change { |value| changes << value }
   handles[:speed_slider] = builder.slider(:speed_slider, from: 1, to: 10, bind: vars[:speed])
@@ -90,11 +90,11 @@ raise "expected the backing Tcl variable to be \"0\", got #{app.get_variable(ena
 # callback the trace fires - a row template re-added on every refresh
 # (e.g. a -textvariable per list row) must not accumulate any of the
 # three.
-baseline_var_names = app.split_list(app.tcl_eval("info vars ::teek_ui_var_*"))
+baseline_var_names = app.split_list(app.tcl_eval("info vars ::tryst_ui_var_*"))
 baseline_callbacks = app.interp.callback_ids.size
 
 50.times do |i|
-  declared_var = nil.as(Teek::UI::Var?)
+  declared_var = nil.as(Tryst::UI::Var?)
   session.add(:host) do |b|
     b.panel(:row) do |row|
       v = row.var("")
@@ -104,9 +104,9 @@ baseline_callbacks = app.interp.callback_ids.size
     end
   end
   app.update
-  var_name = declared_var.as(Teek::UI::Var).name
+  var_name = declared_var.as(Tryst::UI::Var).name
 
-  during_var_names = app.split_list(app.tcl_eval("info vars ::teek_ui_var_*"))
+  during_var_names = app.split_list(app.tcl_eval("info vars ::tryst_ui_var_*"))
   unless during_var_names.size == baseline_var_names.size + 1
     raise "vars: cycle #{i}: expected one new live var, got #{during_var_names} vs baseline #{baseline_var_names}"
   end
@@ -118,7 +118,7 @@ baseline_callbacks = app.interp.callback_ids.size
   raise "vars: cycle #{i}: expected no traces left on #{var_name}, got #{trace_left.inspect}" unless trace_left.empty?
 end
 
-after_var_names = app.split_list(app.tcl_eval("info vars ::teek_ui_var_*"))
+after_var_names = app.split_list(app.tcl_eval("info vars ::tryst_ui_var_*"))
 unless after_var_names == baseline_var_names
   raise "vars: expected info vars back to #{baseline_var_names} after 50 cycles, got #{after_var_names}"
 end

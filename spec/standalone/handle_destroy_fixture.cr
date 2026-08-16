@@ -1,14 +1,14 @@
-require "../../src/teek/ui"
+require "../../src/tryst/ui"
 
 # Standalone verification for Handle#destroy!'s auto-defer behavior -
-# needs a genuine Tcl callback dispatch to exercise (Teek.in_callback?
+# needs a genuine Tcl callback dispatch to exercise (Tryst.in_callback?
 # reflects the real interpreter's live callback depth, meaningless
 # without one), so this can't be headless like handle_spec.cr's
 # FakeApp-backed coverage. Needs its own subprocess for the same reason
 # session_realize_fixture.cr does (Session#realize always constructs a
-# brand-new Teek::App).
+# brand-new Tryst::App).
 #
-# Reduced from ruby-teek's teek-ui/test/test_handle_destroy_realtk.rb -
+# Reduced from ruby-tryst's tryst-ui/test/test_handle_destroy_realtk.rb -
 # every scenario there needing ui.window/session.add/screens/menu_bar
 # (not ported yet) is dropped; the close-button-racing-ttk's-own-
 # bindings hazard (that file's first case) is adapted to a plain
@@ -17,9 +17,9 @@ require "../../src/teek/ui"
 # :box_b, ...) - #component (scope isolation) isn't ported yet, so
 # every name in this one build shares a single flat top-level namespace.
 
-handles = {} of Symbol => Teek::UI::Handle
+handles = {} of Symbol => Tryst::UI::Handle
 
-session = Teek::UI.app(title: "handle destroy fixture") do |builder|
+session = Tryst::UI.app(title: "handle destroy fixture") do |builder|
   # Scenario A: a button destroying its own containing panel from inside
   # its own on_click - the auto-defer hazard. If this destroyed
   # synchronously, ttk::button's own queued internal binding for this

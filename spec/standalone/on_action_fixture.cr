@@ -1,4 +1,4 @@
-require "../../src/teek/ui"
+require "../../src/tryst/ui"
 
 # Standalone verification for Handle#on_action, which wires Tk's own
 # -command option rather than a <Button-1> binding. The entire point is
@@ -7,7 +7,7 @@ require "../../src/teek/ui"
 # side headlessly against FakeApp.
 #
 # Needs its own subprocess for the same reason handle_destroy_fixture.cr
-# does: Session#realize always constructs a brand-new Teek::App, and
+# does: Session#realize always constructs a brand-new Tryst::App, and
 # Tk_Init only runs once per process, so the shared tk_worker can't host
 # it.
 #
@@ -19,14 +19,14 @@ require "../../src/teek/ui"
 # the first thing didn't. That gives a real ordering guarantee rather
 # than a guess about how long "nothing happened" takes.
 
-handles = {} of Symbol => Teek::UI::Handle
+handles = {} of Symbol => Tryst::UI::Handle
 action_hits = 0
 click_hits = 0
 tracer_hits = 0
 keyboard_hits = 0
 late_hits = 0
 
-session = Teek::UI.app(title: "on_action fixture") do |builder|
+session = Tryst::UI.app(title: "on_action fixture") do |builder|
   handles[:action_btn] = builder.button(:action_btn, text: "Action").on_action { |_v, _s| action_hits += 1 }
   handles[:click_btn] = builder.button(:click_btn, text: "Click").on_click { |_v, _s| click_hits += 1 }
   handles[:tracer_btn] = builder.button(:tracer_btn, text: "Tracer").on_click { |_v, _s| tracer_hits += 1 }

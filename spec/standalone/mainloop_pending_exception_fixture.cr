@@ -1,4 +1,4 @@
-require "../../src/teek"
+require "../../src/tryst"
 
 # Standalone regression check: a RepeatingTimer's on_error: :raise
 # exception must surface from App#mainloop, not just from App#update -
@@ -9,7 +9,7 @@ require "../../src/teek"
 # behavior fails this fixture (the rescue below never runs, so it falls
 # through to the final raise) instead of hanging the suite forever.
 
-app = Teek::App.new(title: "mainloop pending exception fixture")
+app = Tryst::App.new(title: "mainloop pending exception fixture")
 
 count = 0
 timer = app.every(30) do

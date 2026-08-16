@@ -1,16 +1,16 @@
-require "../../src/teek/ui"
+require "../../src/tryst/ui"
 
 # Standalone verification for ui.scrollable against real Tk: that the
 # canvas/viewport structure really scrolls arbitrary widgets, and - the
 # case this whole mechanism exists for - that wheeling over a NESTED
 # CHILD scrolls the region rather than doing nothing, which a wheel
 # binding on the canvas alone would. The exact commands Realizer builds
-# are covered headlessly against FakeApp (spec/teek/ui/scrollable_spec.cr).
+# are covered headlessly against FakeApp (spec/tryst/ui/scrollable_spec.cr).
 #
-# Needs its own subprocess (see spec/teek/ui/session_realtk_spec.cr):
-# Session#realize always constructs a brand-new Teek::App.
+# Needs its own subprocess (see spec/tryst/ui/session_realtk_spec.cr):
+# Session#realize always constructs a brand-new Tryst::App.
 
-session = Teek::UI.app(title: "scrollable fixture") do |builder|
+session = Tryst::UI.app(title: "scrollable fixture") do |builder|
   builder.scrollable(:scroller) do |region|
     # Deliberately nested one level deeper than the viewport, so the
     # widget under the pointer is NOT the canvas and not the viewport
@@ -100,7 +100,7 @@ raise "scrollable: expected <Button-4> to scroll back up" unless back_x11
 tags = app.split_list(app.command(:bindtags, deep))
 raise "scrollable: expected #{deep} to keep its own tags, got #{tags}" unless tags.first == deep
 raise "scrollable: expected TLabel among #{tags}" unless tags.includes?("TLabel")
-unless tags.last.starts_with?("TeekScrollRegion")
+unless tags.last.starts_with?("TrystScrollRegion")
   raise "scrollable: expected the scroll tag appended last, got #{tags}"
 end
 

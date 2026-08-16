@@ -1,14 +1,14 @@
 require "./tk_test_registry"
 require "./widget_dsl_harness"
-require "../../src/teek/ui/realizer"
+require "../../src/tryst/ui/realizer"
 
 # Parses a Tcl arg list of the form "-flag1 value1 -flag2 value2 ..."
 # (e.g. a stubbed dialog command's captured $args) into a Hash, so
 # dialog-test assertions don't depend on the order a wrapper method
-# happens to build its flags in. Mirrors ruby-teek's own TestContext#tcl_flag_hash
-# (test/teek_test_worker.rb) - pure Tcl-list parsing, no App/Tk needed.
+# happens to build its flags in. Mirrors ruby-tryst's own TestContext#tcl_flag_hash
+# (test/tryst_test_worker.rb) - pure Tcl-list parsing, no App/Tk needed.
 private def tcl_flag_hash(list_str : String) : Hash(String, String)
-  parts = Teek.split_list(list_str)
+  parts = Tryst.split_list(list_str)
   hash = {} of String => String
   parts.each_slice(2) { |pair| hash[pair[0]] = pair[1] }
   hash
@@ -22,7 +22,7 @@ tk_test "eval and invoke marshaling round trip" do |app|
   begin
     app.tcl_invoke("this_command_does_not_exist")
     raise "expected TclError, got no exception"
-  rescue Teek::TclError
+  rescue Tryst::TclError
     # expected
   end
 end
@@ -130,7 +130,7 @@ tk_test "an unhandled exception in a callback becomes a Tcl error" do |app|
   begin
     interp.tcl_invoke("crystal_callback", id)
     raise "expected TclError, got no exception"
-  rescue ex : Teek::TclError
+  rescue ex : Tryst::TclError
     unless ex.message.try(&.includes?("boom"))
       raise "expected error message to mention 'boom', got #{ex.message.inspect}"
     end
@@ -237,7 +237,7 @@ tk_test "command registers a Proc kwarg as a real callback via app.callback" do 
   raise "callback did not fire" unless clicked
 end
 
-# Mirrors ruby-teek's control-flow-parity tests between App#command's
+# Mirrors ruby-tryst's control-flow-parity tests between App#command's
 # positional vs kwarg Proc handling (test/test_callback_exceptions.rb).
 tk_test "signal.break! in a command()-embedded positional callback stops propagation" do |app|
   interp = app.interp
@@ -784,7 +784,7 @@ tk_test "App#measure_chars whole_words breaks on a word boundary" do |app|
 
   r = app.measure_chars("TkDefaultFont", text, limit, whole_words: true)
   # byte_slice, not [0, n]: bytes is a byte count, and String#[] counts
-  # characters (ruby-teek's own version of this test conflates the two,
+  # characters (ruby-tryst's own version of this test conflates the two,
   # which only holds because the fixture is ASCII).
   fitted = text.byte_slice(0, r[:bytes])
   raise "expected a word break, got #{fitted.inspect}" if fitted.includes?("Wor") && !fitted.includes?("World")
@@ -992,7 +992,7 @@ end
 
 # add_debug_console is only available on macOS/Windows (Tk has no console
 # window on Linux) - every case below tolerates either outcome rather
-# than asserting the console is actually available, same as ruby-teek's
+# than asserting the console is actually available, same as ruby-tryst's
 # own test_debug_console.rb.
 tk_test "App#add_debug_console returns true or false" do |app|
   result = app.add_debug_console
@@ -1015,16 +1015,16 @@ tk_test "App#add_debug_console accepts a custom keybinding" do |app|
   raise "expected a Bool, got #{result.inspect}" unless result.is_a?(Bool)
 end
 
-# Widget wrapper tests. Two ruby-teek test cases aren't ported here since
+# Widget wrapper tests. Two ruby-tryst test cases aren't ported here since
 # they need App infrastructure that doesn't exist yet: "widget tracking
 # works with create_widget" needs App#widgets (a separate <Destroy>-trace
 # mechanism, not built), and the -command-callback-cleanup-on-destroy
 # tests need Interp#callback_ids plus a global <Destroy> handler releasing
-# CallbackRegistry entries (ruby-teek's setup_destroy_cleanup, also not
+# CallbackRegistry entries (ruby-tryst's setup_destroy_cleanup, also not
 # built) - neither is Widget's own responsibility.
 tk_test "create_widget returns a Widget" do |app|
   btn = app.create_widget("ttk::button", text: "Hi")
-  raise "expected a Teek::Widget" unless btn.is_a?(Teek::Widget)
+  raise "expected a Tryst::Widget" unless btn.is_a?(Tryst::Widget)
   raise "expected #app to be the same App instance" unless btn.app.same?(app)
 end
 
@@ -1074,7 +1074,7 @@ end
 
 tk_test "Widget#on_close delegates to Window#on_close for this widget's path" do |app|
   app.tcl_eval("toplevel .t_widget_on_close")
-  top = Teek::Widget.new(app, ".t_widget_on_close")
+  top = Tryst::Widget.new(app, ".t_widget_on_close")
   fired = false
 
   top.on_close { fired = true }
@@ -1089,13 +1089,13 @@ end
 tk_test "Widget#inspect shows the class and path" do |app|
   btn = app.create_widget("ttk::button", text: "Hi")
   raise "expected inspect to include the path" unless btn.inspect.includes?(btn.path)
-  raise "expected inspect to include the class name" unless btn.inspect.includes?("Teek::Widget")
+  raise "expected inspect to include the class name" unless btn.inspect.includes?("Tryst::Widget")
 end
 
 tk_test "Widget equality is by path" do |app|
   btn = app.create_widget("ttk::button", text: "Hi")
   other = app.create_widget("ttk::button", text: "Bye")
-  raise "expected btn == Widget.new(app, btn.path)" unless btn == Teek::Widget.new(app, btn.path)
+  raise "expected btn == Widget.new(app, btn.path)" unless btn == Tryst::Widget.new(app, btn.path)
   raise "expected two different paths to compare unequal" if btn == other
   raise "expected matching hash" unless btn.path.hash == btn.hash
 end
@@ -1140,7 +1140,7 @@ end
 # track_widgets: is on), so its cleanup on destroy has to be unconditional
 # too - a user who opts out of widget tracking still pays for the write.
 tk_test "App#debug_info's :widget_types is tracked and released even with track_widgets disabled" do |_app|
-  app2 = Teek::App.new(track_widgets: false)
+  app2 = Tryst::App.new(track_widgets: false)
   baseline = app2.debug_info[:widget_types]? || 0
 
   app2.command(:button, ".wt_no_track", text: "hello")
@@ -1156,7 +1156,7 @@ end
 # event loop/notifier itself is process-global, so this never runs
 # app2.mainloop or otherwise depends on its own independent event timing.
 tk_test "should not populate app.widgets when track_widgets is disabled" do |_app|
-  app2 = Teek::App.new(track_widgets: false)
+  app2 = Tryst::App.new(track_widgets: false)
   app2.tcl_eval("button .b_no_track -text hello")
   raise "expected app2.widgets to stay empty" unless app2.widgets.empty?
   app2.destroy(".b_no_track")
@@ -1201,7 +1201,7 @@ end
 
 # The block's first argument is always Array(String) (in the requested
 # sub order) rather than individually destructured positional params -
-# ruby-teek's proc.call(*args) works for a block of any arity since Ruby
+# ruby-tryst's proc.call(*args) works for a block of any arity since Ruby
 # procs adapt automatically; Crystal blocks have a fixed arity, and the
 # number of substitution values is only known at the call site (runtime,
 # for a variable-length *subs), not encodable as a fixed block type.
@@ -1437,8 +1437,8 @@ tk_test "destroying the owner releases callbacks bound to a bindtag" do |app|
   app.tcl_eval("canvas .c_wheel1")
 
   baseline = app.interp.callback_ids.size
-  app.bind("TeekScrollRegion_c_wheel1", "<MouseWheel>", owner: ".c_wheel1") { }
-  app.bind("TeekScrollRegion_c_wheel1", "<Button-4>", owner: ".c_wheel1") { }
+  app.bind("TrystScrollRegion_c_wheel1", "<MouseWheel>", owner: ".c_wheel1") { }
+  app.bind("TrystScrollRegion_c_wheel1", "<Button-4>", owner: ".c_wheel1") { }
   raise "bind should register two callbacks" unless app.interp.callback_ids.size == baseline + 2
 
   app.destroy(".c_wheel1")
@@ -1459,7 +1459,7 @@ tk_test "a bindtag and its owner can bind the same event independently" do |app|
 
   baseline = app.interp.callback_ids.size
   app.bind(".c_wheel2", "<MouseWheel>") { }
-  app.bind("TeekScrollRegion_c_wheel2", "<MouseWheel>", owner: ".c_wheel2") { }
+  app.bind("TrystScrollRegion_c_wheel2", "<MouseWheel>", owner: ".c_wheel2") { }
 
   unless app.interp.callback_ids.size == baseline + 2
     raise "the tag's binding replaced the owner's own binding for the same event"
@@ -1506,7 +1506,7 @@ tk_test "destroying a widget releases bind callbacks on its descendants" do |app
 end
 
 tk_test "bind cleanup works even with track_widgets disabled" do |_app|
-  app2 = Teek::App.new(track_widgets: false)
+  app2 = Tryst::App.new(track_widgets: false)
   app2.tcl_eval("frame .f_bind5")
 
   baseline = app2.interp.callback_ids.size
@@ -1541,7 +1541,7 @@ end
 # stays permanently registered but never actually matches any other
 # test's calls, including each other's.
 tk_test "CommandInterceptors: a single matching interceptor overrides raw_command" do |app|
-  Teek::CommandInterceptors.register("scale", "test-interceptor-single") do |_app, _path, args, _kwargs|
+  Tryst::CommandInterceptors.register("scale", "test-interceptor-single") do |_app, _path, args, _kwargs|
     args.first? == "intercept_marker_single" ? "intercepted-result" : nil
   end
 
@@ -1557,10 +1557,10 @@ tk_test "CommandInterceptors: a non-matching interceptor falls through to raw_co
 end
 
 tk_test "CommandInterceptors: two matching interceptors raise AmbiguousCommandError" do |app|
-  Teek::CommandInterceptors.register("scale", "test-interceptor-ambiguous-a") do |_app, _path, args, _kwargs|
+  Tryst::CommandInterceptors.register("scale", "test-interceptor-ambiguous-a") do |_app, _path, args, _kwargs|
     args.first? == "intercept_marker_ambiguous" ? "result-a" : nil
   end
-  Teek::CommandInterceptors.register("scale", "test-interceptor-ambiguous-b") do |_app, _path, args, _kwargs|
+  Tryst::CommandInterceptors.register("scale", "test-interceptor-ambiguous-b") do |_app, _path, args, _kwargs|
     args.first? == "intercept_marker_ambiguous" ? "result-b" : nil
   end
 
@@ -1568,7 +1568,7 @@ tk_test "CommandInterceptors: two matching interceptors raise AmbiguousCommandEr
   begin
     app.command(path, "intercept_marker_ambiguous")
     raise "expected AmbiguousCommandError, got no exception"
-  rescue ex : Teek::AmbiguousCommandError
+  rescue ex : Tryst::AmbiguousCommandError
     message = ex.message || ""
     unless message.includes?("test-interceptor-ambiguous-a") && message.includes?("test-interceptor-ambiguous-b")
       raise "expected error message to mention both labels, got #{message.inspect}"
@@ -1971,7 +1971,7 @@ tk_test "get_variable on a nonexistent variable raises" do |app|
   begin
     app.get_variable("does_not_exist_xyz")
     raise "expected TclError, got no exception"
-  rescue Teek::TclError
+  rescue Tryst::TclError
   end
 end
 
@@ -2020,7 +2020,7 @@ tk_test "a value containing brackets is not command-substituted" do |app|
   begin
     app.get_variable("injection_target_var")
     raise "expected TclError - injection should not have run"
-  rescue Teek::TclError
+  rescue Tryst::TclError
   end
 end
 
@@ -2044,9 +2044,9 @@ tk_test "array-element variable names round-trip" do |app|
 end
 
 tk_test "fully-qualified namespaced variable names round-trip" do |app|
-  app.tcl_eval("namespace eval ::teekbfmtest {}")
-  app.set_variable("::teekbfmtest::v1", "nsvalue")
-  raise "expected round-trip" unless app.get_variable("::teekbfmtest::v1") == "nsvalue"
+  app.tcl_eval("namespace eval ::trystbfmtest {}")
+  app.set_variable("::trystbfmtest::v1", "nsvalue")
+  raise "expected round-trip" unless app.get_variable("::trystbfmtest::v1") == "nsvalue"
 end
 
 # real call sites pass non-String values (e.g. an Int32 progress %)
@@ -2085,18 +2085,18 @@ tk_test "after_idle releases its callback even when the block raises" do |app|
   # a leaked override would corrupt every later test's bgerror behavior.
   original_bgerror = app.tcl_invoke("interp", "bgerror", "")
   app.tcl_eval(<<-TCL)
-    proc ::teek_test_after_idle_bgerror {msg opts} {
-      set ::teek_test_after_idle_bgerror_msg $msg
+    proc ::tryst_test_after_idle_bgerror {msg opts} {
+      set ::tryst_test_after_idle_bgerror_msg $msg
     }
     TCL
-  app.tcl_invoke("interp", "bgerror", "", "::teek_test_after_idle_bgerror")
-  app.tcl_eval("set ::teek_test_after_idle_bgerror_msg {}")
+  app.tcl_invoke("interp", "bgerror", "", "::tryst_test_after_idle_bgerror")
+  app.tcl_eval("set ::tryst_test_after_idle_bgerror_msg {}")
 
   begin
     app.after_idle { raise "boom" }
 
-    app.interp.wait_until(2.seconds) { !app.tcl_eval("set ::teek_test_after_idle_bgerror_msg").empty? }
-    msg = app.tcl_eval("set ::teek_test_after_idle_bgerror_msg")
+    app.interp.wait_until(2.seconds) { !app.tcl_eval("set ::tryst_test_after_idle_bgerror_msg").empty? }
+    msg = app.tcl_eval("set ::tryst_test_after_idle_bgerror_msg")
 
     raise "expected the after_idle block's exception to reach Tcl's bgerror handler" if msg.empty?
     raise "expected 'boom' in the bgerror message, got #{msg.inspect}" unless msg.includes?("boom")
@@ -2619,12 +2619,12 @@ end
 # process-wide config - reset back to true afterward so it doesn't leak
 # into other tests sharing this persistent worker).
 tk_test "background_work fires progress and done callbacks" do |app|
-  Teek::BackgroundWork.drop_intermediate = false
+  Tryst::BackgroundWork.drop_intermediate = false
 
   results = [] of Int32
   done = false
 
-  Teek::BackgroundWork(Array(Int32), Int32).new(app, [1, 2, 3]) do |ctx, data|
+  Tryst::BackgroundWork(Array(Int32), Int32).new(app, [1, 2, 3]) do |ctx, data|
     data.each { |num| ctx.yield(num * 10) }
   end.on_progress do |result|
     results << result
@@ -2633,7 +2633,7 @@ tk_test "background_work fires progress and done callbacks" do |app|
   end
 
   app.interp.wait_until(5.seconds) { done }
-  Teek::BackgroundWork.drop_intermediate = true
+  Tryst::BackgroundWork.drop_intermediate = true
 
   raise "task did not complete" unless done
   raise "expected [10, 20, 30], got #{results.inspect}" unless results == [10, 20, 30]
@@ -2643,7 +2643,7 @@ tk_test "background_work pause works" do |app|
   counter = 0
   done = false
 
-  task = Teek::BackgroundWork(Int32, Int32).new(app, 50) do |ctx, count|
+  task = Tryst::BackgroundWork(Int32, Int32).new(app, 50) do |ctx, count|
     count.times do |i|
       ctx.check_pause
       ctx.yield(i)
@@ -2680,7 +2680,7 @@ end
 # #arm_poll), with no event loop pump needed to observe the effect, so
 # there's no sleep/wait_until race to get wrong here.
 tk_test "BackgroundWork#resume called twice only arms one poll chain" do |app|
-  task = Teek::BackgroundWork(Nil, Symbol).new(app, nil) do |ctx, _data|
+  task = Tryst::BackgroundWork(Nil, Symbol).new(app, nil) do |ctx, _data|
     loop do
       ctx.check_pause
       sleep 5.milliseconds
@@ -2704,7 +2704,7 @@ tk_test "BackgroundWork#resume called twice only arms one poll chain" do |app|
 end
 
 tk_test "BackgroundWork#pause cancels an already-armed poll instead of leaving it to race #resume" do |app|
-  task = Teek::BackgroundWork(Nil, Symbol).new(app, nil) do |ctx, _data|
+  task = Tryst::BackgroundWork(Nil, Symbol).new(app, nil) do |ctx, _data|
     loop do
       ctx.check_pause
       sleep 5.milliseconds
@@ -2737,7 +2737,7 @@ tk_test "background_work receives final progress before done" do |app|
   final_progress_before_done = nil
   done = false
 
-  Teek::BackgroundWork(Int32, Float64).new(app, 5) do |ctx, total|
+  Tryst::BackgroundWork(Int32, Float64).new(app, 5) do |ctx, total|
     total.times { |i| ctx.yield((i + 1).to_f / total) }
   end.on_progress do |progress|
     progress_values << progress
@@ -2754,7 +2754,7 @@ tk_test "background_work receives final progress before done" do |app|
 end
 
 tk_test "BackgroundWork#done?/#paused? reflect state" do |app|
-  task = Teek::BackgroundWork(Nil, Symbol).new(app, nil) do |ctx, _data|
+  task = Tryst::BackgroundWork(Nil, Symbol).new(app, nil) do |ctx, _data|
     ctx.check_pause
     ctx.yield(:ok)
   end
@@ -2770,11 +2770,11 @@ tk_test "BackgroundWork#done?/#paused? reflect state" do |app|
 end
 
 tk_test "on_message and send_message work bidirectionally" do |app|
-  Teek::BackgroundWork.drop_intermediate = false
+  Tryst::BackgroundWork.drop_intermediate = false
   received_by_main = [] of String
   done = false
 
-  task = Teek::BackgroundWork(Nil, Symbol).new(app, nil) do |ctx, _data|
+  task = Tryst::BackgroundWork(Nil, Symbol).new(app, nil) do |ctx, _data|
     msg = ctx.wait_message
     ctx.send_message("echo:#{msg}")
     ctx.yield(:done)
@@ -2787,25 +2787,25 @@ tk_test "on_message and send_message work bidirectionally" do |app|
   task.send_message("hello")
 
   app.interp.wait_until(3.seconds) { done }
-  Teek::BackgroundWork.drop_intermediate = true
+  Tryst::BackgroundWork.drop_intermediate = true
 
   raise "task should complete" unless done
   raise "expected 'echo:hello' in #{received_by_main.inspect}" unless received_by_main.includes?("echo:hello")
 end
 
 tk_test "TaskContext#check_message returns nil when empty" do |app|
-  Teek::BackgroundWork.drop_intermediate = false
+  Tryst::BackgroundWork.drop_intermediate = false
   results = [] of String
   done = false
 
-  Teek::BackgroundWork(Nil, String).new(app, nil) do |ctx, _data|
+  Tryst::BackgroundWork(Nil, String).new(app, nil) do |ctx, _data|
     msg = ctx.check_message
     ctx.yield(msg.nil? ? "none" : msg.to_s)
   end.on_progress { |res| results << res }
     .on_done { done = true }
 
   app.interp.wait_until(3.seconds) { done }
-  Teek::BackgroundWork.drop_intermediate = true
+  Tryst::BackgroundWork.drop_intermediate = true
 
   raise "expected ['none'], got #{results.inspect}" unless results == ["none"]
 end
@@ -2814,7 +2814,7 @@ tk_test "BackgroundWork#stop terminates the worker" do |app|
   progress_count = 0
   done = false
 
-  task = Teek::BackgroundWork(Int32, Int32).new(app, 1000) do |ctx, count|
+  task = Tryst::BackgroundWork(Int32, Int32).new(app, 1000) do |ctx, count|
     count.times do |i|
       ctx.check_message
       ctx.yield(i)
@@ -2834,7 +2834,7 @@ end
 tk_test "BackgroundWork#close stops the worker without invoking further callbacks" do |app|
   done = false
 
-  task = Teek::BackgroundWork(Nil, Int32).new(app, nil) do |ctx, _data|
+  task = Tryst::BackgroundWork(Nil, Int32).new(app, nil) do |ctx, _data|
     loop do
       ctx.check_message
       sleep 10.milliseconds
@@ -2857,7 +2857,7 @@ tk_test "BackgroundWork#close lets a queue-choked worker terminate instead of bl
   stopped = false
   progress_count = 0
 
-  task = Teek::BackgroundWork(Int32, Int32).new(app, 20_000) do |ctx, count|
+  task = Tryst::BackgroundWork(Int32, Int32).new(app, 20_000) do |ctx, count|
     begin
       count.times do |i|
         ctx.check_message
@@ -2878,7 +2878,7 @@ tk_test "BackgroundWork#close lets a queue-choked worker terminate instead of bl
   raise "expected done once the worker's own BackgroundDone was drained" unless task.done?
 end
 
-# From ruby-teek's test_threading.rb - the parts not already covered by
+# From ruby-tryst's test_threading.rb - the parts not already covered by
 # other tests (after firing, tcl_eval, widget callbacks firing) are
 # specifically about background concurrency alongside Tk, adapted here to
 # Fiber::ExecutionContext::Isolated (this project's Thread equivalent)
@@ -2906,18 +2906,18 @@ tk_test "a widget callback can spawn an Isolated context" do |app|
   raise "expected 'from_callback', got #{callback_thread_result.inspect}" unless callback_thread_result == "from_callback"
 end
 
-# From ruby-teek's teek-ui/test/test_realizer.rb - Realizer's own specs
-# (spec/teek/ui/realizer_spec.cr) cover the create/link logic headlessly
+# From ruby-tryst's tryst-ui/test/test_realizer.rb - Realizer's own specs
+# (spec/tryst/ui/realizer_spec.cr) cover the create/link logic headlessly
 # against FakeApp; this confirms the same walk against a REAL Tk
 # interpreter actually creates and maps real widgets, not just records
 # what would have happened. Built directly against Realizer.new(app,
 # document) (WidgetDslHarness standing in for Session, which doesn't
-# exist yet) rather than through Teek::UI.app.
+# exist yet) rather than through Tryst::UI.app.
 tk_test "realizing a nested tree creates real, mapped widgets at hierarchical paths" do |app|
   session = WidgetDslHarness.new
   session.panel(:controls, &.button(:go, text: "Go"))
 
-  Teek::UI::Realizer.new(app, session.document).realize
+  Tryst::UI::Realizer.new(app, session.document).realize
   app.show # a widget in a still-withdrawn root window never reports ismapped?
   app.update
 
@@ -2940,7 +2940,7 @@ tk_test "the simple leaf types realize as the real Tk widgets they name" do |app
   session.dropdown(:pick, values: ["alpha", "beta"])
   session.number_box(:size, from: 1, to: 64, increment: 2)
 
-  Teek::UI::Realizer.new(app, session.document).realize
+  Tryst::UI::Realizer.new(app, session.document).realize
   app.show
   app.update
 
@@ -2960,9 +2960,9 @@ tk_test "the simple leaf types realize as the real Tk widgets they name" do |app
   raise "expected the number box to hold its range" unless app.command(".size", :cget, "-to") == "64"
 end
 
-# -- Teek::Photo --
+# -- Tryst::Photo --
 #
-# Ported from ruby-teek's test/test_photo.rb and test/test_photo_gc.rb.
+# Ported from ruby-tryst's test/test_photo.rb and test/test_photo_gc.rb.
 # Photo takes an already-constructed App rather than making its own, so
 # unlike Session these run happily against the shared worker.
 #
@@ -2985,12 +2985,12 @@ private def assert_pixel(photo, x : Int32, y : Int32, expected : Tuple(Int32, In
 end
 
 tk_test "Photo auto-generates unique names" do |app|
-  first = Teek::Photo.new(app, width: 1, height: 1)
-  second = Teek::Photo.new(app, width: 1, height: 1)
+  first = Tryst::Photo.new(app, width: 1, height: 1)
+  second = Tryst::Photo.new(app, width: 1, height: 1)
 
   raise "expected distinct names, both were #{first.name}" if first.name == second.name
   [first, second].each do |photo|
-    raise "expected a teek_photoN name, got #{photo.name.inspect}" unless photo.name.matches?(/\Ateek_photo\d+\z/)
+    raise "expected a tryst_photoN name, got #{photo.name.inspect}" unless photo.name.matches?(/\Atryst_photo\d+\z/)
   end
 ensure
   first.try(&.delete)
@@ -2998,9 +2998,9 @@ ensure
 end
 
 tk_test "Photo equality is by image name" do |app|
-  first = Teek::Photo.new(app, name: "eq_photo", width: 1, height: 1)
-  same = Teek::Photo.new(app, name: "eq_photo", width: 1, height: 1)
-  other = Teek::Photo.new(app, name: "eq_photo_other", width: 1, height: 1)
+  first = Tryst::Photo.new(app, name: "eq_photo", width: 1, height: 1)
+  same = Tryst::Photo.new(app, name: "eq_photo", width: 1, height: 1)
+  other = Tryst::Photo.new(app, name: "eq_photo_other", width: 1, height: 1)
 
   raise "expected two handles on eq_photo to compare equal" unless first == same
   raise "expected different names to compare unequal" if first == other
@@ -3011,7 +3011,7 @@ ensure
 end
 
 tk_test "Photo accepts an explicit name, and #to_s is that name" do |app|
-  photo = Teek::Photo.new(app, name: "my_test_photo", width: 10, height: 10)
+  photo = Tryst::Photo.new(app, name: "my_test_photo", width: 10, height: 10)
 
   raise "expected my_test_photo, got #{photo.name.inspect}" unless photo.name == "my_test_photo"
   raise "expected #to_s to be the name, got #{photo}" unless photo.to_s == "my_test_photo"
@@ -3020,7 +3020,7 @@ ensure
 end
 
 tk_test "Photo's constructor sets its dimensions" do |app|
-  photo = Teek::Photo.new(app, width: 42, height: 17)
+  photo = Tryst::Photo.new(app, width: 42, height: 17)
 
   size = photo.get_size
   raise "expected 42x17, got #{size}" unless size == {width: 42, height: 17}
@@ -3029,7 +3029,7 @@ ensure
 end
 
 tk_test "Photo#exists? tracks creation and #delete" do |app|
-  photo = Teek::Photo.new(app, width: 5, height: 5)
+  photo = Tryst::Photo.new(app, width: 5, height: 5)
   raise "expected the photo to exist after creation" unless photo.exists?
 
   photo.delete
@@ -3037,15 +3037,15 @@ tk_test "Photo#exists? tracks creation and #delete" do |app|
 end
 
 tk_test "Photo#inspect names the image" do |app|
-  photo = Teek::Photo.new(app, name: "inspect_test", width: 1, height: 1)
+  photo = Tryst::Photo.new(app, name: "inspect_test", width: 1, height: 1)
 
-  raise "got #{photo.inspect}" unless photo.inspect == "#<Teek::Photo inspect_test>"
+  raise "got #{photo.inspect}" unless photo.inspect == "#<Tryst::Photo inspect_test>"
 ensure
   photo.try(&.delete)
 end
 
 tk_test "Photo#put_block writes pixels and #get_image reads them back" do |app|
-  photo = Teek::Photo.new(app, width: 10, height: 10)
+  photo = Tryst::Photo.new(app, width: 10, height: 10)
   photo.put_block(solid(255, 0, 0, 255, 100), 10, 10)
 
   result = photo.get_image
@@ -3062,7 +3062,7 @@ ensure
 end
 
 tk_test "Photo#put_block with an x/y offset writes only to that region" do |app|
-  photo = Teek::Photo.new(app, width: 20, height: 20)
+  photo = Tryst::Photo.new(app, width: 20, height: 20)
   photo.put_block(solid(0, 0, 0, 255, 400), 20, 20)
   photo.put_block(solid(0, 255, 0, 255, 25), 5, 5, x: 10, y: 10)
 
@@ -3075,7 +3075,7 @@ ensure
 end
 
 tk_test "Photo#put_block returns self, for chaining" do |app|
-  photo = Teek::Photo.new(app, width: 2, height: 2)
+  photo = Tryst::Photo.new(app, width: 2, height: 2)
 
   returned = photo.put_block(solid(255, 0, 0, 255, 4), 2, 2)
   raise "expected the same Photo back" unless returned.same?(photo)
@@ -3084,7 +3084,7 @@ ensure
 end
 
 tk_test "Photo#put_block rejects pixel data that isn't width*height*4 bytes" do |app|
-  photo = Teek::Photo.new(app, width: 10, height: 10)
+  photo = Tryst::Photo.new(app, width: 10, height: 10)
 
   begin
     photo.put_block(Bytes.new(9), 10, 10)
@@ -3097,7 +3097,7 @@ ensure
 end
 
 tk_test "Photo#put_block rejects a zero dimension" do |app|
-  photo = Teek::Photo.new(app, width: 10, height: 10)
+  photo = Tryst::Photo.new(app, width: 10, height: 10)
 
   begin
     photo.put_block(Bytes.new(0), 0, 10)
@@ -3110,7 +3110,7 @@ ensure
 end
 
 tk_test "Photo#put_block preserves a transparent pixel's color channels" do |app|
-  photo = Teek::Photo.new(app, width: 10, height: 10)
+  photo = Tryst::Photo.new(app, width: 10, height: 10)
   photo.put_block(solid(255, 0, 0, 0, 100), 10, 10)
 
   pixel = photo.get_pixel(5, 5)
@@ -3121,7 +3121,7 @@ ensure
 end
 
 tk_test "Photo#put_block format: :argb maps the channels correctly" do |app|
-  photo = Teek::Photo.new(app, width: 1, height: 1)
+  photo = Tryst::Photo.new(app, width: 1, height: 1)
 
   # ARGB is 0xAARRGGBB little-endian, so the bytes run [B, G, R, A].
   # This is green: B=0, G=255, R=0, A=255.
@@ -3133,7 +3133,7 @@ ensure
 end
 
 tk_test "Photo#put_block format: :argb reads a red pixel back as red" do |app|
-  photo = Teek::Photo.new(app, width: 1, height: 1)
+  photo = Tryst::Photo.new(app, width: 1, height: 1)
   photo.put_block(Bytes[0, 0, 255, 255], 1, 1, format: :argb)
 
   assert_pixel(photo, 0, 0, {255, 0, 0, 255}, "argb red")
@@ -3142,7 +3142,7 @@ ensure
 end
 
 tk_test "Photo#put_block composite: :set overwrites what was there" do |app|
-  photo = Teek::Photo.new(app, width: 1, height: 1)
+  photo = Tryst::Photo.new(app, width: 1, height: 1)
   photo.put_block(Bytes[255, 0, 0, 255], 1, 1)
   photo.put_block(Bytes[0, 0, 255, 255], 1, 1, composite: :set)
 
@@ -3152,7 +3152,7 @@ ensure
 end
 
 tk_test "Photo#put_block composite: :overlay alpha-blends over what was there" do |app|
-  photo = Teek::Photo.new(app, width: 1, height: 1)
+  photo = Tryst::Photo.new(app, width: 1, height: 1)
   photo.put_block(Bytes[255, 0, 0, 255], 1, 1)
   photo.put_block(Bytes[0, 255, 0, 128], 1, 1, composite: :overlay)
 
@@ -3166,7 +3166,7 @@ ensure
 end
 
 tk_test "Photo#put_zoomed_block replicates each source pixel zoom times" do |app|
-  photo = Teek::Photo.new(app, width: 30, height: 30)
+  photo = Tryst::Photo.new(app, width: 30, height: 30)
   photo.put_zoomed_block(solid(255, 0, 0, 255, 100), 10, 10, zoom_x: 3, zoom_y: 3)
 
   { {0, 0}, {15, 15}, {29, 29} }.each do |(x, y)|
@@ -3177,7 +3177,7 @@ ensure
 end
 
 tk_test "Photo#put_zoomed_block handles an asymmetric zoom" do |app|
-  photo = Teek::Photo.new(app, width: 10, height: 10)
+  photo = Tryst::Photo.new(app, width: 10, height: 10)
   photo.put_block(solid(0, 0, 0, 255, 100), 10, 10)
   photo.put_zoomed_block(Bytes[0, 0, 255, 255], 1, 1, zoom_x: 4, zoom_y: 2)
 
@@ -3192,7 +3192,7 @@ ensure
 end
 
 tk_test "Photo#put_zoomed_block returns self" do |app|
-  photo = Teek::Photo.new(app, width: 4, height: 4)
+  photo = Tryst::Photo.new(app, width: 4, height: 4)
 
   returned = photo.put_zoomed_block(Bytes[255, 0, 0, 255], 1, 1, zoom_x: 4, zoom_y: 4)
   raise "expected the same Photo back" unless returned.same?(photo)
@@ -3201,7 +3201,7 @@ ensure
 end
 
 tk_test "Photo#put_zoomed_block rejects a non-positive zoom or subsample" do |app|
-  photo = Teek::Photo.new(app, width: 4, height: 4)
+  photo = Tryst::Photo.new(app, width: 4, height: 4)
 
   begin
     photo.put_zoomed_block(Bytes[255, 0, 0, 255], 1, 1, zoom_x: 0)
@@ -3221,7 +3221,7 @@ ensure
 end
 
 tk_test "Photo#get_image reads back a sub-region" do |app|
-  photo = Teek::Photo.new(app, width: 20, height: 20)
+  photo = Tryst::Photo.new(app, width: 20, height: 20)
   photo.put_block(solid(0, 0, 0, 255, 400), 20, 20)
   photo.put_block(solid(0, 255, 0, 255, 100), 10, 10, x: 10, y: 10)
 
@@ -3238,7 +3238,7 @@ ensure
 end
 
 tk_test "Photo#get_image clamps a region that runs past the image edge" do |app|
-  photo = Teek::Photo.new(app, width: 10, height: 10)
+  photo = Tryst::Photo.new(app, width: 10, height: 10)
   photo.put_block(solid(0, 0, 0, 255, 100), 10, 10)
 
   result = photo.get_image(x: 6, y: 6, width: 99, height: 99)
@@ -3249,7 +3249,7 @@ ensure
 end
 
 tk_test "Photo#get_image rejects an offset outside the image" do |app|
-  photo = Teek::Photo.new(app, width: 10, height: 10)
+  photo = Tryst::Photo.new(app, width: 10, height: 10)
   photo.put_block(solid(0, 0, 0, 255, 100), 10, 10)
 
   begin
@@ -3263,7 +3263,7 @@ ensure
 end
 
 tk_test "Photo#get_pixel reads exact RGBA values, including partial alpha" do |app|
-  photo = Teek::Photo.new(app, width: 3, height: 1)
+  photo = Tryst::Photo.new(app, width: 3, height: 1)
   photo.put_block(Bytes[255, 0, 0, 255, 0, 255, 0, 200, 0, 0, 255, 128], 3, 1)
 
   assert_pixel(photo, 0, 0, {255, 0, 0, 255}, "opaque red")
@@ -3274,7 +3274,7 @@ ensure
 end
 
 tk_test "Photo#get_pixel rejects out-of-bounds coordinates" do |app|
-  photo = Teek::Photo.new(app, width: 5, height: 5)
+  photo = Tryst::Photo.new(app, width: 5, height: 5)
   photo.put_block(solid(0, 0, 0, 255, 25), 5, 5)
 
   { {5, 0}, {0, 5} }.each do |(x, y)|
@@ -3289,7 +3289,7 @@ end
 
 tk_test "Photo#get_size reports the dimensions it was built with" do |app|
   { {10, 10}, {100, 50}, {1, 200} }.each do |(width, height)|
-    photo = Teek::Photo.new(app, width: width, height: height)
+    photo = Tryst::Photo.new(app, width: width, height: height)
     begin
       size = photo.get_size
       raise "expected #{width}x#{height}, got #{size}" unless size == {width: width, height: height}
@@ -3300,7 +3300,7 @@ tk_test "Photo#get_size reports the dimensions it was built with" do |app|
 end
 
 tk_test "Photo#set_size grows and shrinks the image, and returns self" do |app|
-  photo = Teek::Photo.new(app, width: 10, height: 10)
+  photo = Tryst::Photo.new(app, width: 10, height: 10)
 
   returned = photo.set_size(20, 30)
   raise "expected the same Photo back" unless returned.same?(photo)
@@ -3315,7 +3315,7 @@ end
 tk_test "Photo#expand grows an auto-sized photo without disturbing its pixels" do |app|
   # No width:/height: - expand is a no-op on a photo given an explicit
   # size, so the size has to come from the pixels written below.
-  photo = Teek::Photo.new(app)
+  photo = Tryst::Photo.new(app)
   photo.put_block(solid(255, 0, 0, 255, 100), 10, 10)
   raise "expected 10x10 after put_block, got #{photo.get_size}" unless photo.get_size == {width: 10, height: 10}
 
@@ -3331,7 +3331,7 @@ ensure
 end
 
 tk_test "Photo#expand never shrinks" do |app|
-  photo = Teek::Photo.new(app)
+  photo = Tryst::Photo.new(app)
   photo.put_block(solid(0, 0, 0, 255, 400), 20, 20)
 
   photo.expand(5, 5)
@@ -3345,7 +3345,7 @@ end
 tk_test "Photo#expand is a no-op on a photo created with explicit width/height" do |app|
   # Tk's own documented behavior - expand does nothing once a definite
   # size has been declared.
-  photo = Teek::Photo.new(app, width: 10, height: 10)
+  photo = Tryst::Photo.new(app, width: 10, height: 10)
 
   photo.expand(20, 20)
 
@@ -3355,7 +3355,7 @@ ensure
 end
 
 tk_test "Photo#blank clears every pixel to fully transparent, and returns self" do |app|
-  photo = Teek::Photo.new(app, width: 10, height: 10)
+  photo = Tryst::Photo.new(app, width: 10, height: 10)
   photo.put_block(solid(255, 0, 0, 255, 100), 10, 10)
   assert_pixel(photo, 5, 5, {255, 0, 0, 255}, "before blank")
 
@@ -3368,7 +3368,7 @@ ensure
 end
 
 tk_test "Photo#clear is #blank" do |app|
-  photo = Teek::Photo.new(app, width: 5, height: 5)
+  photo = Tryst::Photo.new(app, width: 5, height: 5)
   photo.put_block(solid(255, 0, 0, 255, 25), 5, 5)
 
   photo.clear
@@ -3379,7 +3379,7 @@ ensure
 end
 
 tk_test "Photo round-trips a multi-color pattern across both rows" do |app|
-  photo = Teek::Photo.new(app, width: 3, height: 2)
+  photo = Tryst::Photo.new(app, width: 3, height: 2)
   photo.put_block(Bytes[
     255, 0, 0, 255,     # red
     0, 255, 0, 255,     # green
@@ -3400,9 +3400,9 @@ ensure
 end
 
 tk_test "Photo#command passes arbitrary photo subcommands through, e.g. copy -subsample" do |app|
-  source = Teek::Photo.new(app, width: 40, height: 20)
+  source = Tryst::Photo.new(app, width: 40, height: 20)
   source.put_block(solid(255, 0, 0, 255, 800), 40, 20)
-  dest = Teek::Photo.new(app, name: "teek_test_copy_dest")
+  dest = Tryst::Photo.new(app, name: "tryst_test_copy_dest")
 
   dest.command(:copy, source.name, subsample: 4)
 
@@ -3413,10 +3413,10 @@ ensure
 end
 
 tk_test "Photo.finalizer_for's proc deletes the image it names" do |app|
-  app.command(:image, :create, :photo, "teek_test_finalizer_target", width: 5, height: 5)
-  raise "expected the image to exist first" unless app.split_list(app.tcl_eval("image names")).includes?("teek_test_finalizer_target")
+  app.command(:image, :create, :photo, "tryst_test_finalizer_target", width: 5, height: 5)
+  raise "expected the image to exist first" unless app.split_list(app.tcl_eval("image names")).includes?("tryst_test_finalizer_target")
 
-  Teek::Photo.finalizer_for("teek_test_finalizer_target", app).call
+  Tryst::Photo.finalizer_for("tryst_test_finalizer_target", app).call
   # pump_once, not app.update: the finalizer only QUEUES the delete via
   # Interp#queue_for_main (a finalizer can run on any thread). app.update
   # runs Tcl's own event loop, which knows nothing about that Crystal-side
@@ -3424,11 +3424,11 @@ tk_test "Photo.finalizer_for's proc deletes the image it names" do |app|
   app.interp.pump_once
 
   names = app.split_list(app.tcl_eval("image names"))
-  raise "expected the finalizer proc to have deleted the image" if names.includes?("teek_test_finalizer_target")
+  raise "expected the finalizer proc to have deleted the image" if names.includes?("tryst_test_finalizer_target")
 end
 
 tk_test "an explicitly deleted Photo's finalizer can't delete a later same-named image" do |app|
-  photo = Teek::Photo.new(app, width: 5, height: 5)
+  photo = Tryst::Photo.new(app, width: 5, height: 5)
   name = photo.name
   photo.delete
 
@@ -3436,7 +3436,7 @@ tk_test "an explicitly deleted Photo's finalizer can't delete a later same-named
   # hand - what a later GC would do. Crystal has no way to unregister a
   # finalizer, so #delete sets a guard flag instead, and this is the
   # observable contract that flag exists to keep.
-  replacement = Teek::Photo.new(app, name: name, width: 5, height: 5)
+  replacement = Tryst::Photo.new(app, name: name, width: 5, height: 5)
   photo.finalize
   # Has to be pump_once for the same reason as the case above - with a
   # plain app.update nothing drains the queue, so this would pass whether
@@ -3457,7 +3457,7 @@ tk_test "finalizing more Photos than @main_queue's capacity in one collection do
   # reachable via GC.collect's finalization pass, not from this method's
   # own locals.
   200.times do
-    Teek::Photo.new(app, width: 2, height: 2)
+    Tryst::Photo.new(app, width: 2, height: 2)
   end
 
   # Boehm's conservative stack scanning means one GC.collect isn't
@@ -3472,25 +3472,25 @@ tk_test "finalizing more Photos than @main_queue's capacity in one collection do
   10.times do
     GC.collect
     app.interp.pump_once
-    remaining = app.split_list(app.tcl_eval("image names")).select(&.starts_with?("teek_photo"))
+    remaining = app.split_list(app.tcl_eval("image names")).select(&.starts_with?("tryst_photo"))
     break if remaining.empty?
   end
 
-  raise "expected no teek_photo images to remain, still have #{remaining}" unless remaining.empty?
+  raise "expected no tryst_photo images to remain, still have #{remaining}" unless remaining.empty?
 end
 
 tk_test "Photo.new(file:) loads an image, and copy -subsample halves it" do |app|
-  path = File.tempname("teek_photo_spec", ".png")
+  path = File.tempname("tryst_photo_spec", ".png")
 
-  seed = Teek::Photo.new(app, width: 80, height: 40)
+  seed = Tryst::Photo.new(app, width: 80, height: 40)
   seed.put_block(solid(0, 0, 255, 255, 3200), 80, 40)
   seed.command(:write, path, format: "png")
   seed.delete
 
-  loaded = Teek::Photo.new(app, file: path)
+  loaded = Tryst::Photo.new(app, file: path)
   raise "expected the loaded image to be 80x40, got #{loaded.get_size}" unless loaded.get_size == {width: 80, height: 40}
 
-  small = Teek::Photo.new(app)
+  small = Tryst::Photo.new(app)
   small.command(:copy, loaded.name, subsample: 2)
   raise "expected the subsampled copy to be 40x20, got #{small.get_size}" unless small.get_size == {width: 40, height: 20}
 ensure
@@ -3506,9 +3506,9 @@ end
 tk_test "Handle#options parses a real configure dump" do |app|
   app.command("ttk::button", ".optbutton", text: "Save changes", state: "disabled")
 
-  node = Teek::UI::Node.new(type: :button, name: :optbutton)
-  node.realized = Teek::UI::RealizedNode.new(app: app, path: ".optbutton")
-  opts = Teek::UI::Handle.new(node).options
+  node = Tryst::UI::Node.new(type: :button, name: :optbutton)
+  node.realized = Tryst::UI::RealizedNode.new(app: app, path: ".optbutton")
+  opts = Tryst::UI::Handle.new(node).options
 
   raise "expected the -text value, got #{opts["text"]?.inspect}" unless opts["text"]? == "Save changes"
   raise "expected the -state value, got #{opts["state"]?.inspect}" unless opts["state"]? == "disabled"
@@ -3526,12 +3526,12 @@ tk_test "Handle#options on a menu entry parses an entryconfigure dump" do |app|
   # A menu entry has no Tk path of its own, so its Handle addresses it
   # through the parent menu plus a live index - hence the real parent
   # link rather than a lone node (see MenuEntryAddressing).
-  menu_node = Teek::UI::Node.new(type: :context_menu, name: :optmenu)
-  menu_node.realized = Teek::UI::RealizedNode.new(app: app, path: ".optmenu")
-  item_node = Teek::UI::Node.new(type: :menu_item, name: :recent)
+  menu_node = Tryst::UI::Node.new(type: :context_menu, name: :optmenu)
+  menu_node.realized = Tryst::UI::RealizedNode.new(app: app, path: ".optmenu")
+  item_node = Tryst::UI::Node.new(type: :menu_item, name: :recent)
   menu_node.add_child(item_node)
 
-  opts = Teek::UI::Handle.new(item_node).options
+  opts = Tryst::UI::Handle.new(item_node).options
 
   raise "expected the -label value, got #{opts["label"]?.inspect}" unless opts["label"]? == "Open Recent"
   raise "expected the -state value, got #{opts["state"]?.inspect}" unless opts["state"]? == "disabled"
@@ -3539,18 +3539,18 @@ ensure
   app.destroy(".optmenu")
 end
 
-# -- Teek::UI::TextContent --
+# -- Tryst::UI::TextContent --
 #
 # The half of TextContent only real Tk can answer: that the commands
-# spec/teek/ui/text_content_spec.cr asserts the shape of actually do what
+# spec/tryst/ui/text_content_spec.cr asserts the shape of actually do what
 # they claim. Built directly against a bare `text` widget rather than
 # through a Session (which would need its own subprocess - see
-# spec/teek/ui/session_realtk_spec.cr), since TextContent takes an app and
+# spec/tryst/ui/session_realtk_spec.cr), since TextContent takes an app and
 # a path and nothing else.
 
-private def text_content_on(app, path : String) : Teek::UI::TextContent
+private def text_content_on(app, path : String) : Tryst::UI::TextContent
   app.command("text", path)
-  Teek::UI::TextContent.new(app, path)
+  Tryst::UI::TextContent.new(app, path)
 end
 
 tk_test "TextContent#insert and #get round trip real text" do |app|
@@ -3620,7 +3620,7 @@ tk_test "TextContent restores read-only even when the mutation fails" do |app|
     # A real Tcl error from inside the lifted window, rather than a
     # simulated one: "not an index" is not a text index.
     text.insert("not an index", "boom")
-  rescue Teek::TclError
+  rescue Tryst::TclError
     raised = true
   end
 
@@ -3774,7 +3774,7 @@ end
 tk_test "TextContent#insert_image embeds a real image in the text flow" do |app|
   text = text_content_on(app, ".tc_image")
   text.insert("1.0", "before after")
-  photo = Teek::Photo.new(app, width: 4, height: 4)
+  photo = Tryst::Photo.new(app, width: 4, height: 4)
 
   text.insert_image("1.7", image: photo)
 
@@ -3809,7 +3809,7 @@ tk_test "ui.image(subsample:) shrinks the source and leaves no temporary behind"
   app.command(:image, :delete, "tk_case_src")
 
   begin
-    image = Teek::UI::Image.new("tk_case_subsampled", source, subsample: 6)
+    image = Tryst::UI::Image.new("tk_case_subsampled", source, subsample: 6)
     image.realize(app)
 
     size = {app.command(:image, :width, image.name), app.command(:image, :height, image.name)}
@@ -3820,7 +3820,7 @@ tk_test "ui.image(subsample:) shrinks the source and leaves no temporary behind"
 
     # a bad factor is rejected up front rather than handed to Tk
     begin
-      Teek::UI::Image.new("tk_case_bad_subsample", source, subsample: 0).realize(app)
+      Tryst::UI::Image.new("tk_case_bad_subsample", source, subsample: 0).realize(app)
       raise "expected subsample: 0 to raise"
     rescue ex : ArgumentError
       raise "unexpected message: #{ex.message}" unless ex.message.to_s.includes?("positive")
@@ -3835,7 +3835,7 @@ tk_test "WidgetDSL#style configures a ttk style the widgets can then name" do |a
   session.style("TkCase.TButton", font: "TkFixedFont 12 bold")
   session.button(:styled, text: "hi", style: "TkCase.TButton")
 
-  Teek::UI::Realizer.new(app, session.document).realize
+  Tryst::UI::Realizer.new(app, session.document).realize
 
   looked_up = app.command("ttk::style", :lookup, "TkCase.TButton", "-font")
   raise "expected the style's font set, got #{looked_up.inspect}" unless looked_up == "TkFixedFont 12 bold"
@@ -3851,7 +3851,7 @@ tk_test "WidgetDSL#on_key binds a real app-wide keystroke to the root window" do
   session.on_key(:f2) { |_args, _signal| fired += 1 }
   session.button(:elsewhere, text: "not focused")
 
-  Teek::UI::Realizer.new(app, session.document).realize
+  Tryst::UI::Realizer.new(app, session.document).realize
   app.show
   app.update
 
@@ -3872,8 +3872,8 @@ tk_test "Handle#on_key does not let a hostile key spec run as Tcl" do |app|
   malicious_spec = "a> {}; set ::tk_case_on_key_injection_probe hit;#"
   begin
     handle.on_key(malicious_spec) { |_args, _signal| }
-    Teek::UI::Realizer.new(app, session.document).realize
-  rescue Teek::TclError
+    Tryst::UI::Realizer.new(app, session.document).realize
+  rescue Tryst::TclError
     # A clear Tcl-level error is an acceptable outcome too - what matters
     # is that the fragment after the injected ";" never ran.
   end
@@ -3899,11 +3899,11 @@ tk_test "every right-click spelling this platform binds is one real Tk delivers"
     seen << args.join(",")
   end
 
-  Teek::UI::Realizer.new(app, session.document).realize
+  Tryst::UI::Realizer.new(app, session.document).realize
   app.show
   app.update
 
-  patterns = Teek::UI::MouseEvents::RIGHT_CLICK_EVENTS
+  patterns = Tryst::UI::MouseEvents::RIGHT_CLICK_EVENTS
   # `bind <window>` with no pattern reports every sequence bound on it, so
   # Tk itself confirms it parsed each pattern rather than us re-reading our
   # own list back.
@@ -3937,13 +3937,13 @@ tk_test "native_window_handle answers with the platform's own window identifier"
   raise "expected a non-zero handle, got #{handle}" if handle.value.zero?
   raise "expected the path to travel with it, got #{handle.path.inspect}" unless handle.path == ".nwh"
 
-  expected = Teek.platform.darwin? ? Teek::NativeWindowKind::Cocoa : Teek::NativeWindowKind::X11
+  expected = Tryst.platform.darwin? ? Tryst::NativeWindowKind::Cocoa : Tryst::NativeWindowKind::X11
   raise "expected #{expected} on this platform, got #{handle.kind}" unless handle.kind == expected
 
   # The value has to agree with what Tk itself reports for the drawable
   # off macOS; on macOS it is a different object entirely - the NSWindow
   # the drawable belongs to - so there is nothing to compare it against.
-  unless Teek.platform.darwin?
+  unless Tryst.platform.darwin?
     winfo_id = app.command(:winfo, :id, ".nwh").lchop("0x").to_u64(16)
     raise "expected #{handle.value} to match winfo id #{winfo_id}" unless handle.value == winfo_id
   end
@@ -3960,7 +3960,7 @@ tk_test "native_window_handle is per-widget everywhere except macOS" do |app|
   root = app.native_window_handle(".")
   frame = app.native_window_handle(".nwh_scope")
 
-  if Teek.platform.darwin?
+  if Tryst.platform.darwin?
     # Aqua gives one native window to a toplevel and none to the widgets
     # inside it, so both answer with the SAME NSWindow. That is what
     # covers_toplevel? warns about: a surface embedded here paints over
@@ -3990,7 +3990,7 @@ tk_test "native_window_handle refuses a widget that is not mapped" do |app|
   begin
     handle = app.native_window_handle(".nwh_unmapped")
     raise "expected an unmapped frame to be refused, got #{handle}"
-  rescue ex : Teek::TclError
+  rescue ex : Tryst::TclError
     raise "expected the message to say so, got #{ex.message.inspect}" unless ex.message.to_s.includes?("not mapped")
   end
 
@@ -4001,7 +4001,7 @@ tk_test "native_window_handle reports an unknown path as Tk does" do |app|
   begin
     handle = app.native_window_handle(".no_such_widget")
     raise "expected an unknown path to raise, got #{handle}"
-  rescue ex : Teek::TclError
+  rescue ex : Tryst::TclError
     unless ex.message.to_s.includes?("bad window path name")
       raise "expected Tk's own message, got #{ex.message.inspect}"
     end
@@ -4120,7 +4120,7 @@ tk_test "registering an already-live event source does not double it up" do |app
   end
 end
 
-# Interp#delete's own regression coverage (spec/teek/interp_delete_spec.cr)
+# Interp#delete's own regression coverage (spec/tryst/interp_delete_spec.cr)
 # needs a fresh subprocess, since it really tears down the process's one
 # Tk interpreter - can't run against the shared worker. What CAN run here
 # is the lower-level mechanism it depends on to stop its keepalive timer

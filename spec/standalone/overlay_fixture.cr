@@ -1,16 +1,16 @@
-require "../../src/teek/ui"
+require "../../src/tryst/ui"
 
 # Standalone verification for Realizer#place_overlay's real Tk behavior -
 # needs its own subprocess for the same reason grid_fixture.cr does
-# (Session#realize always constructs a brand-new Teek::App). Realizer's
+# (Session#realize always constructs a brand-new Tryst::App). Realizer's
 # exact computed place-option arithmetic is already covered headlessly
-# against FakeApp (spec/teek/ui/realizer_spec.cr); this confirms Tk's
+# against FakeApp (spec/tryst/ui/realizer_spec.cr); this confirms Tk's
 # own `place` geometry manager actually honors it - real -relx/-rely/
-# -anchor placement, matching ruby-teek's teek-ui/test/test_overlay.rb.
+# -anchor placement, matching ruby-tryst's tryst-ui/test/test_overlay.rb.
 
-handles = {} of Symbol => Teek::UI::Handle
+handles = {} of Symbol => Tryst::UI::Handle
 
-session = Teek::UI.app(title: "overlay fixture") do |builder|
+session = Tryst::UI.app(title: "overlay fixture") do |builder|
   handles[:board] = builder.canvas(:board, width: 300, height: 200) do |canvas|
     canvas.overlay(:bottom_right) { handles[:status] = canvas.label(:status, text: "Ready") }
     canvas.overlay(:top_left) { handles[:corner] = canvas.label(:corner, text: "Corner") }

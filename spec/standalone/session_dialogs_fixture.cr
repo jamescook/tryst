@@ -1,4 +1,4 @@
-require "../../src/teek/ui"
+require "../../src/tryst/ui"
 
 # Standalone verification that Session's dialog passthroughs forward
 # every option to the App wrapper underneath, under the right Tk flag,
@@ -10,15 +10,15 @@ require "../../src/teek/ui"
 # it was actually invoked with and return a canned result. Nothing pops
 # up, and the assertion is on the real Tcl call the wrapper built.
 #
-# Needs its own subprocess (see spec/teek/ui/session_realtk_spec.cr)
-# because Session#realize always constructs a brand-new Teek::App, which
+# Needs its own subprocess (see spec/tryst/ui/session_realtk_spec.cr)
+# because Session#realize always constructs a brand-new Tryst::App, which
 # the shared tk_worker can't host.
 
 # Parses a captured "-flag1 value1 -flag2 value2" Tcl arg list into a
 # Hash, so assertions don't depend on the order a wrapper happens to
 # build its flags in. Mirrors tk_cases.cr's own helper of the same name.
 private def tcl_flag_hash(list_str : String) : Hash(String, String)
-  parts = Teek.split_list(list_str)
+  parts = Tryst.split_list(list_str)
   hash = {} of String => String
   parts.each_slice(2) { |pair| hash[pair[0]] = pair[1] }
   hash
@@ -29,7 +29,7 @@ private def assert_flags(app, expected : Hash(String, String), label : String) :
   raise "#{label}: expected flags #{expected}, got #{captured}" unless captured == expected
 end
 
-session = Teek::UI.app(title: "session dialogs fixture") do |builder|
+session = Tryst::UI.app(title: "session dialogs fixture") do |builder|
   builder.label(:hello, text: "Hello")
 end
 

@@ -1,17 +1,17 @@
-require "../../src/teek/ui"
+require "../../src/tryst/ui"
 
 # Standalone verification for Realizer#arrange_flow's real Tk behavior -
 # needs its own subprocess for the same reason session_realize_fixture.cr
-# does (Session#realize always constructs a brand-new Teek::App).
+# does (Session#realize always constructs a brand-new Tryst::App).
 # Realizer's exact computed pack-option arithmetic is already covered
-# headlessly against FakeApp (spec/teek/ui/realizer_spec.cr); this
+# headlessly against FakeApp (spec/tryst/ui/realizer_spec.cr); this
 # confirms Tk's own geometry manager actually honors it - real pixel
-# positions/widths, matching ruby-teek's teek-ui/test/test_layout.rb
+# positions/widths, matching ruby-tryst's tryst-ui/test/test_layout.rb
 # (minus its last case, which needs Var/slider, not ported yet).
 
-handles = {} of Symbol => Teek::UI::Handle
+handles = {} of Symbol => Tryst::UI::Handle
 
-session = Teek::UI.app(title: "layout fixture") do |builder|
+session = Tryst::UI.app(title: "layout fixture") do |builder|
   builder.column(:col_gap, gap: 20) do |col|
     handles[:col_gap_a] = col.button(:col_gap_a, text: "A")
     handles[:col_gap_b] = col.button(:col_gap_b, text: "B")

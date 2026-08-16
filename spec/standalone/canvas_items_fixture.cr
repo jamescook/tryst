@@ -1,18 +1,18 @@
-require "../../src/teek/ui"
+require "../../src/tryst/ui"
 
 # Standalone verification for Handle's canvas shape-creation methods and
 # CanvasItem's real Tk behavior - needs its own subprocess for the same
 # reason grid_fixture.cr/overlay_fixture.cr do (Session#realize always
-# constructs a brand-new Teek::App). The exact Tcl commands each method
-# builds are already covered headlessly against FakeApp (spec/teek/ui/
-# handle_spec.cr, spec/teek/ui/canvas_item_spec.cr); this confirms Tk's
-# own canvas actually behaves as expected - matching ruby-teek's
-# teek-ui/test/test_canvas_items.rb, minus its on_drag/#draggable cases
+# constructs a brand-new Tryst::App). The exact Tcl commands each method
+# builds are already covered headlessly against FakeApp (spec/tryst/ui/
+# handle_spec.cr, spec/tryst/ui/canvas_item_spec.cr); this confirms Tk's
+# own canvas actually behaves as expected - matching ruby-tryst's
+# tryst-ui/test/test_canvas_items.rb, minus its on_drag/#draggable cases
 # (deferred - see canvas_item.cr's own doc comment) and its menu-based
 # on_right_click case (needs a real context_menu widget type, not ported
 # yet - covered headlessly instead, via a bare :context_menu Node/Handle).
 
-session = Teek::UI.app(title: "canvas items fixture") { |builder| builder.canvas(:board, width: 200, height: 200) }
+session = Tryst::UI.app(title: "canvas items fixture") { |builder| builder.canvas(:board, width: 200, height: 200) }
 app = session.realize
 app.show
 app.update
@@ -40,7 +40,7 @@ end
 
 # Case 2b: #image, kept out of the table above because it needs a real
 # Tk image to point at rather than a self-contained option value.
-photo = Teek::Photo.new(app, width: 8, height: 8)
+photo = Tryst::Photo.new(app, width: 8, height: 8)
 photo_item = board.image(0, 0, image: photo.name, anchor: :nw)
 photo_item_type = app.tcl_eval("#{board.path} type #{photo_item.tag_or_id}")
 raise "expected an image item, got #{photo_item_type}" unless photo_item_type == "image"

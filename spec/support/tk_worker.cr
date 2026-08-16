@@ -2,10 +2,10 @@ require "./tk_worker_protocol"
 require "./tk_test_registry"
 require "./tk_cases"
 
-# Persistent worker process for fast Tk test execution: one Teek::App
+# Persistent worker process for fast Tk test execution: one Tryst::App
 # for the whole run (Tk_Init can only happen once per process), reset
-# between tests instead of recreated. Ported from ruby-teek's
-# Teek::TestWorker (test/teek_test_worker.rb) - same persistent-worker,
+# between tests instead of recreated. Ported from ruby-tryst's
+# Tryst::TestWorker (test/tryst_test_worker.rb) - same persistent-worker,
 # reset-not-reinit design, JSON-line protocol over stdin/stdout (see
 # tk_worker_protocol.cr, shared with tk_worker_client.cr). Must be
 # built/run with `-D tk_worker_mode` so tk_test registers real,
@@ -15,7 +15,7 @@ require "./tk_cases"
 module TkWorker
   class Server
     def initialize
-      @app = Teek::App.new
+      @app = Tryst::App.new
     end
 
     def run : Nil
@@ -48,7 +48,7 @@ module TkWorker
       reset_tk_state!
     end
 
-    # Mirrors ruby-teek's reset_tk_state! (test/teek_test_worker.rb) as
+    # Mirrors ruby-tryst's reset_tk_state! (test/tryst_test_worker.rb) as
     # far as our current App supports: destroy every child of root and
     # hide it again, without recreating the interpreter. Doesn't yet port
     # the grid-geometry-manager reset (column/row weights) - nothing

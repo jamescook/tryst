@@ -1,28 +1,28 @@
 require "base64"
-require "../../src/teek/ui"
+require "../../src/tryst/ui"
 
-# Standalone verification for Teek::UI::Image against real Tk - the
+# Standalone verification for Tryst::UI::Image against real Tk - the
 # build-time name allocation, the load at realize, and the same
 # declared-inside-#add and rolled-back-#add paths Var already gets.
 #
-# Needs its own subprocess (see spec/teek/ui/session_realtk_spec.cr):
-# Session#realize always constructs a brand-new Teek::App. Image's
-# pre-realize surface is headless instead, in spec/teek/ui/image_spec.cr.
+# Needs its own subprocess (see spec/tryst/ui/session_realtk_spec.cr):
+# Session#realize always constructs a brand-new Tryst::App. Image's
+# pre-realize surface is headless instead, in spec/tryst/ui/image_spec.cr.
 
 # A 1x1 transparent GIF, so there is a real file for Tk to read. Decoded
 # in Crystal rather than written out by Tk, because Session#realize
-# constructs the only Teek::App this process is ever allowed (Tk_Init is
+# constructs the only Tryst::App this process is ever allowed (Tk_Init is
 # one-shot per process) - there is no interpreter to write one with until
 # after the very realize under test here.
 GIF_1X1 = "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
 
-image_path = File.join(Dir.tempdir, "teek_ui_image_fixture.gif")
+image_path = File.join(Dir.tempdir, "tryst_ui_image_fixture.gif")
 File.write(image_path, Base64.decode(GIF_1X1))
 
 begin
-  declared = nil.as(Teek::UI::Image?)
+  declared = nil.as(Tryst::UI::Image?)
 
-  session = Teek::UI.app(title: "ui image fixture") do |builder|
+  session = Tryst::UI.app(title: "ui image fixture") do |builder|
     declared = builder.image(image_path)
     builder.column(:list, &.label(:heading, text: "Items"))
     builder.grid(:form) do |grid|
@@ -30,15 +30,15 @@ begin
     end
   end
 
-  image = declared.as(Teek::UI::Image)
+  image = declared.as(Tryst::UI::Image)
 
   # Case 1: the name is allocated during build, with no interpreter and
   # no file read yet - #photo has nothing to hand back until realize.
-  raise "image: expected teek_ui_image_1, got #{image.name}" unless image.name == "teek_ui_image_1"
+  raise "image: expected tryst_ui_image_1, got #{image.name}" unless image.name == "tryst_ui_image_1"
   begin
     image.photo
     raise "image: expected NotRealizedError before realize"
-  rescue Teek::UI::NotRealizedError
+  rescue Tryst::UI::NotRealizedError
   end
 
   app = session.realize
@@ -55,7 +55,7 @@ begin
 
   # Case 3: an image declared inside #add is realized before the new
   # subtree is, exactly as the initial realize orders them.
-  added = nil.as(Teek::UI::Image?)
+  added = nil.as(Tryst::UI::Image?)
   session.add(:list) do |builder|
     inner = builder.image(image_path)
     added = inner
@@ -63,8 +63,8 @@ begin
   end
   app.update
 
-  inner_image = added.as(Teek::UI::Image)
-  raise "image: expected teek_ui_image_2, got #{inner_image.name}" unless inner_image.name == "teek_ui_image_2"
+  inner_image = added.as(Tryst::UI::Image)
+  raise "image: expected tryst_ui_image_2, got #{inner_image.name}" unless inner_image.name == "tryst_ui_image_2"
   inner_size = inner_image.photo.get_size
   raise "image: expected the added image loaded, got #{inner_size}" unless inner_size == {width: 1, height: 1}
 
@@ -84,11 +84,11 @@ begin
       builder.label(:no_cell, text: "nope")
     end
     raise "image: expected ValidationError for a grid child with no cell"
-  rescue Teek::UI::ValidationError
+  rescue Tryst::UI::ValidationError
   end
 
   after_rollback = app.split_list(app.command(:image, :names))
-  if after_rollback.includes?("teek_ui_image_3")
+  if after_rollback.includes?("tryst_ui_image_3")
     raise "image: expected the rolled-back image never to reach Tk, got #{after_rollback}"
   end
 
@@ -100,7 +100,7 @@ begin
   end
   app.update
 
-  unless reused_name == "teek_ui_image_3"
+  unless reused_name == "tryst_ui_image_3"
     raise "image: expected the rolled-back name reused, got #{reused_name}"
   end
   final_names = app.split_list(app.command(:image, :names))

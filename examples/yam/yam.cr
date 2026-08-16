@@ -1,11 +1,11 @@
 # Yet Another Minesweeper - run with `crystal run examples/yam/yam.cr`.
 #
-# A port of ruby-teek's sample/yam/yam.rb, rebuilt on the Teek::UI DSL
+# A port of ruby-tryst's sample/yam/yam.rb, rebuilt on the Tryst::UI DSL
 # rather than raw widget calls. Functionally 1:1 with two deliberate
 # exceptions, both noted where they occur below:
 #
-#   - No sound. ruby-teek plays four .wav effects through teek-sdl2, a
-#     separate gem with its own C extension; crystal-teek has no audio
+#   - No sound. ruby-tryst plays four .wav effects through tryst-sdl2, a
+#     separate gem with its own C extension; crystal-tryst has no audio
 #     layer yet, and Tk has none at all.
 #   - No music, and no music toggle button. Dropped outright.
 #
@@ -22,7 +22,7 @@
 #
 # Tile artwork: "Minesweeper Tile Set" by eugeneloza (CC0)
 # https://opengameart.org/content/minesweeper-tile-set
-require "../../src/teek/ui"
+require "../../src/tryst/ui"
 
 class Minesweeper
   # The source PNGs are 216x216. Tk shrinks them with "copy -subsample N",
@@ -60,23 +60,23 @@ class Minesweeper
   @first_click : Bool = true
   @flags_placed : Int32 = 0
   @elapsed : Int32 = 0
-  @timer : Teek::UI::TimerHandle?
+  @timer : Tryst::UI::TimerHandle?
   @pressed_cell : {Int32, Int32}?
   @tiles : Hash(Symbol | Int32, String) = {} of Symbol | Int32 => String
-  @art : Array(Teek::UI::Image) = [] of Teek::UI::Image
-  @cell : Array(Array(Teek::UI::CanvasItem)) = [] of Array(Teek::UI::CanvasItem)
+  @art : Array(Tryst::UI::Image) = [] of Tryst::UI::Image
+  @cell : Array(Array(Tryst::UI::CanvasItem)) = [] of Array(Tryst::UI::CanvasItem)
   @mine : Array(Array(Bool)) = [] of Array(Bool)
   @revealed : Array(Array(Bool)) = [] of Array(Bool)
   @flagged : Array(Array(Bool)) = [] of Array(Bool)
   @adjacent : Array(Array(Int32)) = [] of Array(Int32)
-  @session : Teek::UI::Session
-  @mine_var : Teek::UI::Var
-  @time_var : Teek::UI::Var
-  @canvas : Teek::UI::Handle
-  @face : Teek::UI::Handle
+  @session : Tryst::UI::Session
+  @mine_var : Tryst::UI::Var
+  @time_var : Tryst::UI::Var
+  @canvas : Tryst::UI::Handle
+  @face : Tryst::UI::Handle
 
-  # Note the no-block form of Teek::UI.app. The block spelling
-  # (`Teek::UI.app { |ui| ... }`) is the nicer one for a script, but it
+  # Note the no-block form of Tryst::UI.app. The block spelling
+  # (`Tryst::UI.app { |ui| ... }`) is the nicer one for a script, but it
   # can't populate a class's own fields: Crystal never counts an instance
   # variable assigned inside a block as initialized - not even a plain
   # `yield` - so every field assigned in there comes out nilable. Without a
@@ -90,7 +90,7 @@ class Minesweeper
     apply_level
     blank_state
 
-    @session = Teek::UI.app(title: "Yet Another Minesweeper", resizable: false)
+    @session = Tryst::UI.app(title: "Yet Another Minesweeper", resizable: false)
     load_tiles(@session)
     @mine_var = @session.var(@num_mines)
     @time_var = @session.var(0)
@@ -173,7 +173,7 @@ class Minesweeper
     @flags_placed = 0
     @elapsed = 0
     @pressed_cell = nil
-    @cell = [] of Array(Teek::UI::CanvasItem)
+    @cell = [] of Array(Tryst::UI::CanvasItem)
     @mine = new_grid { false }
     @revealed = new_grid { false }
     @flagged = new_grid { false }
@@ -191,8 +191,8 @@ class Minesweeper
   #
   # foreground:/background: rather than the fg:/bg: shorthand the Ruby uses
   # - those are classic-widget abbreviations, and a ttk::label rejects them.
-  private def build_header(ui : Teek::UI::Session) : Teek::UI::Handle
-    face = nil.as(Teek::UI::Handle?)
+  private def build_header(ui : Tryst::UI::Session) : Tryst::UI::Handle
+    face = nil.as(Tryst::UI::Handle?)
     ui.row(:hdr, pad: 4, gap: 6, align: :stretch) do |header|
       counter_label(header, @mine_var)
       face = header.button(:face, text: FACE_READY, width: 3,
@@ -205,7 +205,7 @@ class Minesweeper
   # The classic sunken-LCD look: red digits on black. Its own method rather
   # than a shared options tuple - Crystal won't double-splat one in after an
   # explicit named argument like bind:.
-  private def counter_label(builder : Teek::UI::Session, var : Teek::UI::Var) : Nil
+  private def counter_label(builder : Tryst::UI::Session, var : Tryst::UI::Var) : Nil
     builder.label(bind: var, width: 4, font: "TkFixedFont 14 bold",
       foreground: :red, background: :black, relief: :sunken, anchor: :center)
   end
@@ -213,7 +213,7 @@ class Minesweeper
   # Named, block-free entries - #wire_events attaches the commands. The
   # shortcut: on New Game is only the "F2" text drawn beside the label; the
   # keystroke itself is bound separately (see #run).
-  private def build_menu(ui : Teek::UI::Session) : Nil
+  private def build_menu(ui : Tryst::UI::Session) : Nil
     ui.menu_bar do |bar|
       bar.menu(label: "Game") do |game|
         game.item(:new_game, label: "New Game", shortcut: "F2")
@@ -244,7 +244,7 @@ class Minesweeper
   # The Images are held in @art for their whole run, not just their names:
   # an Image owns its Tk photo's lifetime, so dropping the wrapper while a
   # canvas item still points at the photo would let it be reclaimed.
-  private def load_tiles(ui : Teek::UI::Session) : Nil
+  private def load_tiles(ui : Tryst::UI::Session) : Nil
     suffixes = TILE_FILES.to_h.transform_keys(&.as(Symbol | Int32))
     (1..8).each { |count| suffixes[count] = count.to_s }
 

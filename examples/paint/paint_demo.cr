@@ -1,9 +1,9 @@
 # Interactive example - run with `crystal run examples/paint/paint_demo.cr`.
-# Port of ruby-teek's sample/paint/ - an MS Paint-style drawing app, and
+# Port of ruby-tryst's sample/paint/ - an MS Paint-style drawing app, and
 # the widest single exercise of the core API in this repo.
 #
 # What it shows off, beyond "hello window":
-# - Teek::Photo for CPU-side pixel work (flood fill, spray paint)
+# - Tryst::Photo for CPU-side pixel work (flood fill, spray paint)
 # - Canvas vector drawing (freehand strokes as line/oval items)
 # - Layers, each backed by a sparse pixel buffer and a photo image
 # - Three windows: the canvas, a tools palette, a color palette
@@ -11,16 +11,16 @@
 # - A menu bar and keyboard shortcuts throughout
 #
 # Not a production paint program - a showcase for anyone wondering what
-# can actually be built on top of teek.
+# can actually be built on top of tryst.
 #
 # Tool icons in assets/ from Lucide (https://lucide.dev) and Iconoir
 # (https://iconoir.com), both MIT licensed.
 #
-# Drops ruby-teek's own demo_support.rb-driven auto-paint block
-# (run_auto_demo/TeekDemo) - tooling for ruby-teek's own test/record
+# Drops ruby-tryst's own demo_support.rb-driven auto-paint block
+# (run_auto_demo/TrystDemo) - tooling for ruby-tryst's own test/record
 # pipeline with no Crystal-side counterpart, same as every other example
 # in this repo.
-require "../../src/teek"
+require "../../src/tryst"
 require "./layer_manager"
 
 # The four drawing tools. Each knows the cursor it wants and the icon
@@ -81,11 +81,11 @@ class StrokeCommand < PaintCommand
   record ItemConfig,
     type : String,
     coords : Array(Float64),
-    opts : Hash(String, Teek::TclArgValue)
+    opts : Hash(String, Tryst::TclArgValue)
 
   @configs : Array(ItemConfig)
 
-  def initialize(@app : Teek::App, @canvas : Teek::Widget, @items : Array(String))
+  def initialize(@app : Tryst::App, @canvas : Tryst::Widget, @items : Array(String))
     @configs = @items.map { |item| capture(item) }
   end
 
@@ -95,7 +95,7 @@ class StrokeCommand < PaintCommand
 
   def redo : Nil
     @items = @configs.map do |config|
-      args = [:create, config.type] of Teek::TclArgValue
+      args = [:create, config.type] of Tryst::TclArgValue
       config.coords.each { |coord| args << coord }
       @app.command(@canvas.path, args, config.opts)
     end
@@ -107,8 +107,8 @@ class StrokeCommand < PaintCommand
     ItemConfig.new(type: type, coords: coords, opts: capture_opts(type, item))
   end
 
-  private def capture_opts(type : String, item : String) : Hash(String, Teek::TclArgValue)
-    opts = {} of String => Teek::TclArgValue
+  private def capture_opts(type : String, item : String) : Hash(String, Tryst::TclArgValue)
+    opts = {} of String => Tryst::TclArgValue
 
     case type
     when "line"
@@ -199,17 +199,17 @@ class PaintDemo
   # below: Crystal requires every non-nilable instance variable to be
   # assigned in #initialize itself, and an ivar set only inside a helper
   # it calls doesn't count.
-  @canvas : Teek::Widget
+  @canvas : Tryst::Widget
   @layers : LayerManager
-  @color_indicator : Teek::Widget
-  @density_label : Teek::Widget
-  @density_spinbox : Teek::Widget
+  @color_indicator : Tryst::Widget
+  @density_label : Tryst::Widget
+  @density_spinbox : Tryst::Widget
 
   @last_x : Int32?
   @last_y : Int32?
   @spray_old_pixels : SparsePixelBuffer?
 
-  def initialize(@app : Teek::App)
+  def initialize(@app : Tryst::App)
     @brush_color = "#000000"
     @bg_color_hex = "#FFFFFF"
     @brush_size = 1
@@ -227,8 +227,8 @@ class PaintDemo
     @current_stroke_items = [] of String
     @spray_old_pixels = nil
 
-    @tool_icons = {} of Tool => Teek::Photo
-    @tool_buttons = {} of Tool => Teek::Widget
+    @tool_icons = {} of Tool => Tryst::Photo
+    @tool_buttons = {} of Tool => Tryst::Widget
 
     @app.set_variable(LAYER_VAR, "[0] Background")
     @app.set_variable(BRUSH_SIZE_VAR, @brush_size.to_s)
@@ -314,7 +314,7 @@ class PaintDemo
       command: @app.callback { @app.window(PALETTE_PATH).deiconify })
   end
 
-  private def build_status_bar(status_frame : Teek::Widget) : Nil
+  private def build_status_bar(status_frame : Tryst::Widget) : Nil
     @color_indicator.pack(side: :left, padx: 5, pady: 3)
 
     @app.create_widget("ttk::label", parent: status_frame,
@@ -347,7 +347,7 @@ class PaintDemo
     tools.set_resizable(false, false)
 
     Tool.each do |tool|
-      @tool_icons[tool] = Teek::Photo.new(@app,
+      @tool_icons[tool] = Tryst::Photo.new(@app,
         file: File.join(ASSETS_DIR, "#{tool.icon_file}.png"))
 
       button = @app.create_widget(:canvas, "#{TOOLS_PATH}.#{tool.path_segment}",
@@ -384,7 +384,7 @@ class PaintDemo
 
   # A hand-rolled tooltip: a borderless toplevel parked next to the
   # pointer. Tk has no tooltip widget, so this is the usual recipe.
-  private def add_tooltip(widget : Teek::Widget, text : String) : Nil
+  private def add_tooltip(widget : Tryst::Widget, text : String) : Nil
     widget.bind("Enter") do
       destroy_tooltip
       @app.command(:toplevel, TOOLTIP_PATH, background: TOOLTIP_BACKGROUND)
@@ -758,7 +758,7 @@ class PaintDemo
   end
 end
 
-app = Teek::App.new(track_widgets: false)
+app = Tryst::App.new(track_widgets: false)
 # A bare CLI-launched Tk window doesn't get foreground focus on macOS, so
 # it would otherwise sit behind the terminal you started it from.
 # #bring_to_front deiconifies as #show does, then raises and focuses -

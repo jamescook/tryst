@@ -1,4 +1,4 @@
-# Calculator, built with the Teek::UI DSL - worth reading next to
+# Calculator, built with the Tryst::UI DSL - worth reading next to
 # examples/calculator.cr, which is the same calculator written against raw
 # widget creation and grid calls in a single file.
 #
@@ -6,7 +6,7 @@
 #
 #   app.cr      (this file) - all UI. The widget tree, and the wiring
 #                             between the service and a reactive var.
-#   service.cr              - all logic. No Teek reference at all, so it
+#   service.cr              - all logic. No Tryst reference at all, so it
 #                             runs in a spec with no interpreter.
 #
 # The dependency only runs one way: this file knows about the service, the
@@ -14,7 +14,7 @@
 # subscribes and pushes them into the var the display is bound to.
 #
 # Run: crystal run examples/calculator_ui/app.cr
-require "../../src/teek/ui"
+require "../../src/tryst/ui"
 require "./service"
 
 # The keypad as data: label, row, column, column span. Layout lives with
@@ -28,9 +28,9 @@ KEYS = [
 ]
 
 service = CalculatorService.new
-keypad = nil.as(Teek::UI::Handle?)
+keypad = nil.as(Tryst::UI::Handle?)
 
-session = Teek::UI.app(title: "Calculator") do |builder|
+session = Tryst::UI.app(title: "Calculator") do |builder|
   display = builder.var(service.display_value)
   service.on_change { |value| display.value = value }
 
@@ -51,7 +51,7 @@ session = Teek::UI.app(title: "Calculator") do |builder|
 
   # The handful of things with no DSL spelling of their own. raw runs
   # during realize, once there's a live interpreter - the DSL is sugar
-  # over teek, not a wall around it. Note what the block is handed: an
+  # over tryst, not a wall around it. Note what the block is handed: an
   # AppContract exposing structured #command, and deliberately no
   # tcl_eval, so there's no string interpolation to get wrong.
   builder.raw do |app|

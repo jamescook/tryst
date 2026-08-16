@@ -1,18 +1,18 @@
-require "../../src/teek/ui"
+require "../../src/tryst/ui"
 
 # Standalone verification for :tabs/:tab against real Tk - that pages
 # really land on the notebook with their labels, and that selecting one
 # fires on_tab_changed with the right identity. The exact commands
 # Realizer builds are covered headlessly against FakeApp
-# (spec/teek/ui/tabs_spec.cr).
+# (spec/tryst/ui/tabs_spec.cr).
 #
-# Needs its own subprocess (see spec/teek/ui/session_realtk_spec.cr):
-# Session#realize always constructs a brand-new Teek::App.
+# Needs its own subprocess (see spec/tryst/ui/session_realtk_spec.cr):
+# Session#realize always constructs a brand-new Tryst::App.
 
 selected = [] of Symbol | Int32
-handles = {} of Symbol => Teek::UI::Handle
+handles = {} of Symbol => Tryst::UI::Handle
 
-session = Teek::UI.app(title: "tabs fixture") do |builder|
+session = Tryst::UI.app(title: "tabs fixture") do |builder|
   handles[:book] = builder.tabs(:book) do |book|
     book.tab("First", :one, &.label(:one_label, text: "Page one"))
     book.tab("Second", :two, &.label(:two_label, text: "Page two"))

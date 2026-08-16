@@ -3,11 +3,11 @@ require "spec"
 # Runs a fixture .cr file (see spec/standalone/*_fixture.cr) as a genuinely
 # fresh `crystal run` subprocess and fails the current spec example
 # (Crystal Spec's own `fail`) unless it exits successfully within
-# `timeout` - the same Process.new/capture/fail shape spec/teek/app_spec.cr
+# `timeout` - the same Process.new/capture/fail shape spec/tryst/app_spec.cr
 # already uses for app_core_fixture.cr, generalized with a timeout here
 # because these fixtures exercise Interp#mainloop's real blocking wait
 # directly, where a genuine bug hangs the subprocess forever instead of
-# just failing promptly. Mirrors ruby-teek's assert_tk_subprocess/
+# just failing promptly. Mirrors ruby-tryst's assert_tk_subprocess/
 # tk_subprocess (test/tk_test_helper.rb) - a dedicated fresh-process-
 # per-test mechanism distinct from the persistent tk_worker
 # (spec/support/tk_worker_client.cr), needed because Tcl/Tk's interpreter

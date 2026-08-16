@@ -1,17 +1,17 @@
-require "../../src/teek/ui"
+require "../../src/tryst/ui"
 
 # Standalone verification for :split/:pane against real Tk - that panes
 # really land on the panedwindow, that Tk itself reports back the weight
 # and orientation they were declared with, and that the panedwindow is the
 # only geometry manager involved. The exact commands Realizer builds are
-# covered headlessly against FakeApp (spec/teek/ui/split_spec.cr).
+# covered headlessly against FakeApp (spec/tryst/ui/split_spec.cr).
 #
-# Needs its own subprocess (see spec/teek/ui/session_realtk_spec.cr):
-# Session#realize always constructs a brand-new Teek::App.
+# Needs its own subprocess (see spec/tryst/ui/session_realtk_spec.cr):
+# Session#realize always constructs a brand-new Tryst::App.
 
-handles = {} of Symbol => Teek::UI::Handle
+handles = {} of Symbol => Tryst::UI::Handle
 
-session = Teek::UI.app(title: "split fixture") do |builder|
+session = Tryst::UI.app(title: "split fixture") do |builder|
   handles[:sideways] = builder.split(:sideways) do |split|
     split.pane(:left, weight: 1, &.button(:go, text: "Go"))
     split.pane(:right, weight: 3, &.label(:info, text: "Info"))
