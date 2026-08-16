@@ -693,17 +693,25 @@ module Teek
     # platform (Tcl's own thread-affinity model, and on macOS Cocoa/
     # AppKit's main-thread requirement for Tk's Aqua backend) - see the
     # Fiber::ExecutionContext::Isolated spike.
-    def mainloop : Nil
+    #
+    # on_tick, if given, runs once per loop iteration after #drain_main_queue -
+    # App#mainloop's hook for raising a RepeatingTimer's stashed
+    # _pending_exception from this same blocking path App#update does, since
+    # this loop (unlike #update) never returns on its own for App#mainloop's
+    # caller to check between calls.
+    def mainloop(on_tick : (-> Nil)? = nil) : Nil
       {% if flag?(:darwin) %}
         while main_windows > 0
           LibTcl.do_one_event(LibTcl::TCL_DONT_WAIT)
           drain_main_queue
+          on_tick.try &.call
           sleep 1.millisecond
         end
       {% else %}
         while main_windows > 0
           LibTcl.do_one_event(LibTcl::TCL_ALL_EVENTS)
           drain_main_queue
+          on_tick.try &.call
         end
       {% end %}
     end

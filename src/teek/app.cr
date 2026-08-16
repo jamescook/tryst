@@ -642,8 +642,13 @@ module Teek
     # the REPL unresponsive) - Crystal has no equivalent REPL culture to
     # detect the same way, so that warning is skipped rather than forced
     # into a shape that doesn't really fit.
+    # Raises a RepeatingTimer's on_error: :raise exception the same way
+    # #update does (see there), checked once per loop iteration so a
+    # timer error surfaces here too rather than sitting unread for the
+    # rest of the run - #update is never called while #mainloop owns the
+    # event loop.
     def mainloop : Nil
-      @interp.mainloop
+      @interp.mainloop(->drain_pending_exception)
     end
 
     # Process all pending events and idle callbacks, then return. Raises
@@ -652,6 +657,10 @@ module Teek
     # raise directly from the tick).
     def update : Nil
       tcl_eval("update")
+      drain_pending_exception
+    end
+
+    private def drain_pending_exception : Nil
       if ex = @_pending_exception
         @_pending_exception = nil
         raise ex

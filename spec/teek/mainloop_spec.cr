@@ -16,6 +16,10 @@ describe "Interp#mainloop" do
     assert_tk_subprocess("spec/standalone/mainloop_fiber_progress_fixture.cr")
   end
 
+  it "raises a RepeatingTimer's on_error: :raise exception the same way App#update does" do
+    assert_tk_subprocess("spec/standalone/mainloop_pending_exception_fixture.cr")
+  end
+
   # ruby-teek's test_mainloop_blocking_mode_lets_background_threads_run
   # sets thread_timer_ms = 0 (disabling the keepalive timer entirely) to
   # prove a real Ruby thread isn't starved while the main thread blocks

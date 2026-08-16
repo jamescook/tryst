@@ -33,4 +33,8 @@ describe "Teek::UI::Session's realize-only surface" do
   it "#add realizes a subtree into the running app, and validates it against its existing siblings" do
     assert_tk_subprocess("spec/standalone/session_add_fixture.cr")
   end
+
+  it "#run raises a ui.every timer's on_error: :raise exception rather than silently stopping" do
+    assert_tk_subprocess("spec/standalone/session_run_pending_exception_fixture.cr")
+  end
 end
