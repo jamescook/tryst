@@ -1228,6 +1228,48 @@ tk_test "App#bind with a raw %-code forwards the substitution" do |app|
   raise "expected .e_bind3, got #{got_widget.inspect}" unless got_widget == ".e_bind3"
 end
 
+# App#bind used to splice a raw %-code sub straight into the bound script
+# text. Tk re-parses that whole script as Tcl (after its own %-substitution)
+# every time the event fires, so a sub containing a brace and a semicolon
+# could close the callback's {} script early and run whatever followed as
+# a separate Tcl command - on every firing, not just at bind time. Now
+# rejected up front: a raw sub has to look like an actual Tk %-code.
+tk_test "App#bind rejects a raw %-code sub that isn't a real %-code" do |app|
+  app.tcl_eval("set ::tk_case_bind_injection_probe none")
+  app.show
+  app.tcl_eval("entry .e_bind_inject_sub")
+  app.tcl_eval("pack .e_bind_inject_sub")
+
+  sub = "%W} ;set ::tk_case_bind_injection_probe hit;#"
+  begin
+    app.bind(".e_bind_inject_sub", "FocusIn", sub) { |_values, _signal| }
+    raise "expected ArgumentError, got no exception"
+  rescue ArgumentError
+    # expected
+  end
+
+  app.tcl_eval("focus -force .e_bind_inject_sub")
+  app.update
+
+  probe = app.tcl_eval("set ::tk_case_bind_injection_probe")
+  raise "expected the injected fragment to not run, probe=#{probe.inspect}" unless probe == "none"
+end
+
+tk_test "App#bind still accepts a genuine raw %-code sub" do |app|
+  got_widget = nil
+
+  app.show
+  app.tcl_eval("entry .e_bind_raw_sub")
+  app.tcl_eval("pack .e_bind_raw_sub")
+
+  app.bind(".e_bind_raw_sub", "FocusIn", "%W") { |values, _signal| got_widget = values[0] }
+
+  app.tcl_eval("focus -force .e_bind_raw_sub")
+  app.update
+
+  raise "expected .e_bind_raw_sub, got #{got_widget.inspect}" unless got_widget == ".e_bind_raw_sub"
+end
+
 tk_test "App#bind does not double-wrap <> in the event string" do |app|
   fired = false
 
@@ -3664,6 +3706,29 @@ tk_test "WidgetDSL#on_key binds a real app-wide keystroke to the root window" do
 
   app.interp.simulate_event(".", "<F2>")
   raise "expected the F2 binding to fire, fired=#{fired}" unless app.interp.wait_until { fired > 0 }
+end
+
+# Keysyms.resolve passes an unrecognised key spec through into the event
+# pattern verbatim, and App#bind used to interpolate that pattern straight
+# into a tcl_eval script - so a spec containing Tcl metacharacters could
+# run arbitrary Tcl as a side effect of realizing the binding, whether or
+# not the resulting event pattern was ever valid.
+tk_test "Handle#on_key does not let a hostile key spec run as Tcl" do |app|
+  app.tcl_eval("set ::tk_case_on_key_injection_probe none")
+  session = WidgetDslHarness.new
+  handle = session.button(:tk_case_on_key_injection, text: "hi")
+
+  malicious_spec = "a> {}; set ::tk_case_on_key_injection_probe hit;#"
+  begin
+    handle.on_key(malicious_spec) { |_args, _signal| }
+    Teek::UI::Realizer.new(app, session.document).realize
+  rescue Teek::TclError
+    # A clear Tcl-level error is an acceptable outcome too - what matters
+    # is that the fragment after the injected ";" never ran.
+  end
+
+  probe = app.tcl_eval("set ::tk_case_on_key_injection_probe")
+  raise "expected the injected fragment to not run, probe=#{probe.inspect}" unless probe == "none"
 end
 
 # The half no headless test can reach: that every spelling in

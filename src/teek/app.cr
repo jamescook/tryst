@@ -101,6 +101,17 @@ module Teek
       :data => "%d",                     # virtual event data (Tk 8.6+)
     } of Symbol => String
 
+    # Every raw %-code #bind accepts is exactly this shape - Tk's own bind(n)
+    # documents %% and %<one letter> as the complete set (%a, %b, ..., %A,
+    # %B, ..., plus the literal %% and %#). A raw sub that doesn't match
+    # this is rejected outright rather than spliced into the bound script:
+    # #bind builds that script by interpolation (the id/sub codes are meant
+    # to be the only moving parts, everything else is a fixed template), and
+    # Tk re-parses the WHOLE script as Tcl - after its own %-substitution -
+    # every time the event fires. A caller-controlled string here would
+    # therefore run as arbitrary Tcl on every firing, not just at bind time.
+    RAW_SUB_PATTERN = /\A%[a-zA-Z%#]\z/
+
     # Bootstraps a new App, running *block* with self rebound to the new
     # instance (mirrors ruby-teek's App.new { ... } via instance_eval, see
     # epic notes: 'with instance yield' only works spliced in here, never
@@ -237,13 +248,22 @@ module Teek
     def bind(widget, event : String, subs : Enumerable, *, owner : String? = nil,
              &block : Array(String), CallbackSignal -> Nil) : String
       event_str = event.starts_with?('<') ? event : "<#{event}>"
+      tcl_subs = subs.map do |sub|
+        next BIND_SUBS[sub] if sub.is_a?(Symbol)
+
+        raw = sub.to_s
+        unless raw.matches?(RAW_SUB_PATTERN)
+          raise ArgumentError.new("#bind's raw %-code subs must be exactly \"%\" plus one letter/%/# (got #{raw.inspect}) - use a BIND_SUBS symbol or a real Tk %-code, not arbitrary text")
+        end
+        raw
+      end
+
       cb = register_callback(&block)
       callback_registry.reconcile({:bind, owner || widget.to_s}) do |before|
         before.merge({bind_key(widget, event_str) => cb})
       end
-      tcl_subs = subs.map { |sub| sub.is_a?(Symbol) ? BIND_SUBS[sub] : sub.to_s }
       sub_str = tcl_subs.empty? ? "" : " " + tcl_subs.join(" ")
-      tcl_eval("bind #{widget} #{event_str} {crystal_callback #{cb}#{sub_str}}")
+      tcl_invoke("bind", widget.to_s, event_str, "crystal_callback #{cb}#{sub_str}")
     end
 
     # Remove an event binding previously set with #bind. Pass the same
@@ -253,7 +273,7 @@ module Teek
       event_str = event.starts_with?('<') ? event : "<#{event}>"
       key = bind_key(widget, event_str)
       callback_registry.reconcile({:bind, owner || widget.to_s}) { |before| before.reject { |k, _| k == key } }
-      tcl_eval("bind #{widget} #{event_str} {}")
+      tcl_invoke("bind", widget.to_s, event_str, "")
     end
 
     # A binding's key within its registry container - the bind target as
