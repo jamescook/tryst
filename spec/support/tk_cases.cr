@@ -3255,6 +3255,37 @@ ensure
   replacement.try(&.delete)
 end
 
+tk_test "finalizing more Photos than @main_queue's capacity in one collection doesn't hang" do |app|
+  # @main_queue (Interp#queue_for_main's backing Channel) has capacity
+  # 64 - well below the 200 finalized here in one go, with nothing
+  # draining it in between. A finalizer that queued through
+  # #queue_for_main itself would suspend its fiber forever past the
+  # 64th. Discard every Photo reference immediately so each one is only
+  # reachable via GC.collect's finalization pass, not from this method's
+  # own locals.
+  200.times do
+    Teek::Photo.new(app, width: 2, height: 2)
+  end
+
+  # Boehm's conservative stack scanning means one GC.collect isn't
+  # guaranteed to reclaim everything already unreachable - stale pointer
+  # bit patterns can linger in unswept stack slots/registers from
+  # earlier iterations and keep an object looking reachable for a cycle
+  # or two longer. Retrying is the existing pattern for this in a
+  # long-lived worker process (see .finalizer_for's doc comment); the
+  # property under test is that this converges at all without hanging or
+  # crashing, not that a single collect is exhaustive.
+  remaining = [] of String
+  10.times do
+    GC.collect
+    app.interp.pump_once
+    remaining = app.split_list(app.tcl_eval("image names")).select(&.starts_with?("teek_photo"))
+    break if remaining.empty?
+  end
+
+  raise "expected no teek_photo images to remain, still have #{remaining}" unless remaining.empty?
+end
+
 tk_test "Photo.new(file:) loads an image, and copy -subsample halves it" do |app|
   path = File.tempname("teek_photo_spec", ".png")
 

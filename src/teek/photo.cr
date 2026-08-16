@@ -315,29 +315,48 @@ module Teek
 
     # @api private
     #
-    # The deletion this instance's #finalize performs, as a standalone
-    # proc over just the name and app. Nothing forces that split in
-    # Crystal - unlike Ruby, where a finalizer closing over its own
-    # object would keep that object permanently reachable and so never
-    # collectable, Crystal's GC calls #finalize as a real method on the
-    # object itself. It stays a separate method purely because it's
-    # testable: a spec can call it directly instead of trying to provoke
-    # a collection, which is genuinely flaky in a shared, long-lived
-    # worker process.
+    # The Tcl-side half of what a finalizer needs to do for name/app -
+    # split out so #initialize can build it exactly once and stash it in
+    # @finalize_task, letting #finalize (see there) enqueue that existing
+    # Proc instead of building a fresh one. Confirmed empirically that
+    # building new Procs from inside an actual GC finalizer, once more
+    # than a handful finalize in the same collection, corrupts Boehm's
+    # in-progress finalization batch - other pending finalizers in the
+    # same GC.collect silently never ran. Captures name/app as plain
+    # locals, not self/@name/@app: closing over self here would keep the
+    # Photo permanently reachable from @finalize_task, so it could never
+    # be collected in the first place (Ruby's version of this problem;
+    # Crystal's GC calls #finalize as a real method on the object itself,
+    # so nothing forces the split the way it would in Ruby, but the
+    # self-capture trap is the same either way).
+    def self.delete_task(name : String, app : App) : Proc(Nil)
+      -> { app.tcl_eval("catch {image delete #{name}}"); nil }
+    end
+
+    # @api private
+    #
+    # What #finalize does, as a standalone proc - kept separate purely so
+    # a spec can call it directly instead of trying to provoke a real
+    # collection, which is genuinely flaky in a shared, long-lived worker
+    # process. Not what #finalize itself calls (see .delete_task for why:
+    # this allocates a fresh task each call, fine for a spec calling it
+    # once, not for an actual finalizer).
     #
     # A finalizer can run on any thread, so the delete is queued onto the
     # interpreter's own thread (fire-and-forget) rather than going
     # through #tcl_eval, which would block on a cross-thread handoff -
-    # not something to do from inside a collection. The Tcl-level catch,
-    # and the rescue around it, both cover an interpreter that's already
-    # been torn down by the time this runs.
+    # not something to do from inside a collection. It goes through
+    # #queue_for_main_from_finalizer rather than #queue_for_main for the
+    # same reason: #queue_for_main's Channel#send can suspend the
+    # calling fiber indefinitely once the channel is full, which a GC
+    # finalizer can't risk. The Tcl-level `catch` covers an interpreter
+    # that's already been torn down by the time this runs on the main
+    # thread; nothing here can raise on the finalizer's own thread, so
+    # there's nothing to rescue there.
     def self.finalizer_for(name : String, app : App) : Proc(Nil)
+      task = delete_task(name, app)
       -> do
-        begin
-          app.interp.queue_for_main { app.tcl_eval("catch {image delete #{name}}") }
-        rescue TclError
-          # interpreter already gone - nothing left to reclaim
-        end
+        app.interp.queue_for_main_from_finalizer(task)
         nil
       end
     end
@@ -364,6 +383,9 @@ module Teek
       @app.command(:image, [:create, :photo, @name] of TclArgValue, opts)
       # No GC.add_finalizer call: Crystal registers one automatically for
       # any class defining #finalize.
+
+      # Built once, here, rather than in #finalize - see .delete_task.
+      @finalize_task = Photo.delete_task(@name, @app)
     end
 
     # Run a photo subcommand this class has no dedicated method for -
@@ -467,12 +489,14 @@ module Teek
       @app.tcl_eval("image delete #{@name}")
     end
 
-    # :nodoc: called by the GC, and directly by specs - see
-    # .finalizer_for for why the work lives there.
+    # :nodoc: called by the GC, and directly by specs. Enqueues
+    # @finalize_task rather than going through .finalizer_for/.delete_task
+    # itself - see @finalize_task's assignment in #initialize for why:
+    # this method must not allocate.
     def finalize
       return if @deleted
       @deleted = true
-      Photo.finalizer_for(@name, @app).call
+      @app.interp.queue_for_main_from_finalizer(@finalize_task)
     end
 
     # Whether the underlying Tk image is still there.

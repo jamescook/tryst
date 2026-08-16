@@ -393,6 +393,13 @@ module Teek
     TCL_OK                    =  0
     DEFAULT_TIMER_INTERVAL_MS = 16 # ~60fps, matches ruby-teek's default
 
+    # Fixed capacity for @finalizer_queue - see #queue_for_main_from_finalizer.
+    # Generous enough that a realistic burst of simultaneously-collected
+    # Photos (or anything else routed through it) never gets near it; a
+    # queue this size costs a preallocated array of 4096 Proc references
+    # (two pointers each), a trivial, one-time cost.
+    FINALIZER_QUEUE_CAPACITY = 4096
+
     # relay_break: false is for callbacks invoked as a plain script (a
     # widget's -command, a menu entry) rather than dispatched through Tk's
     # bind mechanism - signal.break! there is still safe to call (never
@@ -404,6 +411,32 @@ module Teek
     @callbacks = {} of String => CallbackEntry
     @next_callback_id = 1
     @main_queue = Channel(Proc(Nil)).new(64)
+
+    # Backing store for #queue_for_main_from_finalizer - see there for why
+    # this exists alongside @main_queue rather than just using it.
+    #
+    # :reentrant because GC finalization nests on the same fiber:
+    # collecting a batch of garbage Photos can run one Photo's #finalize
+    # (which locks this to push its delete task) from inside the Deque
+    # push of an earlier one still on the call stack - confirmed
+    # empirically (a plain Mutex raises Sync::Error::Deadlock the moment
+    # more than one Photo needs finalizing in the same GC.collect). Still
+    # a real Mutex, not a no-op: cross-THREAD callers (finalizers can run
+    # on any thread) still need mutual exclusion, only same-fiber
+    # re-entry needs to be allowed.
+    @finalizer_lock = Mutex.new(:reentrant)
+
+    # Preallocated to FINALIZER_QUEUE_CAPACITY up front and never allowed
+    # to grow past it (see #queue_for_main_from_finalizer) - confirmed
+    # empirically that letting this Deque reallocate its backing buffer
+    # from inside a GC finalizer, even just via the ordinary growth an
+    # unsized Deque(Proc(Nil)) does under repeated #push, corrupts
+    # Boehm's in-progress finalization batch: other pending finalizers in
+    # the same GC.collect silently never ran (in one repro, only 53 of
+    # 200 did), no exception raised. A Deque that never reallocates
+    # during #push sidesteps whatever GC/allocator interaction that is,
+    # rather than relying on understanding it further.
+    @finalizer_queue = Deque(Proc(Nil)).new(FINALIZER_QUEUE_CAPACITY)
 
     # Held so #delete can take them back down, and so nothing collects
     # the State the notifier holds a raw pointer to.
@@ -707,6 +740,22 @@ module Teek
       @main_queue.send(block)
     end
 
+    # Like #queue_for_main, but safe to call from a GC finalizer, where
+    # #queue_for_main is not: Channel#send suspends the calling FIBER
+    # once @main_queue is full, and a GC finalizer has no guarantee that
+    # any other fiber will ever run again to drain it - an indefinite
+    # hang, not a brief wait. This queue is a plain, fixed-capacity Deque
+    # guarded by a Mutex held only across a single push/shift, so the
+    # calling fiber can never be left waiting on progress it doesn't
+    # control itself. Past FINALIZER_QUEUE_CAPACITY outstanding entries,
+    # a task is silently dropped rather than growing the Deque - see its
+    # declaration for why growth specifically isn't an option here.
+    def queue_for_main_from_finalizer(task : Proc(Nil)) : Nil
+      @finalizer_lock.synchronize do
+        @finalizer_queue.push(task) if @finalizer_queue.size < FINALIZER_QUEUE_CAPACITY
+      end
+    end
+
     private def drain_main_queue : Nil
       loop do
         select
@@ -715,6 +764,12 @@ module Teek
         else
           break
         end
+      end
+
+      loop do
+        task = @finalizer_lock.synchronize { @finalizer_queue.shift? }
+        break unless task
+        task.call
       end
     end
 
