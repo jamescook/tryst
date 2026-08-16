@@ -2047,6 +2047,38 @@ tk_test "after_idle fires the callback" do |app|
   raise "after_idle did not fire" unless app.interp.wait_until(2.seconds) { fired }
 end
 
+tk_test "after_idle releases its callback even when the block raises" do |app|
+  baseline = app.interp.callback_ids.size
+
+  # A crystal_callback error never unwinds into Crystal - #dispatch_callback
+  # reports it back to Tcl as a normal script error instead, so it reaches
+  # Tk's own bgerror, not Crystal's caller. Redirect bgerror to a Tcl var
+  # instead of leaving the default handler's GUI error dialog to pop up in
+  # this shared persistent worker - restore it in ensure either way, since
+  # a leaked override would corrupt every later test's bgerror behavior.
+  original_bgerror = app.tcl_invoke("interp", "bgerror", "")
+  app.tcl_eval(<<-TCL)
+    proc ::teek_test_after_idle_bgerror {msg opts} {
+      set ::teek_test_after_idle_bgerror_msg $msg
+    }
+    TCL
+  app.tcl_invoke("interp", "bgerror", "", "::teek_test_after_idle_bgerror")
+  app.tcl_eval("set ::teek_test_after_idle_bgerror_msg {}")
+
+  begin
+    app.after_idle { raise "boom" }
+
+    app.interp.wait_until(2.seconds) { !app.tcl_eval("set ::teek_test_after_idle_bgerror_msg").empty? }
+    msg = app.tcl_eval("set ::teek_test_after_idle_bgerror_msg")
+
+    raise "expected the after_idle block's exception to reach Tcl's bgerror handler" if msg.empty?
+    raise "expected 'boom' in the bgerror message, got #{msg.inspect}" unless msg.includes?("boom")
+    raise "callback registry should return to baseline, no leaked id" unless app.interp.callback_ids.size == baseline
+  ensure
+    app.tcl_invoke("interp", "bgerror", "", original_bgerror)
+  end
+end
+
 tk_test "after_cancel prevents the callback" do |app|
   fired = false
   timer_id = app.after(50) { fired = true }

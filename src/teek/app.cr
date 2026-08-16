@@ -344,8 +344,11 @@ module Teek
     def after_idle(&block : -> Nil) : AfterHandle
       cb_id = ""
       cb_id = register_callback do |_args, _signal|
-        block.call
-        unregister_callback(cb_id)
+        begin
+          block.call
+        ensure
+          unregister_callback(cb_id)
+        end
       end
       tcl_id = tcl_eval("after idle {crystal_callback #{cb_id}}")
       AfterHandle.new(tcl_id, cb_id)
