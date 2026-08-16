@@ -61,6 +61,21 @@ def with_mixer(spec : Teek::SDL::AudioSpec = Teek::SDL::AudioSpec.new, &)
   end
 end
 
+# Runs the block with a fresh virtual gamepad - no hardware required,
+# what makes the gamepad examples runnable in a headless container the
+# same as on a developer's desk. Tears the Gamepad and the virtual
+# device it came from both down afterward, even if the block raises.
+def with_virtual_gamepad(&)
+  id = Teek::SDL::Gamepad.attach_virtual
+  gamepad = Teek::SDL::Gamepad.open(id)
+  begin
+    yield gamepad
+  ensure
+    gamepad.destroy
+    Teek::SDL::Gamepad.detach_virtual
+  end
+end
+
 # True when every byte is zero. Silence is all-zero bytes in both of the
 # formats these specs use - integer PCM and float32 alike - so this is
 # the same question either way.

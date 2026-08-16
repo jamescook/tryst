@@ -12,6 +12,7 @@ require "./sdl/sound"
 require "./sdl/music"
 require "./sdl/audio_capture"
 require "./sdl/audio_stream"
+require "./sdl/gamepad"
 require "./sdl/geometry"
 require "./sdl/texture"
 require "./sdl/font"
@@ -65,6 +66,14 @@ module Teek
     # initialized - SDL_Quit is the big hammer, not a matching decrement.
     def self.quit : Nil
       LibSDL.quit
+    end
+
+    # Shuts down only `subsystems`, leaving everything else running - the
+    # counterpart to #init when the big #quit hammer would be too broad
+    # (Gamepad.shutdown_subsystem, for one, must not tear down audio or
+    # video another part of the same program still has up).
+    def self.quit_subsystem(subsystems : Subsystem) : Nil
+      LibSDL.quit_sub_system(subsystems.value)
     end
 
     # Everything currently up, as flags. Subsystems SDL brought up
