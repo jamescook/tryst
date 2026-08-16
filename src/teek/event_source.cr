@@ -111,8 +111,14 @@ module Teek
 
     private def to_tcl_time(span : Time::Span) : LibTcl::Time
       total = span.total_microseconds.to_i64
-      LibTcl::Time.new(sec: LibC::Long.new(total // 1_000_000),
-        usec: LibC::Long.new(total % 1_000_000))
+      usec = LibC::Long.new(total % 1_000_000)
+      # sec's argument type has to track LibTcl::Time#sec's own
+      # version-conditional type - see its declaration in interp.cr.
+      {% if env("TCL_VERSION") == "9" %}
+        LibTcl::Time.new(sec: LibC::LongLong.new(total // 1_000_000), usec: usec)
+      {% else %}
+        LibTcl::Time.new(sec: LibC::Long.new(total // 1_000_000), usec: usec)
+      {% end %}
     end
   end
 end

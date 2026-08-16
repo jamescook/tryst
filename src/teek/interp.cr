@@ -175,9 +175,21 @@ lib LibTcl
   TCL_FILE_EVENTS = 1 << 3
 
   # Tcl_Time (tcl.h) - a duration here rather than a moment, since the
-  # only use below is Tcl_SetMaxBlockTime.
+  # only use below is Tcl_SetMaxBlockTime. sec's real C type is
+  # version-dependent - `long` in 8.6, `long long` in 9.x (confirmed
+  # against both real headers) - and unlike most of this port's other
+  # 8.6-vs-9 differences, this one is silent rather than a link/runtime
+  # error when gotten wrong: `long` and `long long` are the same 64 bits
+  # on LP64 (macOS/Linux), so a plain `LibC::Long` sec merely happens to
+  # work there on either Tcl version. It does not on Windows' LLP64
+  # (`long` is 32-bit there) - built against 9.x, a `LibC::Long` sec would
+  # misalign usec and corrupt whatever reads this struct.
   struct Time
-    sec : LibC::Long
+    {% if env("TCL_VERSION") == "9" %}
+      sec : LibC::LongLong
+    {% else %}
+      sec : LibC::Long
+    {% end %}
     usec : LibC::Long
   end
 
@@ -443,6 +455,13 @@ module Teek
     @event_sources = [] of EventSource
 
     def initialize
+      # Must run before the very first Tcl_CreateInterp call below (which
+      # triggers Tcl_InitNotifier internally) - see Teek::Notifier for why
+      # this only applies on Linux/Windows, not macOS.
+      {% unless flag?(:darwin) %}
+        Teek::Notifier.install_once
+      {% end %}
+
       LibTcl.find_executable("crystal_teek")
 
       @ptr = LibTcl.create_interp
@@ -633,22 +652,57 @@ module Teek
       LibTk.get_num_main_windows
     end
 
-    # Blocks the calling fiber/thread until every toplevel window has been
-    # closed - Tcl_DoOneEvent(TCL_ALL_EVENTS) blocks waiting for the next
-    # event (window/file/timer/idle) each iteration, so this is a real
-    # blocking wait, not a busy poll. Must run on the same thread that
-    # created this Interp (Tcl's own thread-affinity model, and on macOS
-    # Cocoa/AppKit's main-thread requirement for Tk's Aqua backend) - see
-    # the Fiber::ExecutionContext::Isolated spike. The keepalive timer
-    # (armed in #initialize) guarantees this loop wakes at least every
-    # DEFAULT_TIMER_INTERVAL_MS even with no real Tk activity, so
-    # #queue_for_main requests from other contexts get serviced promptly
-    # rather than sitting until the next real window event.
+    # Runs until every toplevel window has been closed. A plain blocking
+    # Tcl_DoOneEvent(TCL_ALL_EVENTS) wait - the obvious way to write this -
+    # stalls the *whole OS thread* it runs on: neither this loop nor
+    # #drain_main_queue calls Fiber.yield or #sleep, so nothing hands
+    # control back to Crystal's own fiber scheduler while it blocks. Any
+    # fiber spawned before #mainloop is entered (an HTTP::Client request, a
+    # socket accept loop, a sleep-driven poller) would silently never run
+    # another instruction, with no error or diagnostic.
+    #
+    # On Linux/Windows this is fixed at the root: Teek::Notifier (see
+    # notifier.cr) replaces Tcl's own notifier via Tcl_SetNotifier, so the
+    # blocking wait *inside* Tcl_DoOneEvent is what's actually made
+    # cooperative with Crystal's scheduler - Tcl_ALL_EVENTS itself is safe
+    # to call exactly as before.
+    #
+    # macOS has no such fix available - confirmed from Tk's own real Aqua
+    # notifier source (macosx/tkMacOSXNotify.c / macosx/tclMacOSXNotify.c)
+    # that the actual wait there is CFRunLoopRunInMode, Apple's Cocoa run
+    # loop; real UI events (clicks, redraws) are delivered *through* that
+    # call via AppKit's own run-loop source, not via any fd a custom
+    # notifier could hand to Crystal's kqueue reactor. So on macOS: pump
+    # whatever Tk event is immediately available (non-blocking, like
+    # #pump_once), drain #queue_for_main, then #sleep briefly before the
+    # next iteration. #sleep specifically, not Fiber.yield alone - with
+    # nothing else ready, Fiber.yield just resumes this same fiber
+    # immediately, never consulting Crystal's IO event loop at all; #sleep
+    # actually suspends this fiber and hands control to the scheduler,
+    # which is what lets IO-bound fibers make progress. Trade-off there is
+    # a ~1ms floor on event latency and constant idle CPU, versus near-zero
+    # latency, in exchange for the rest of the program actually running -
+    # this is real, precedented prior art (every Python Tkinter+asyncio
+    # integration does exactly this), not a novel hack, just the fallback
+    # of last resort where no fd-level integration point exists.
+    #
+    # Must run on the same thread that created this Interp regardless of
+    # platform (Tcl's own thread-affinity model, and on macOS Cocoa/
+    # AppKit's main-thread requirement for Tk's Aqua backend) - see the
+    # Fiber::ExecutionContext::Isolated spike.
     def mainloop : Nil
-      while main_windows > 0
-        LibTcl.do_one_event(LibTcl::TCL_ALL_EVENTS)
-        drain_main_queue
-      end
+      {% if flag?(:darwin) %}
+        while main_windows > 0
+          LibTcl.do_one_event(LibTcl::TCL_DONT_WAIT)
+          drain_main_queue
+          sleep 1.millisecond
+        end
+      {% else %}
+        while main_windows > 0
+          LibTcl.do_one_event(LibTcl::TCL_ALL_EVENTS)
+          drain_main_queue
+        end
+      {% end %}
     end
 
     # Non-blocking: processes whatever Tk event is immediately available
@@ -734,8 +788,8 @@ module Teek
     # Fiber::ExecutionContext::Isolated spike) and which Crystal, unlike
     # Ruby's Ractor, does nothing to stop you from doing anyway. Queues the
     # block onto a Channel; it runs on the main thread the next time
-    # #mainloop's keepalive timer wakes (bounded by
-    # DEFAULT_TIMER_INTERVAL_MS), not immediately.
+    # #mainloop drains it (bounded by #mainloop's own ~1ms loop interval),
+    # not immediately.
     def queue_for_main(&block : -> Nil) : Nil
       @main_queue.send(block)
     end
