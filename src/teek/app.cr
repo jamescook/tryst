@@ -143,6 +143,7 @@ module Teek
       @widgets = {} of String => WidgetInfo
       @track_widgets = track_widgets
       @_pending_exception = nil
+      @destroy_observers = [] of Proc(String, Nil)
       setup_widget_tracking if track_widgets
       setup_destroy_cleanup
       hide
@@ -936,6 +937,20 @@ module Teek
       end
     end
 
+    # Register a callback fired with a widget's own Tk path immediately
+    # after Tk destroys it (see #setup_destroy_cleanup) - regardless of
+    # whether the destroy was explicit (an app-level #destroy call, or a
+    # teek-ui Handle#destroy!) or implicit (the window manager's own
+    # close button, or Tk recursively destroying a descendant along with
+    # its parent). Core App has no opinion on what a "widget path"
+    # ultimately represents to a caller - teek-ui's Session hangs its own
+    # Document-cleanup off this (see Document#node_destroyed), so an
+    # implicit destroy's bookkeeping converges on the exact same path an
+    # explicit one already used.
+    def on_widget_destroyed(&block : String -> Nil) : Nil
+      @destroy_observers << block
+    end
+
     # Installed unconditionally (unlike widget-creation tracking, which is
     # opt-out via track_widgets: false) so that bind-callback cleanup
     # always runs. A single `bind all <Destroy>` script is used because
@@ -947,6 +962,7 @@ module Teek
       destroy_cb_id = register_callback do |args, _signal|
         path = args[0]
         callback_registry.forget_all_for_path(path)
+        @destroy_observers.each(&.call(path))
         next if path.starts_with?(".teek_debug")
         @widgets.delete(path) if @track_widgets
       end

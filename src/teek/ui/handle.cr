@@ -155,6 +155,17 @@ module Teek
       # and unlinks the node from the retained tree so it stops being
       # reachable at all, not just Tk-dead.
       #
+      # A descendant node, or a DIFFERENT node whose Tk window Tk itself
+      # destroys (the window manager's own close button, most commonly),
+      # gets exactly the same bookkeeping done for it, off the same real
+      # Tk <Destroy> this triggers - see Document#node_destroyed, which
+      # is the one thing both an explicit #destroy! and an implicit
+      # destroy converge on. #perform_destroy! below still does its own
+      # node's bookkeeping directly too, redundantly but harmlessly with
+      # whatever #node_destroyed also does for that same node - so this
+      # stays reliable even for a Handle built against a FakeApp with no
+      # real Tk <Destroy> mechanism to fire at all (see handle_spec.cr).
+      #
       # Destroying a widget SYNCHRONOUSLY from inside the click handler
       # of one of its own descendants (a dialog's own "Close" button
       # tearing down the dialog it lives in) is a real Tk hazard:
@@ -167,12 +178,18 @@ module Teek
       # current click finishes first, or destroys synchronously
       # otherwise (a script/test with no event loop running has nothing
       # to defer TO, and wants "gone when this call returns" semantics).
-      # Pass explicitly to override either way. Calling this again on the
-      # same handle while its own deferred destroy hasn't run yet is a
-      # safe no-op.
-      # Raises NotRealizedError if this node was never realized.
+      # Pass explicitly to override either way.
+      #
+      # Safe to call on an already-gone node - whether that's because
+      # this same handle's own deferred destroy hasn't run yet, or
+      # because the node stopped being realized some other way in the
+      # meantime (an ancestor's destroy, or Tk's own doing - e.g. the
+      # window manager's close button). Use #configure or another
+      # realized-only method instead of #destroy! to actually detect
+      # that case; those raise NotRealizedError.
       def destroy!(defer : Bool? = nil) : Nil
         return if @node.pending_destroy?
+        return unless @node.realized
 
         should_defer = defer.nil? ? Teek.in_callback? : defer
         if should_defer

@@ -19,6 +19,7 @@ module Teek
 
       def initialize
         @index = {} of {Scope, Symbol} => Node
+        @path_index = {} of String => Node
         @next_auto_key = 0
         @used_segments = {} of String => Hash(String, Int32)
         @events = EventBus(Node | String).new
@@ -115,9 +116,49 @@ module Teek
       # arrange_path (the scrollbar-wrapper case - the wrapper frame
       # itself has no owning node of its own to return) or a WidgetType's
       # addressing strategy's synthesized virtual path (a menu entry has
-      # no real Tk path at all).
+      # no real Tk path at all). Backed by #register_path/#unregister_path
+      # (see Node#realized=), so this is an index lookup, not a tree walk.
       def find_by_path(path : String) : Node?
-        root.find { |node| node.realized.try(&.path) == path }
+        @path_index[path]?
+      end
+
+      # @api private - the ONLY callers are Node#realized= (keeping the
+      # index in step with whatever a node's current real Tk path is) and
+      # #node_destroyed (removing an entry once its node is confirmed
+      # gone). Never call directly from outside Node.
+      def register_path(path : String, node : Node) : Nil
+        @path_index[path] = node
+      end
+
+      # @api private - see #register_path.
+      def unregister_path(path : String) : Nil
+        @path_index.delete(path)
+      end
+
+      # @api private - the single Document-side entry point a live App's
+      # `<Destroy>` handler calls (via Session#realize wiring
+      # App#on_widget_destroyed) with the exact Tk path Tk just destroyed,
+      # for EVERY window it destroys - both an explicit ui[:x].destroy!
+      # and an implicit one (the window manager's own close button, an
+      # ancestor's destroy recursively taking a descendant with it). Tk
+      # destroys a whole subtree window-by-window, each with its own real
+      # <Destroy> firing, so this only ever has to release what ONE node
+      # owns - no separate subtree walk needed here the way
+      # Handle#perform_destroy! used to do it manually.
+      #
+      # A no-op for any path that isn't one of this Document's own nodes
+      # (an unrelated widget somewhere else in the same App, or a wrapper
+      # frame/scrollbar Realizer created as plumbing - see #find_by_path's
+      # own arrange_path note).
+      def node_destroyed(path : String) : Nil
+        node = @path_index[path]?
+        return unless node
+
+        node.images.each(&.unrealize)
+        node.vars.each(&.unrealize)
+        node.realized = nil
+        unregister(node)
+        node.parent.try(&.remove_child(node))
       end
 
       # @api private - called by Realizer#allocate_path, which gets a

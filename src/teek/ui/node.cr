@@ -93,7 +93,7 @@ module Teek
       setter document : Document?
 
       property key : String?
-      property realized : RealizedNode?
+      getter realized : RealizedNode?
 
       # Whether this child takes the leftover space on its parent flow
       # container's main axis - the grow: option, and what ui.spacer is.
@@ -178,6 +178,25 @@ module Teek
         node.parent = self
         document.try(&.notify(:append, self, node))
         node
+      end
+
+      # Keeps Document's path index (Document#node_destroyed's own lookup
+      # table) in sync with whatever this node's real Tk path currently
+      # is - a plain `property` can't do that, since Document has to hear
+      # about both the old path going away and the new one taking its
+      # place. This is the ONLY thing that makes a real Tk `<Destroy>`
+      # (whether from an explicit Handle#destroy! or Tk's own doing, e.g.
+      # closing a window's WM close button) findable back to the node it
+      # belongs to - see Document#node_destroyed for the other half.
+      def realized=(new_realized : RealizedNode?) : RealizedNode?
+        if old = @realized
+          document.try(&.unregister_path(old.path))
+        end
+        @realized = new_realized
+        if new_realized
+          document.try(&.register_path(new_realized.path, self))
+        end
+        new_realized
       end
 
       # A short, human label for this node - its type, plus the explicit

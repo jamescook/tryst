@@ -281,6 +281,64 @@ describe Teek::UI::Document do
     document.find_by_path(".wrap").should be_nil
   end
 
+  it "find_by_path returns nil once a node's realized is cleared" do
+    document = Teek::UI::Document.new
+    node = document.create(type: :button, name: :save)
+    document.root.add_child(node)
+    node.realized = Teek::UI::RealizedNode.new(app: nil, path: ".win.save")
+
+    node.realized = nil
+
+    document.find_by_path(".win.save").should be_nil
+  end
+
+  it "find_by_path follows a node re-realized at a different path" do
+    document = Teek::UI::Document.new
+    node = document.create(type: :button, name: :save)
+    document.root.add_child(node)
+    node.realized = Teek::UI::RealizedNode.new(app: nil, path: ".old.save")
+
+    node.realized = Teek::UI::RealizedNode.new(app: nil, path: ".new.save")
+
+    document.find_by_path(".old.save").should be_nil
+    document.find_by_path(".new.save").should be(node)
+  end
+
+  # node_destroyed is what App#on_widget_destroyed's hook calls (see
+  # Session#realize) for every Tk <Destroy>, explicit or implicit -
+  # Handle destroy specs (handle_spec.cr, implicit_destroy_fixture.cr)
+  # cover it end-to-end; these pin its own contract directly.
+  it "node_destroyed clears realized, unregisters the name, and unlinks from the parent" do
+    document = Teek::UI::Document.new
+    parent = document.create(type: :panel, name: :host)
+    document.root.add_child(parent)
+    node = document.create(type: :button, name: :save)
+    parent.add_child(node)
+    node.realized = Teek::UI::RealizedNode.new(app: nil, path: ".host.save")
+
+    document.node_destroyed(".host.save")
+
+    node.realized.should be_nil
+    document.find(:save).should be_nil
+    parent.children.should eq([] of Teek::UI::Node)
+  end
+
+  it "node_destroyed on an unknown path is a safe no-op" do
+    document = Teek::UI::Document.new
+
+    document.node_destroyed(".nope")
+  end
+
+  it "node_destroyed on a path is idempotent" do
+    document = Teek::UI::Document.new
+    node = document.create(type: :button, name: :save)
+    document.root.add_child(node)
+    node.realized = Teek::UI::RealizedNode.new(app: nil, path: ".save")
+
+    document.node_destroyed(".save")
+    document.node_destroyed(".save")
+  end
+
   it "claim_path_segment persists across separate calls, not just one realizer instance" do
     document = Teek::UI::Document.new
 

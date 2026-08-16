@@ -96,6 +96,11 @@ module Teek
         Validator.validate!(@document, strict: strict)
 
         app = Teek::App.new(title: @title, track_widgets: @track_widgets)
+        # Converges an explicit Handle#destroy! and an implicit destroy
+        # (WM close button, an ancestor recursively taking a descendant
+        # with it) on the same cleanup path - see Document#node_destroyed
+        # and Handle#perform_destroy!'s own doc comment.
+        app.on_widget_destroyed { |path| @document.node_destroyed(path) }
         # The root window's own properties, the counterpart to the title:
         # already handled above and to the resizable: a ui.window takes.
         #
