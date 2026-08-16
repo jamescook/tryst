@@ -27,6 +27,34 @@ tk_test "eval and invoke marshaling round trip" do |app|
   end
 end
 
+tk_test "an embedded NUL round-trips through tcl_eval, tcl_set_var/tcl_get_var, and a callback argument" do |app|
+  interp = app.interp
+  original = "a\0b"
+
+  # `format %c 0` makes Tcl itself produce the NUL, via its internal
+  # modified-UTF-8 (0xC0 0x80) encoding - not just echo a literal we sent.
+  evaled = app.tcl_eval("string cat a [format %c 0] b")
+  raise "tcl_eval NUL mismatch: #{evaled.bytes}" unless evaled == original
+  raise "tcl_eval bytesize mismatch: #{evaled.bytesize}" unless evaled.bytesize == original.bytesize
+  raise "tcl_eval size mismatch: #{evaled.size}" unless evaled.size == original.size
+
+  interp.tcl_set_var("nul_var", original)
+  fetched = interp.tcl_get_var("nul_var")
+  raise "tcl_get_var returned nil" unless fetched
+  raise "tcl_get_var NUL mismatch: #{fetched.bytes}" unless fetched == original
+  raise "tcl_get_var bytesize mismatch: #{fetched.bytesize}" unless fetched.bytesize == original.bytesize
+
+  received = nil
+  id = app.register_callback do |args, _signal|
+    received = args.first
+  end
+  app.tcl_invoke("crystal_callback", id, original)
+  arg = received
+  raise "callback never fired" unless arg
+  raise "callback arg NUL mismatch: #{arg.bytes}" unless arg == original
+  raise "callback arg bytesize mismatch: #{arg.bytesize}" unless arg.bytesize == original.bytesize
+end
+
 tk_test "widget creation and button invoke fires a registered callback" do |app|
   # create_widget/pack don't exist on App yet (later tasks) - fall back to
   # the underlying Interp for those; register_callback/tcl_invoke/tcl_eval

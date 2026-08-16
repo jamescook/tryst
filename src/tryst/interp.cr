@@ -134,6 +134,13 @@ lib LibTcl
   fun get_var = Tcl_GetVar2(interp : Interp*, part1 : LibC::Char*, part2 : LibC::Char*, flags : LibC::Int) : LibC::Char*
   fun set_var = Tcl_SetVar2(interp : Interp*, part1 : LibC::Char*, part2 : LibC::Char*, new_value : LibC::Char*, flags : LibC::Int) : LibC::Char*
 
+  # *Ex forms of the pair above - Obj*-based rather than char*-based, so
+  # a value can carry an explicit byte length instead of being read/written
+  # strlen-terminated. #tcl_get_var/#tcl_set_var use these (not the plain
+  # *2 forms above) so a value with an embedded NUL round-trips intact.
+  fun get_var2ex = Tcl_GetVar2Ex(interp : Interp*, part1 : LibC::Char*, part2 : LibC::Char*, flags : LibC::Int) : Obj*
+  fun set_var2ex = Tcl_SetVar2Ex(interp : Interp*, part1 : LibC::Char*, part2 : LibC::Char*, new_value : Obj*, flags : LibC::Int) : Obj*
+
   # ObjCmdProc/CmdDeleteProc: the C signatures Tcl_CreateObjCommand expects
   # for a custom command's handler and (optional) cleanup callback. Crystal
   # can hand a real, C-ABI-compatible function pointer for these directly -
@@ -360,6 +367,33 @@ module Tryst
     @@callback_depth -= 1
   end
 
+  # Tcl's internal string representation never contains a raw NUL byte -
+  # an embedded NUL is instead encoded as the two bytes 0xC0 0x80, Tcl's
+  # "modified UTF-8" (the same trick Java uses internally). 0xC0/0xC1 can
+  # never start a real UTF-8 sequence (both would only ever produce an
+  # overlong encoding, which UTF-8 forbids), so any 0xC0 byte here is
+  # unambiguously this escape, never misread genuine UTF-8 content.
+  # Shared by Interp#obj_to_string and tryst_crystal_callback_dispatch's
+  # id/arg extraction (interp.cr, below) - the two boundaries where Tcl
+  # hands string bytes back to Crystal.
+  def self.decode_modified_utf8_nul(ptr : LibC::Char*, len : LibTcl::TclSize) : String
+    bytes = Slice.new(ptr.as(UInt8*), len.to_i32)
+    return String.new(bytes) unless bytes.includes?(0xC0_u8)
+
+    io = IO::Memory.new(bytes.size)
+    i = 0
+    while i < bytes.size
+      if bytes[i] == 0xC0_u8 && bytes[i + 1]? == 0x80_u8
+        io.write_byte(0_u8)
+        i += 2
+      else
+        io.write_byte(bytes[i])
+        i += 1
+      end
+    end
+    io.to_s
+  end
+
   # errorinfo/errorcode mirror Tcl's own -errorinfo/-errorcode return
   # options (ruby-tryst's raise_tcl_error, ext/tryst/tcltkbridge.c) - the
   # traceback through Tcl procs, and the machine-readable error category,
@@ -550,18 +584,26 @@ module Tryst
     # work), or nil if it doesn't exist. Mirrors ruby-tryst's
     # Interp#tcl_get_var.
     def tcl_get_var(name : String) : String?
-      value_ptr = LibTcl.get_var(ptr, name, nil, LibTcl::TCL_GLOBAL_ONLY)
-      return if value_ptr.null?
-      String.new(value_ptr)
+      obj = LibTcl.get_var2ex(ptr, name, nil, LibTcl::TCL_GLOBAL_ONLY)
+      obj_to_string(obj)
     end
 
     # Sets a Tcl variable (array-element and namespaced forms work). Goes
-    # through Tcl_SetVar directly (no re-parsing), so the value never
-    # needs escaping - braces, backslashes, $, [, whatever, all safe.
-    # Mirrors ruby-tryst's Interp#tcl_set_var.
+    # through Tcl_SetVar2Ex (no re-parsing), so the value never needs
+    # escaping - braces, backslashes, $, [, whatever, all safe. Obj-based
+    # rather than the plain char*-based Tcl_SetVar2, so an embedded NUL in
+    # value survives (Tcl_SetVar2 has no length parameter - it would
+    # silently truncate at the first NUL). Mirrors ruby-tryst's
+    # Interp#tcl_set_var.
     def tcl_set_var(name : String, value : String) : String
-      value_ptr = LibTcl.set_var(ptr, name, nil, value, LibTcl::TCL_GLOBAL_ONLY)
-      raise TclError.new("failed to set variable '#{name}'") if value_ptr.null?
+      obj = LibTcl.new_string_obj(value, LibTcl::TclSize.new(value.bytesize))
+      LibTcl.db_incr_ref_count(obj, __FILE__, __LINE__)
+      begin
+        result_ptr = LibTcl.set_var2ex(ptr, name, nil, obj, LibTcl::TCL_GLOBAL_ONLY)
+        raise TclError.new("failed to set variable '#{name}'") if result_ptr.null?
+      ensure
+        LibTcl.db_decr_ref_count(obj, __FILE__, __LINE__)
+      end
       value
     end
 
@@ -1026,7 +1068,9 @@ module Tryst
     end
 
     private def result : String
-      String.new(LibTcl.get_string(LibTcl.get_obj_result(ptr)))
+      len = LibTcl::TclSize.new(0)
+      str_ptr = LibTcl.get_string_from_obj(LibTcl.get_obj_result(ptr), pointerof(len))
+      Tryst.decode_modified_utf8_nul(str_ptr, len)
     end
 
     # The @[Link] lines' library lookup (top of this file) is heuristic,
@@ -1082,7 +1126,7 @@ module Tryst
       return if obj.null?
       len = LibTcl::TclSize.new(0)
       ptr = LibTcl.get_string_from_obj(obj, pointerof(len))
-      String.new(ptr, len)
+      Tryst.decode_modified_utf8_nul(ptr, len)
     end
   end
 end
@@ -1099,12 +1143,12 @@ fun tryst_crystal_callback_dispatch(client_data : Void*, interp : LibTcl::Interp
 
   len = LibTcl::TclSize.new(0)
   id_ptr = LibTcl.get_string_from_obj(objv[1], pointerof(len))
-  id = String.new(id_ptr, len)
+  id = Tryst.decode_modified_utf8_nul(id_ptr, len)
 
   args = (2...objc).map do |i|
     arg_len = LibTcl::TclSize.new(0)
     ptr = LibTcl.get_string_from_obj(objv[i], pointerof(arg_len))
-    String.new(ptr, arg_len)
+    Tryst.decode_modified_utf8_nul(ptr, arg_len)
   end
 
   code, error = wrapper.dispatch_callback(id, args)
