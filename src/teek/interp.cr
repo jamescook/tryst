@@ -1,3 +1,6 @@
+require "./event_source"
+require "./notifier"
+
 # Deliberately skips Tcl/Tk's stub-library mechanism. Stubs exist to let one
 # compiled artifact run against multiple Tcl/Tk runtime versions, but that
 # indirection is implemented via C preprocessor macros in tcl.h/tk.h (e.g.

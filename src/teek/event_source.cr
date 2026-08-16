@@ -1,3 +1,5 @@
+require "./interp"
+
 module Teek
   # A callback Tcl runs on every pass of its event loop.
   #
