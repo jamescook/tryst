@@ -141,6 +141,31 @@ describe Tryst::UI::Session do
 
       seen.should eq(["heard"])
     end
+
+    it "keeps delivering to listeners after one another unsubscribes itself" do
+      session = Tryst::UI.app
+      seen = [] of String
+      middle = uninitialized Proc(Array(Tryst::UI::EventValue), Nil)
+
+      session.on(:tick) { |_args| seen << "first" }
+      middle = session.on(:tick) { |_args| seen << "middle"; session.off(:tick, middle) }
+      session.on(:tick) { |_args| seen << "third" }
+      session.emit(:tick)
+
+      seen.should eq(["first", "middle", "third"])
+    end
+
+    it "keeps delivering to listeners after one another raises, then re-raises" do
+      session = Tryst::UI.app
+      seen = [] of String
+
+      session.on(:tick) { |_args| seen << "first" }
+      session.on(:tick) { |_args| raise "boom" }
+      session.on(:tick) { |_args| seen << "third" }
+
+      expect_raises(Exception, "boom") { session.emit(:tick) }
+      seen.should eq(["first", "third"])
+    end
   end
 
   # #every/#after queue when called before realize (same queue-then-wire

@@ -45,7 +45,7 @@ module Tryst
       # here is a plain miss rather than a subscriber list conjured into
       # existence and kept forever.
       def emit(event : Symbol) : Nil
-        @listeners[event]?.try &.each(&.call(Array(T).new))
+        dispatch(@listeners[event]?, Array(T).new)
       end
 
       # Emit a named event to every current subscriber, in subscription
@@ -59,12 +59,36 @@ module Tryst
         # narrower array to a Proc(Array(T), Nil) fails to compile).
         values = Array(T).new
         args.each { |arg| values << arg }
-        @listeners[event]?.try &.each(&.call(values))
+        dispatch(@listeners[event]?, values)
       end
 
       # Unsubscribe a specific listener.
       def off(event : Symbol, listener : Proc(Array(T), Nil)) : Nil
         @listeners[event]?.try &.delete(listener)
+      end
+
+      # Runs a snapshot of `listeners`, not the live Array: a one-shot
+      # listener that calls #off on itself mid-call (the natural way to
+      # write "unsubscribe after first fire") would otherwise shrink the
+      # same Array #each is walking, silently skipping whichever listener
+      # next occupied the removed index.
+      #
+      # Each listener runs inside its own rescue, so one listener raising
+      # doesn't stop the rest from firing. The first exception seen is
+      # still re-raised once every listener has had its turn, rather than
+      # swallowed - a real bug in a listener should surface somewhere,
+      # just not at the expense of its neighbors.
+      private def dispatch(listeners : Array(Proc(Array(T), Nil))?, values : Array(T)) : Nil
+        return unless listeners
+        first_error = nil
+        listeners.dup.each do |listener|
+          begin
+            listener.call(values)
+          rescue ex
+            first_error ||= ex
+          end
+        end
+        raise first_error if first_error
       end
     end
   end
