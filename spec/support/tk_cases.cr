@@ -2675,6 +2675,63 @@ tk_test "background_work pause works" do |app|
   raise "expected 49, got #{counter}" unless counter == 49
 end
 
+# Both scenarios count live callback ids rather than timing anything -
+# #resume/#pause/#close all arm or cancel their poll synchronously (see
+# #arm_poll), with no event loop pump needed to observe the effect, so
+# there's no sleep/wait_until race to get wrong here.
+tk_test "BackgroundWork#resume called twice only arms one poll chain" do |app|
+  task = Teek::BackgroundWork(Nil, Symbol).new(app, nil) do |ctx, _data|
+    loop do
+      ctx.check_pause
+      sleep 5.milliseconds
+    end
+  end.on_progress { |_| }
+
+  task.start
+  task.pause
+  baseline = app.interp.callback_ids.size
+
+  task.resume
+  after_first = app.interp.callback_ids.size
+  raise "expected exactly one armed poll callback after resume, got #{after_first - baseline}" unless after_first - baseline == 1
+
+  task.resume
+  after_second = app.interp.callback_ids.size
+  raise "a second resume while not paused should not arm another poll chain, got #{after_second - baseline}" unless after_second == after_first
+
+  task.close
+  app.interp.wait_until(2.seconds) { task.done? }
+end
+
+tk_test "BackgroundWork#pause cancels an already-armed poll instead of leaving it to race #resume" do |app|
+  task = Teek::BackgroundWork(Nil, Symbol).new(app, nil) do |ctx, _data|
+    loop do
+      ctx.check_pause
+      sleep 5.milliseconds
+    end
+  end.on_progress { |_| }
+  # #on_progress above already started the task (see #maybe_start), which
+  # arms an initial poll for 0ms - still pending, since nothing has
+  # pumped the event loop yet. baseline is taken with that poll already
+  # counted, since #pause/#resume below race against exactly it.
+  baseline = app.interp.callback_ids.size
+
+  # #pause used to leave that armed poll alone; it would fire later, see
+  # @paused == false (Resume hadn't reached the worker yet either way),
+  # and re-arm itself alongside whatever #resume arms next - two
+  # independent, never-converging chains. Fixed: still exactly one
+  # armed poll afterward, same count as baseline, not baseline + 1.
+  task.pause
+  task.resume
+
+  after = app.interp.callback_ids.size
+  raise "expected still exactly one armed poll callback, got #{after - baseline} extra - " \
+        "pause/resume within one interval duplicated the chain" unless after == baseline
+
+  task.close
+  app.interp.wait_until(2.seconds) { task.done? }
+end
+
 tk_test "background_work receives final progress before done" do |app|
   progress_values = [] of Float64
   final_progress_before_done = nil

@@ -157,6 +157,10 @@ module Teek
     # written (how far apart its #check_message calls are).
     getter close_drain_timeout : Time::Span
 
+    # The currently-armed self-rescheduling poll, if any - see #arm_poll,
+    # the only place this is ever written.
+    @poll_handle : AfterHandle?
+
     # Crystal doesn't support a generic (parameterized) alias, and a
     # class-level alias can't see its own enclosing generic class's type
     # param either (both confirmed directly) - so the output event union
@@ -179,6 +183,7 @@ module Teek
       @paused = false
       @closing = false
       @closing_since = Time.instant
+      @poll_handle = nil
       # Large-but-bounded rather than truly unbounded (Crystal's Channel
       # has no unbounded option) - #yield never blocks in practice short
       # of a worker producing results far faster than the UI could ever
@@ -215,17 +220,30 @@ module Teek
       self
     end
 
+    # Cancels the armed poll (if any) as well as sending Pause - #poll
+    # stops re-arming itself once @paused, but the poll already armed
+    # before this call would otherwise still fire once, see @paused ==
+    # false (this hadn't taken effect on the worker side yet) and re-arm
+    # anyway, racing whatever #resume arms next. See #arm_poll.
     def pause : self
       @paused = true
       send_message(BackgroundControl::Pause)
+      if handle = @poll_handle
+        @app.after_cancel(handle)
+        @poll_handle = nil
+      end
       self
     end
 
+    # A no-op unless currently paused, so calling #resume twice (or
+    # #resume racing a #pause that hasn't landed) can't arm a second,
+    # never-converging poll chain alongside whatever's already running -
+    # see #arm_poll.
     def resume : self
+      return self if @done || !@paused
       @paused = false
       send_message(BackgroundControl::Resume)
-      # Restart polling (was stopped when paused).
-      @app.after(0) { poll } unless @done
+      arm_poll(0)
       self
     end
 
@@ -263,7 +281,7 @@ module Teek
       @closing = true
       @closing_since = Time.instant
       send_message(BackgroundControl::Stop)
-      @app.after(0) { poll }
+      arm_poll(0)
       self
     end
 
@@ -306,12 +324,26 @@ module Teek
 
       @dropped_count = 0
       @choke_warned = false
-      @app.after(0) { poll }
+      arm_poll(0)
       self
     end
 
     private def maybe_start : Nil
       start unless @started
+    end
+
+    # The one place any self-rescheduling poll chain gets armed - cancels
+    # whatever's currently armed first, so #start/#resume/#close/#poll's
+    # own re-arm/#drain_while_closing's own re-arm can never coexist as
+    # two independent chains. Safe to call when nothing is armed
+    # (@poll_handle nil) or when the handle being cancelled already fired
+    # (this same call, from inside #poll's own tail) - #after_cancel is a
+    # no-op on either.
+    private def arm_poll(ms : Int32) : Nil
+      if handle = @poll_handle
+        @app.after_cancel(handle)
+      end
+      @poll_handle = @app.after(ms) { poll }
     end
 
     private def poll : Nil
@@ -343,7 +375,7 @@ module Teek
       end
 
       unless @done || @paused
-        @app.after(self.class.poll_ms) { poll }
+        arm_poll(self.class.poll_ms)
       end
     end
 
@@ -371,7 +403,7 @@ module Teek
         return
       end
 
-      @app.after(self.class.poll_ms) { poll }
+      arm_poll(self.class.poll_ms)
     end
 
     # Handles a single event drained from the output queue during #poll.
