@@ -34,4 +34,15 @@ describe Teek::UI::Image do
 
     img.name.should eq("teek_ui_image_1")
   end
+
+  # #unrealize deletes @photo, which needs real Tk to prove (see
+  # ui_image_fixture.cr) - this only covers the pre-realize edge, where
+  # there's no photo yet to delete, and needs no interpreter either way.
+  it "unrealize before realize is a safe no-op" do
+    img = Teek::UI::Image.new("teek_ui_image_1", "logo.png")
+
+    img.unrealize
+
+    expect_raises(Teek::UI::NotRealizedError) { img.photo }
+  end
 end

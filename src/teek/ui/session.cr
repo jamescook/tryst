@@ -178,6 +178,19 @@ module Teek
             info[label] = count
           end
         end
+
+        # Callback counts above come from CallbackRegistry, which knows
+        # nothing about Tk photo images - they're never callbacks, so a
+        # leaked one is invisible to every count above it. Queried
+        # straight from Tcl (not @images.size) since that's the number
+        # that actually matters: a live Tk photo still costs its pixel
+        # buffer whether or not anything on the Crystal side still
+        # references the Image that created it. Filtered to the DSL's
+        # own naming prefix so an app's own unrelated `image create`
+        # calls don't get counted as a leak.
+        photo_count = app.split_list(app.tcl_eval("image names")).count(&.starts_with?("teek_ui_image_"))
+        info[:live_photos] = photo_count unless photo_count.zero?
+
         info
       end
 

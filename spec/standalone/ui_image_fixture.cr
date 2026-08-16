@@ -106,6 +106,47 @@ begin
   final_names = app.split_list(app.command(:image, :names))
   raise "image: expected #{reused_name} registered, got #{final_names}" unless final_names.includes?(reused_name)
 
+  # Case 6: destroying a subtree that owns an image releases its photo -
+  # a thumbnail rebuilt on every refresh must not accumulate a live Tk
+  # photo per cycle. debug_info's :live_photos count (queried straight
+  # from Tk's `image names`, not @images.size) has to track this too,
+  # since it's the only leak detector that can see a photo at all -
+  # nothing else here is a callback.
+  session.add(:list, &.panel(:thumb_host))
+  baseline_names = app.split_list(app.command(:image, :names))
+  baseline_photos = session.debug_info[:live_photos]?
+
+  10.times do |i|
+    session.add(:thumb_host) do |b|
+      b.panel(:thumb_row) do |row|
+        img = row.image(image_path)
+        row.label(:thumb, image: img.name)
+      end
+    end
+    app.update
+
+    during_names = app.split_list(app.command(:image, :names))
+    unless during_names.size == baseline_names.size + 1
+      raise "image: cycle #{i}: expected one new live photo, got #{during_names} vs baseline #{baseline_names}"
+    end
+    during_photos = session.debug_info[:live_photos]?
+    expected_during = (baseline_photos || 0) + 1
+    unless during_photos == expected_during
+      raise "image: cycle #{i}: expected debug_info[:live_photos] == #{expected_during}, got #{during_photos.inspect}"
+    end
+
+    session[:thumb_row].destroy!(defer: false)
+    app.update
+  end
+
+  after_names = app.split_list(app.command(:image, :names))
+  raise "image: expected image names back to #{baseline_names} after 10 cycles, got #{after_names}" unless after_names == baseline_names
+
+  after_photos = session.debug_info[:live_photos]?
+  unless after_photos == baseline_photos
+    raise "image: expected debug_info[:live_photos] back to #{baseline_photos.inspect}, got #{after_photos.inspect}"
+  end
+
   app.destroy
   puts "OK"
 ensure

@@ -567,11 +567,18 @@ module Teek
       # so destroying path alone leaves it (and the scrollbar) behind as
       # an orphaned, still-packed empty frame. arrange_path == path for
       # every other node, so this is a strict superset of destroying path.
+      #
+      # Also releases every image this subtree owns (Node#images) -
+      # unlike a bind callback, a Tk photo's pixel data has no <Destroy>
+      # of its own to hang cleanup off, so it needs an explicit sweep
+      # here rather than the same global trace that already handles
+      # widgets and their callbacks.
       private def perform_destroy! : Nil
         @node.pending_destroy = false
         r = realized
         app_ref = r.app || raise NotRealizedError.new
         app_ref.destroy(r.arrange_path)
+        @node.each { |descendant| descendant.images.each(&.unrealize) }
         @node.realized = nil
         unlink!
       end

@@ -3,6 +3,7 @@ require "./realized_node"
 require "./event_binding"
 require "./app_contract"
 require "./flow_align"
+require "./image"
 
 module Teek
   module UI
@@ -61,6 +62,16 @@ module Teek
       getter opts : Hash(Symbol, TclArgValue)
       getter children : Array(Node)
       getter events : Array(EventBinding)
+
+      # Images declared while this node was the open build container (the
+      # top of WidgetDSL's @stack at the time - see WidgetDSL#image), so
+      # Handle#destroy! knows which photos belong to a subtree it's
+      # tearing down. Not necessarily every Image a descendant widget's
+      # image: option names - a shared image declared elsewhere and reused
+      # here stays owned by wherever it was declared, since destroying one
+      # user of a shared image must not pull the photo out from under the
+      # others.
+      getter images : Array(Image)
       getter parent : Node?
       getter scope : Scope
       getter document : Document?
@@ -148,6 +159,7 @@ module Teek
         @key = key || @name.try(&.to_s)
         @children = [] of Node
         @events = [] of EventBinding
+        @images = [] of Image
         @realized = nil
         @parent = nil
       end

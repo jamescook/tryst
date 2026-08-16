@@ -1,6 +1,7 @@
 require "../../spec_helper"
 require "../../../src/teek/ui/node"
 require "../../../src/teek/ui/document"
+require "../../../src/teek/ui/image"
 
 # Pure-logic tests for Teek::UI::Node - no Tk interpreter needed. Mirrors
 # ruby-teek's teek-ui/test/test_node.rb.
@@ -24,6 +25,7 @@ describe Teek::UI::Node do
     node.opts.should eq({} of Symbol => Teek::TclArgValue)
     node.children.should eq([] of Teek::UI::Node)
     node.events.should eq([] of Teek::UI::EventBinding)
+    node.images.should eq([] of Teek::UI::Image)
     node.grow?.should be_false
     node.realized.should be_nil
     node.scope.should be(Teek::UI::Scope::TOP_LEVEL)

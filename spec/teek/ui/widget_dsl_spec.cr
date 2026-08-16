@@ -326,6 +326,21 @@ describe Teek::UI::WidgetDSL do
     root_child.opts.should eq({:image => "teek_ui_image_1"} of Symbol => Teek::TclArgValue)
   end
 
+  # Ownership drives Handle#destroy!'s cleanup (see handle_spec.cr/
+  # ui_image_fixture.cr) - declared at the top level, an image is owned by
+  # the document root; declared inside a container's block, by that
+  # container, not wherever it happens to get referenced as an option.
+  it "an image is owned by whichever container was open when it was declared" do
+    session = WidgetDslHarness.new
+
+    top_level = session.image("top.png")
+    inner = nil.as(Teek::UI::Image?)
+    session.panel(:host) { |b| inner = b.image("inner.png") }
+
+    session.document.root.images.should eq([top_level])
+    session.document.root.children.first.images.should eq([inner])
+  end
+
   it "bind: on a bind_option-supporting type sets that type's own Tk option to the var's name" do
     session = WidgetDslHarness.new
     var = session.var(5)

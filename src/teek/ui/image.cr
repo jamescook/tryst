@@ -78,6 +78,16 @@ module Teek
         end
       end
 
+      # Delete the backing Teek::Photo now, rather than waiting for
+      # whatever eventually collects this Image to run its finalizer -
+      # called by Handle#destroy! for a subtree that owns this image (see
+      # Node#images). Safe to call more than once, and safe to call
+      # before #realize (nothing to delete yet).
+      def unrealize : Nil
+        @photo.try(&.delete)
+        @photo = nil
+      end
+
       # The Tcl image name, so interpolating an Image and passing #name
       # produce the same string - matching Teek::Photo's own convention.
       def to_s(io : IO) : Nil

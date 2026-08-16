@@ -396,6 +396,12 @@ module Teek
       # The remaining arguments are forwarded to Teek::Photo.new. Ruby
       # forwards an opts Hash; they're spelled out here because Crystal
       # can't splat one into a method with named parameters.
+      #
+      # Owned by whichever container is currently open (the top of
+      # @stack) - Handle#destroy! releases every image a destroyed
+      # subtree owns this way, so a thumbnail declared inside a row that
+      # later gets destroyed and rebuilt doesn't accumulate a live Tk
+      # photo per cycle. See Node#images.
       def image(path : String, width : Int32? = nil, height : Int32? = nil,
                 format : String? = nil, palette : String? = nil,
                 gamma : Float64? = nil, subsample : Int32? = nil) : Image
@@ -404,6 +410,7 @@ module Teek
           width: width, height: height, format: format,
           palette: palette, gamma: gamma, subsample: subsample)
         @images << img
+        @stack.last.images << img
         img
       end
 
