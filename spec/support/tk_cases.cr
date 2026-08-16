@@ -4119,3 +4119,31 @@ tk_test "registering an already-live event source does not double it up" do |app
     raise "one unregister left it firing (#{settled} -> #{counter.value}) - registered more than once"
   end
 end
+
+# Interp#delete's own regression coverage (spec/teek/interp_delete_spec.cr)
+# needs a fresh subprocess, since it really tears down the process's one
+# Tk interpreter - can't run against the shared worker. What CAN run here
+# is the lower-level mechanism it depends on to stop its keepalive timer
+# from becoming a zombie: that Tcl_DeleteTimerHandler, given a still-
+# pending Tcl_CreateTimerHandler token, actually cancels it rather than
+# the timer firing anyway.
+tk_test "LibTcl.delete_timer_handler cancels a still-pending timer before it fires" do |app|
+  counter = Pointer(Int32).malloc(1)
+  counter.value = 0
+  token = LibTcl.create_timer_handler(5, ->tk_cases_bump_counter(Void*), counter.as(Void*))
+  LibTcl.delete_timer_handler(token)
+
+  # Tracer-gated, the same pattern session_timers_fixture.cr uses for every
+  # "it never fired" case: an absence can't be waited for directly, so a
+  # SEPARATE, un-cancelled timer proves real wall-clock time (not just 20
+  # rapid update calls, which can complete well under the 5ms interval)
+  # actually passed before checking the cancelled one stayed at zero.
+  tracer_counter = Pointer(Int32).malloc(1)
+  tracer_counter.value = 0
+  LibTcl.create_timer_handler(5, ->tk_cases_bump_counter(Void*), tracer_counter.as(Void*))
+  unless app.interp.wait_until { app.update; tracer_counter.value > 0 }
+    raise "tracer never fired"
+  end
+
+  raise "expected the cancelled timer never to fire, got #{counter.value}" unless counter.value.zero?
+end

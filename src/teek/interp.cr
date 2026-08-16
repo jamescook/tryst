@@ -154,6 +154,11 @@ lib LibTcl
   alias TimerProc = (Void*) -> Void
   fun create_timer_handler = Tcl_CreateTimerHandler(milliseconds : LibC::Int, proc : TimerProc, client_data : Void*) : Void*
 
+  # Cancels a still-pending token from #create_timer_handler - a no-op if
+  # it already fired. See Interp#delete, which uses this to stop the
+  # keepalive timer from outliving the interpreter it was armed for.
+  fun delete_timer_handler = Tcl_DeleteTimerHandler(token : Void*)
+
   # From tcl.h: TCL_DONT_WAIT (1<<1), TCL_ALL_EVENTS (~TCL_DONT_WAIT). Not
   # stub-table entries (plain #defines), so there's nothing to link against
   # - just the numeric values, reproduced here since Crystal never reads
@@ -427,6 +432,16 @@ module Teek
     @next_callback_id = 1
     @main_queue = Channel(Proc(Nil)).new(64)
 
+    # Set by #delete, checked by #ptr - guards every FFI call after
+    # deletion against reaching @ptr directly, which Tcl_DeleteInterp has
+    # already freed by then.
+    @deleted = false
+
+    # The keepalive timer's current, not-yet-fired token - overwritten by
+    # every #arm_keepalive_timer call (including its own re-arm each
+    # tick), so #delete always cancels whichever one is actually pending.
+    @timer_token = Pointer(Void).null
+
     # Backing store for #queue_for_main_from_finalizer - see there for why
     # this exists alongside @main_queue rather than just using it.
     #
@@ -503,7 +518,7 @@ module Teek
     # use #tcl_invoke instead, which quotes each argument as a distinct
     # Tcl_Obj rather than relying on Tcl's string-quoting rules.
     def tcl_eval(script : String) : String
-      raise_unless_ok("Tcl_Eval(#{script.inspect})") { LibTcl.eval(@ptr, script, -1, 0) }
+      raise_unless_ok("Tcl_Eval(#{script.inspect})") { LibTcl.eval(ptr, script, -1, 0) }
       result
     end
 
@@ -523,7 +538,7 @@ module Teek
       end
 
       begin
-        code = LibTcl.eval_objv(@ptr, LibTcl::TclSize.new(objv.size), objv.to_unsafe, 0)
+        code = LibTcl.eval_objv(ptr, LibTcl::TclSize.new(objv.size), objv.to_unsafe, 0)
         raise_tcl_error(code) unless code == TCL_OK
         result
       ensure
@@ -535,9 +550,9 @@ module Teek
     # work), or nil if it doesn't exist. Mirrors ruby-teek's
     # Interp#tcl_get_var.
     def tcl_get_var(name : String) : String?
-      ptr = LibTcl.get_var(@ptr, name, nil, LibTcl::TCL_GLOBAL_ONLY)
-      return if ptr.null?
-      String.new(ptr)
+      value_ptr = LibTcl.get_var(ptr, name, nil, LibTcl::TCL_GLOBAL_ONLY)
+      return if value_ptr.null?
+      String.new(value_ptr)
     end
 
     # Sets a Tcl variable (array-element and namespaced forms work). Goes
@@ -545,8 +560,8 @@ module Teek
     # needs escaping - braces, backslashes, $, [, whatever, all safe.
     # Mirrors ruby-teek's Interp#tcl_set_var.
     def tcl_set_var(name : String, value : String) : String
-      ptr = LibTcl.set_var(@ptr, name, nil, value, LibTcl::TCL_GLOBAL_ONLY)
-      raise TclError.new("failed to set variable '#{name}'") if ptr.null?
+      value_ptr = LibTcl.set_var(ptr, name, nil, value, LibTcl::TCL_GLOBAL_ONLY)
+      raise TclError.new("failed to set variable '#{name}'") if value_ptr.null?
       value
     end
 
@@ -563,8 +578,8 @@ module Teek
       # embedding Tcl directly (as here) must set it explicitly first.
       tcl_set_var("tcl_interactive", "0") if tcl_get_var("tcl_interactive").nil?
 
-      LibTk.init_console_channels(@ptr)
-      raise_unless_ok("Tk_CreateConsoleWindow") { LibTk.create_console_window(@ptr) }
+      LibTk.init_console_channels(ptr)
+      raise_unless_ok("Tk_CreateConsoleWindow") { LibTk.create_console_window(ptr) }
     end
 
     # Creates a widget of the given kind (e.g. "button", "label", "frame")
@@ -839,7 +854,7 @@ module Teek
     end
 
     private def arm_keepalive_timer : Nil
-      LibTcl.create_timer_handler(DEFAULT_TIMER_INTERVAL_MS, ->teek_keepalive_timer, Box.box(self))
+      @timer_token = LibTcl.create_timer_handler(DEFAULT_TIMER_INTERVAL_MS, ->teek_keepalive_timer, Box.box(self))
     end
 
     # :nodoc: called by teek_keepalive_timer to re-arm itself each tick.
@@ -847,14 +862,37 @@ module Teek
       arm_keepalive_timer
     end
 
+    # Every FFI call below goes through this instead of touching @ptr
+    # directly, so a call after #delete raises a clear TclError instead of
+    # reaching Tcl_DeleteInterp's freed memory.
+    private def ptr : LibTcl::Interp*
+      raise TclError.new("this Interp has already been deleted") if @deleted
+      @ptr
+    end
+
+    # Safe to call more than once. Tcl_DeleteInterp releases the
+    # Tcl_Interp struct outright - every method below guards against that
+    # via #ptr instead of touching @ptr directly.
     def delete : Nil
+      return if @deleted
+
       # Event sources belong to the THREAD's notifier, not to this
       # interpreter, so deleting the interp would leave any still
       # registered - and Tcl would go on calling them against state
       # nothing owns any more.
       @event_sources.each(&.unregister)
       @event_sources.clear
+
+      # Same reasoning for the keepalive timer: Tcl_CreateTimerHandler
+      # registers with the thread's notifier, not the interpreter, so
+      # without this it would keep re-arming itself forever - one zombie
+      # 16ms timer per deleted interpreter, each re-entering Crystal
+      # through a Box(Interp) pointing at whatever this memory becomes
+      # after Boehm has no reason left to keep it alive.
+      LibTcl.delete_timer_handler(@timer_token)
+
       LibTcl.delete_interp(@ptr)
+      @deleted = true
     end
 
     # Registers a callback Tcl will run on every pass of its event loop,
@@ -974,10 +1012,10 @@ module Teek
     # the matching Tk_FreeFont runs in an ensure - a leaked reference keeps
     # that cache entry alive for the life of the process.
     private def with_font(font : String, &)
-      main_win = LibTk.main_window(@ptr)
+      main_win = LibTk.main_window(ptr)
       raise TclError.new("Tk is not initialized (no main window)") if main_win.null?
 
-      tkfont = LibTk.get_font(@ptr, main_win, font)
+      tkfont = LibTk.get_font(ptr, main_win, font)
       raise TclError.new("font not found: #{font} - #{result}") if tkfont.null?
 
       begin
@@ -988,7 +1026,7 @@ module Teek
     end
 
     private def result : String
-      String.new(LibTcl.get_string(LibTcl.get_obj_result(@ptr)))
+      String.new(LibTcl.get_string(LibTcl.get_obj_result(ptr)))
     end
 
     # The @[Link] lines' library lookup (top of this file) is heuristic,
@@ -1022,7 +1060,7 @@ module Teek
     end
 
     private def raise_tcl_error(code : LibC::Int, what : String? = nil) : Nil
-      options = LibTcl.get_return_options(@ptr, code)
+      options = LibTcl.get_return_options(ptr, code)
       LibTcl.db_incr_ref_count(options, __FILE__, __LINE__)
       errorinfo = dict_get(options, "-errorinfo")
       errorcode = dict_get(options, "-errorcode")
@@ -1035,7 +1073,7 @@ module Teek
     private def dict_get(dict : LibTcl::Obj*, key : String) : String?
       key_obj = LibTcl.new_string_obj(key, LibTcl::TclSize.new(key.bytesize))
       LibTcl.db_incr_ref_count(key_obj, __FILE__, __LINE__)
-      LibTcl.dict_obj_get(@ptr, dict, key_obj, out value_ptr)
+      LibTcl.dict_obj_get(ptr, dict, key_obj, out value_ptr)
       LibTcl.db_decr_ref_count(key_obj, __FILE__, __LINE__)
       obj_to_string(value_ptr)
     end

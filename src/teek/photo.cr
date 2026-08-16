@@ -112,7 +112,7 @@ module Teek
       block = build_block(pixel_data, width, height, format)
 
       raise_unless_ok("Tk_PhotoPutBlock") do
-        LibTk.photo_put_block(@ptr, handle, pointerof(block), x, y, width, height, composite.to_tk)
+        LibTk.photo_put_block(ptr, handle, pointerof(block), x, y, width, height, composite.to_tk)
       end
     end
 
@@ -135,7 +135,7 @@ module Teek
       dest_height = (height // subsample_y) * zoom_y
 
       raise_unless_ok("Tk_PhotoPutZoomedBlock") do
-        LibTk.photo_put_zoomed_block(@ptr, handle, pointerof(block), x, y, dest_width, dest_height,
+        LibTk.photo_put_zoomed_block(ptr, handle, pointerof(block), x, y, dest_width, dest_height,
           zoom_x, zoom_y, subsample_x, subsample_y, composite.to_tk)
       end
     end
@@ -197,13 +197,13 @@ module Teek
     def photo_set_size(name : String, width : Int32, height : Int32) : Nil
       raise ArgumentError.new("width and height must be non-negative") if width < 0 || height < 0
       handle = find_photo!(name)
-      raise_unless_ok("Tk_PhotoSetSize") { LibTk.photo_set_size(@ptr, handle, width, height) }
+      raise_unless_ok("Tk_PhotoSetSize") { LibTk.photo_set_size(ptr, handle, width, height) }
     end
 
     def photo_expand(name : String, width : Int32, height : Int32) : Nil
       raise ArgumentError.new("width and height must be non-negative") if width < 0 || height < 0
       handle = find_photo!(name)
-      raise_unless_ok("Tk_PhotoExpand") { LibTk.photo_expand(@ptr, handle, width, height) }
+      raise_unless_ok("Tk_PhotoExpand") { LibTk.photo_expand(ptr, handle, width, height) }
     end
 
     def photo_blank(name : String) : Nil
@@ -211,7 +211,7 @@ module Teek
     end
 
     private def find_photo!(name : String) : LibTk::PhotoHandle
-      handle = LibTk.find_photo(@ptr, name)
+      handle = LibTk.find_photo(ptr, name)
       raise TclError.new("photo image not found: #{name}") if handle.null?
       handle
     end
@@ -330,7 +330,13 @@ module Teek
     # so nothing forces the split the way it would in Ruby, but the
     # self-capture trap is the same either way).
     def self.delete_task(name : String, app : App) : Proc(Nil)
-      -> { app.tcl_eval("catch {image delete #{name}}"); nil }
+      -> do
+        begin
+          app.tcl_eval("catch {image delete #{name}}")
+        rescue TclError
+        end
+        nil
+      end
     end
 
     # @api private
@@ -349,10 +355,13 @@ module Teek
     # #queue_for_main_from_finalizer rather than #queue_for_main for the
     # same reason: #queue_for_main's Channel#send can suspend the
     # calling fiber indefinitely once the channel is full, which a GC
-    # finalizer can't risk. The Tcl-level `catch` covers an interpreter
-    # that's already been torn down by the time this runs on the main
-    # thread; nothing here can raise on the finalizer's own thread, so
-    # there's nothing to rescue there.
+    # finalizer can't risk. Nothing here can raise on the finalizer's own
+    # thread - the actual delete happens later, in the proc .delete_task
+    # returns, on the main thread. There, the Tcl-level `catch` covers an
+    # ordinary image-delete failure; the surrounding rescue TclError
+    # covers the interpreter itself already being torn down by
+    # Interp#delete, whose guarded pointer accessor raises a catchable
+    # TclError instead of touching freed memory.
     def self.finalizer_for(name : String, app : App) : Proc(Nil)
       task = delete_task(name, app)
       -> do
