@@ -24,6 +24,8 @@ session = Teek::UI.app(title: "reactive vars fixture") do |builder|
 
   vars[:enabled] = builder.var(true)
   handles[:enabled_box] = builder.checkbox(:enabled_box, bind: vars[:enabled])
+
+  builder.panel(:host)
 end
 
 app = session.realize
@@ -82,6 +84,49 @@ enabled.value = false
 app.update
 raise "expected enabled.value to become false, got #{enabled.value}" unless enabled.value == false
 raise "expected the backing Tcl variable to be \"0\", got #{app.get_variable(enabled.name)}" unless app.get_variable(enabled.name) == "0"
+
+# Regression: destroying a subtree that declared a var releases its
+# backing Tcl global, its write trace, and the change-notification
+# callback the trace fires - a row template re-added on every refresh
+# (e.g. a -textvariable per list row) must not accumulate any of the
+# three.
+baseline_var_names = app.split_list(app.tcl_eval("info vars ::teek_ui_var_*"))
+baseline_callbacks = app.interp.callback_ids.size
+
+50.times do |i|
+  declared_var = nil.as(Teek::UI::Var?)
+  session.add(:host) do |b|
+    b.panel(:row) do |row|
+      v = row.var("")
+      v.on_change { }
+      row.text_box(:row_box, bind: v)
+      declared_var = v
+    end
+  end
+  app.update
+  var_name = declared_var.as(Teek::UI::Var).name
+
+  during_var_names = app.split_list(app.tcl_eval("info vars ::teek_ui_var_*"))
+  unless during_var_names.size == baseline_var_names.size + 1
+    raise "vars: cycle #{i}: expected one new live var, got #{during_var_names} vs baseline #{baseline_var_names}"
+  end
+
+  session[:row].destroy!(defer: false)
+  app.update
+
+  trace_left = app.tcl_eval("trace info variable #{var_name}")
+  raise "vars: cycle #{i}: expected no traces left on #{var_name}, got #{trace_left.inspect}" unless trace_left.empty?
+end
+
+after_var_names = app.split_list(app.tcl_eval("info vars ::teek_ui_var_*"))
+unless after_var_names == baseline_var_names
+  raise "vars: expected info vars back to #{baseline_var_names} after 50 cycles, got #{after_var_names}"
+end
+
+after_callbacks = app.interp.callback_ids.size
+unless after_callbacks == baseline_callbacks
+  raise "vars: expected callback_ids.size back to #{baseline_callbacks}, got #{after_callbacks}"
+end
 
 app.destroy
 puts "OK"

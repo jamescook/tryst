@@ -4,6 +4,7 @@ require "./event_binding"
 require "./app_contract"
 require "./flow_align"
 require "./image"
+require "./var"
 
 module Teek
   module UI
@@ -72,6 +73,12 @@ module Teek
       # user of a shared image must not pull the photo out from under the
       # others.
       getter images : Array(Image)
+
+      # Vars declared while this node was the open build container - same
+      # ownership rule as #images above (see WidgetDSL#var), so
+      # Handle#destroy! can release a subtree's own Tcl globals, write
+      # traces, and change callbacks along with it.
+      getter vars : Array(Var)
       getter parent : Node?
       getter scope : Scope
       getter document : Document?
@@ -160,6 +167,7 @@ module Teek
         @children = [] of Node
         @events = [] of EventBinding
         @images = [] of Image
+        @vars = [] of Var
         @realized = nil
         @parent = nil
       end

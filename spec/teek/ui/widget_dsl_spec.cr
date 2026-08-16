@@ -341,6 +341,19 @@ describe Teek::UI::WidgetDSL do
     session.document.root.children.first.images.should eq([inner])
   end
 
+  # Same ownership rule as images (see the case just above) - drives
+  # Handle#destroy!'s cleanup (var_spec.cr/reactive_vars_fixture.cr).
+  it "a var is owned by whichever container was open when it was declared" do
+    session = WidgetDslHarness.new
+
+    top_level = session.var(1)
+    inner = nil.as(Teek::UI::Var?)
+    session.panel(:host) { |b| inner = b.var(2) }
+
+    session.document.root.vars.should eq([top_level])
+    session.document.root.children.first.vars.should eq([inner])
+  end
+
   it "bind: on a bind_option-supporting type sets that type's own Tk option to the var's name" do
     session = WidgetDslHarness.new
     var = session.var(5)

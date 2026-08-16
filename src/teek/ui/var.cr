@@ -34,9 +34,12 @@ module Teek
 
       @app : Teek::App?
 
+      @cb_id : String?
+
       def initialize(@name : String, @initial : VarValue)
         @on_change_callbacks = [] of VarValue -> Nil
         @app = nil
+        @cb_id = nil
       end
 
       # The current value, coerced to match the initial value's type
@@ -62,6 +65,13 @@ module Teek
         self
       end
 
+      # Remove every #on_change handler at once - the counterpart to
+      # #on_change accumulating one entry per call, for a Var that's
+      # re-subscribed without ever being destroyed and rebuilt.
+      def clear_on_change : Nil
+        @on_change_callbacks.clear
+      end
+
       # Create the backing Tcl variable, set its initial value, and wire
       # the change trace. Called once by Session#realize, before the
       # widget tree realizes, so bound widgets display the initial value
@@ -70,7 +80,24 @@ module Teek
         @app = app
         app.set_variable(@name, to_tcl(@initial))
         cb_id = app.register_callback { |_args, _signal| notify_change }
-        app.tcl_eval("trace add variable #{@name} write {crystal_callback #{cb_id}}")
+        @cb_id = cb_id
+        app.tcl_invoke("trace", "add", "variable", @name, "write", "crystal_callback #{cb_id}")
+      end
+
+      # Tear down the backing Tcl variable, its write trace, and the
+      # callback that trace fires - called by Handle#destroy! for a
+      # subtree that owns this var (see Node#vars). Safe to call more
+      # than once, and safe to call before #realize (nothing to tear
+      # down yet).
+      def unrealize : Nil
+        return unless live_app = @app
+        return unless cb_id = @cb_id
+
+        live_app.tcl_invoke("trace", "remove", "variable", @name, "write", "crystal_callback #{cb_id}")
+        live_app.unregister_callback(cb_id)
+        live_app.tcl_invoke("unset", "-nocomplain", @name)
+        @app = nil
+        @cb_id = nil
       end
 
       private def notify_change : Nil

@@ -375,10 +375,15 @@ module Teek
       # itself only becomes real at realize (Session#realize runs
       # Var#realize on every declared Var before the widget tree itself
       # realizes). Bind it to a widget with bind:.
+      #
+      # Owned by whichever container is currently open (the top of
+      # @stack) - Handle#destroy! releases every var a destroyed subtree
+      # owns this way, same as #image. See Node#vars.
       def var(initial : VarValue) : Var
         raise_if_closed!
         v = Var.new("::teek_ui_var_#{@vars.size + 1}", initial)
         @vars << v
+        @stack.last.vars << v
         v
       end
 

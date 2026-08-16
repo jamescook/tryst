@@ -568,17 +568,20 @@ module Teek
       # an orphaned, still-packed empty frame. arrange_path == path for
       # every other node, so this is a strict superset of destroying path.
       #
-      # Also releases every image this subtree owns (Node#images) -
-      # unlike a bind callback, a Tk photo's pixel data has no <Destroy>
-      # of its own to hang cleanup off, so it needs an explicit sweep
-      # here rather than the same global trace that already handles
-      # widgets and their callbacks.
+      # Also releases every image and var this subtree owns (Node#images,
+      # Node#vars) - unlike a bind callback, a Tk photo or a Tcl global's
+      # write trace has no <Destroy> of its own to hang cleanup off, so
+      # both need an explicit sweep here rather than the same global
+      # trace that already handles widgets and their callbacks.
       private def perform_destroy! : Nil
         @node.pending_destroy = false
         r = realized
         app_ref = r.app || raise NotRealizedError.new
         app_ref.destroy(r.arrange_path)
-        @node.each { |descendant| descendant.images.each(&.unrealize) }
+        @node.each do |descendant|
+          descendant.images.each(&.unrealize)
+          descendant.vars.each(&.unrealize)
+        end
         @node.realized = nil
         unlink!
       end

@@ -36,4 +36,28 @@ describe Teek::UI::Var do
 
     result.should be(var)
   end
+
+  it "clear_on_change empties the queued handlers" do
+    var = Teek::UI::Var.new("::teek_ui_var_1", 5)
+    var.on_change { |value| value }
+
+    var.clear_on_change
+
+    # Nothing observable pre-realize besides not raising - the real
+    # "no handler fires afterward" behavior needs a live trace, covered
+    # in reactive_vars_fixture.cr.
+    var.clear_on_change
+  end
+
+  # #unrealize deletes the backing Tcl variable/trace/callback, which
+  # needs real Tk to prove (see reactive_vars_fixture.cr) - this only
+  # covers the pre-realize edge, where there's nothing to tear down yet,
+  # and needs no interpreter either way.
+  it "unrealize before realize is a safe no-op" do
+    var = Teek::UI::Var.new("::teek_ui_var_1", 5)
+
+    var.unrealize
+
+    expect_raises(Teek::UI::NotRealizedError) { var.value }
+  end
 end
