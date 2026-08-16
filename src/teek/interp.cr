@@ -10,7 +10,7 @@
 #
 # WHICH VERSION is still a compile-time choice, though, and has to be - Tcl
 # 8.x and 9.x ship under different library names specifically so both can be
-# installed side by side (confirmed via `nm` on both, see ctk-jrf.8), and
+# installed side by side (confirmed via `nm` on both), and
 # even Tcl's own stub-version negotiation (Tcl_InitStubs) explicitly refuses
 # to bridge the major-version boundary (ruby-teek's tcl9compat.h comment:
 # "9.x won't satisfy '8.6'"). So there is no dynamic-linking trick that
@@ -283,7 +283,7 @@ end
   #                                              below - tkIntPlatDecls.h)
   #            Tk_MacOSXGetNSWindowForDrawable   exported (tkPlatDecls.h)
   #
-  # Confirmed via `nm` on both libraries (ctk-jrf.8) and directly against
+  # Confirmed via `nm` on both libraries and directly against
   # Tk 9.0.3's real tkPlatDecls.h - both take a Drawable and return the
   # toplevel's NSWindow, so the surrounding code and the NativeWindow
   # value #native_window_handle builds are unaffected by the branch. The

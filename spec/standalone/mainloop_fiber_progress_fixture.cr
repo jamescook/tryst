@@ -1,8 +1,8 @@
 require "../../src/teek"
 
-# Standalone regression check for ctk-2o0: a fiber spawned before
-# #mainloop is entered must keep making progress while it runs, not just
-# resume once mainloop finally returns. Same "own subprocess" reasoning
+# Standalone regression check: a fiber spawned before #mainloop is
+# entered must keep making progress while it runs, not just resume once
+# mainloop finally returns. Same "own subprocess" reasoning
 # as mainloop_destroy_fixture.cr - constructing Teek::App does a real
 # Tk_Init, and #mainloop blocks until every toplevel is gone.
 

@@ -1,8 +1,8 @@
 # Replaces Tcl's own notifier (Tcl_SetNotifier, tcl.h) with one whose
 # blocking wait cooperates with Crystal's fiber scheduler, instead of
 # blocking the whole OS thread the way a bare Tcl_DoOneEvent(TCL_ALL_EVENTS)
-# does - see Interp#mainloop's doc comment for the bug this fixes (ctk-2o0:
-# any fiber spawned before #mainloop silently never runs again).
+# does - see Interp#mainloop's doc comment for the bug this fixes (any
+# fiber spawned before #mainloop silently never runs again).
 #
 # Linux/Windows only. Not installed on macOS at all - Tk's real Aqua
 # notifier (macosx/tkMacOSXNotify.c, macosx/tclMacOSXNotify.c in the real
