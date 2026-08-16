@@ -2715,16 +2715,51 @@ tk_test "BackgroundWork#stop terminates the worker" do |app|
   raise "should not have run all iterations, got #{progress_count}" unless progress_count < 1000
 end
 
-tk_test "BackgroundWork#close marks done immediately" do |app|
-  task = Teek::BackgroundWork(Nil, Int32).new(app, nil) do |_ctx, _data|
-    loop { sleep 100.milliseconds }
+tk_test "BackgroundWork#close stops the worker without invoking further callbacks" do |app|
+  done = false
+
+  task = Teek::BackgroundWork(Nil, Int32).new(app, nil) do |ctx, _data|
+    loop do
+      ctx.check_message
+      sleep 10.milliseconds
+    end
   end.on_progress { |_| }
+    .on_done { done = true }
 
   task.start
   raise "expected not done yet" if task.done?
 
   task.close
-  raise "expected done after close" unless task.done?
+  raise "expected not done immediately - the worker still has to see the Stop" if task.done?
+
+  app.interp.wait_until(3.seconds) { task.done? }
+  raise "expected done once the worker actually stopped" unless task.done?
+  raise "on_done should not fire for a close, only a natural finish" if done
+end
+
+tk_test "BackgroundWork#close lets a queue-choked worker terminate instead of blocking forever" do |app|
+  stopped = false
+  progress_count = 0
+
+  task = Teek::BackgroundWork(Int32, Int32).new(app, 20_000) do |ctx, count|
+    begin
+      count.times do |i|
+        ctx.check_message
+        ctx.yield(i)
+      end
+    ensure
+      stopped = true
+    end
+  end.on_progress { |_| progress_count += 1 }
+
+  task.start
+  app.interp.wait_until(2.seconds) { progress_count >= 10 }
+  task.close
+
+  app.interp.wait_until(3.seconds) { stopped }
+  raise "worker should have terminated after close instead of blocking on a full output_queue" unless stopped
+  app.interp.wait_until(3.seconds) { task.done? }
+  raise "expected done once the worker's own BackgroundDone was drained" unless task.done?
 end
 
 # From ruby-teek's test_threading.rb - the parts not already covered by

@@ -139,6 +139,24 @@ module Teek
     # yields faster than the UI polls.
     class_property drop_intermediate : Bool = true # ameba:disable Naming/QueryBoolMethods
 
+    # Default for close_drain_timeout below.
+    DEFAULT_CLOSE_DRAIN_TIMEOUT = 5.seconds
+
+    # A floor under close_drain_timeout - below this the drain loop could
+    # give up and mark the task done while a perfectly cooperative worker
+    # is still on its way to its next #check_message, turning an honest
+    # wait into a false "done".
+    MIN_CLOSE_DRAIN_TIMEOUT = 1.second
+
+    # How long #close's drain loop keeps polling for the worker's
+    # BackgroundDone before giving up and marking the task done anyway -
+    # only reached by a worker that never calls #check_message/
+    # #check_pause, since a cooperative one sees the queued Stop on its
+    # very next check. Per-instance rather than global, since how long
+    # that's worth waiting depends on how the specific work block is
+    # written (how far apart its #check_message calls are).
+    getter close_drain_timeout : Time::Span
+
     # Crystal doesn't support a generic (parameterized) alias, and a
     # class-level alias can't see its own enclosing generic class's type
     # param either (both confirmed directly) - so the output event union
@@ -146,13 +164,21 @@ module Teek
     # declarations and #dispatch_event) instead of being named once.
     # Adding a member means updating all three; #dispatch_event's
     # exhaustive case then points at any branch still missing.
-    def initialize(@app : App, @data : Data, &@work_block : TaskContext(Result), Data -> Nil)
+    def initialize(@app : App, @data : Data, close_drain_timeout : Time::Span = DEFAULT_CLOSE_DRAIN_TIMEOUT,
+                   &@work_block : TaskContext(Result), Data -> Nil)
+      if close_drain_timeout < MIN_CLOSE_DRAIN_TIMEOUT
+        raise ArgumentError.new("close_drain_timeout must be at least #{MIN_CLOSE_DRAIN_TIMEOUT}, got #{close_drain_timeout}")
+      end
+      @close_drain_timeout = close_drain_timeout
+
       @callback_progress = nil
       @callback_done = nil
       @callback_message = nil
       @started = false
       @done = false
       @paused = false
+      @closing = false
+      @closing_since = Time.instant
       # Large-but-bounded rather than truly unbounded (Crystal's Channel
       # has no unbounded option) - #yield never blocks in practice short
       # of a worker producing results far faster than the UI could ever
@@ -209,18 +235,35 @@ module Teek
     end
 
     # Crystal has no equivalent of Ruby's Thread#kill - there is no
-    # hard-kill primitive for a fiber/execution context. This marks the
-    # task done immediately, matching ruby-teek's own observable #close
-    # behavior (@done is set directly there too, regardless of whether
-    # the kill actually lands before the thread's next instruction), and
-    # best-effort asks the worker to stop cooperatively via the same
-    # message #stop uses. A worker that never calls #check_message/
-    # #check_pause (e.g. a bare infinite loop) keeps running in the
-    # background regardless - a real, deliberate deviation, not a silent
-    # gap: Ruby's true kill has no Crystal analogue.
+    # hard-kill primitive for a fiber/execution context, so this can only
+    # ask the worker to stop cooperatively via the same message #stop
+    # uses. Unlike #stop, though, #close also marks the poll chain as
+    # closing: #poll keeps draining @output_queue (discarding what it
+    # drains, no callbacks) instead of returning early the way an
+    # immediate @done = true used to make it. A worker that's still
+    # yielding when #close is called would otherwise fill the bounded
+    # output_queue and block forever inside #yield, never reaching the
+    # #check_message call that would have seen this Stop - close draining
+    # the queue keeps that from happening.
+    #
+    # @done itself only flips once the worker's own BackgroundDone
+    # arrives (or close_drain_timeout elapses without one, for a worker
+    # that never calls #check_message/#check_pause at all - a bare
+    # infinite loop keeps running in the background regardless, a real,
+    # deliberate deviation, not a silent gap: Ruby's true kill has no
+    # Crystal analogue), so #done? reflects the worker actually having
+    # stopped rather than the moment #close was called.
     def close : self
-      @done = true
+      return self if @closing || @done
+      unless @started
+        @done = true
+        return self
+      end
+
+      @closing = true
+      @closing_since = Time.instant
       send_message(BackgroundControl::Stop)
+      @app.after(0) { poll }
       self
     end
 
@@ -274,6 +317,11 @@ module Teek
     private def poll : Nil
       return if @done
 
+      if @closing
+        drain_while_closing
+        return
+      end
+
       drop_intermediate = self.class.drop_intermediate
       last_progress : Result? = nil
       results_this_poll = 0
@@ -297,6 +345,33 @@ module Teek
       unless @done || @paused
         @app.after(self.class.poll_ms) { poll }
       end
+    end
+
+    # #close's poll path: keeps draining @output_queue so a still-yielding
+    # worker's #yield never blocks on a full queue, but discards every
+    # event instead of dispatching it - no progress/message callbacks fire
+    # once closing, only the eventual BackgroundDone matters, and that
+    # just flips @done rather than invoking #on_done (the caller asked to
+    # tear this down, not to be told it finished).
+    private def drain_while_closing : Nil
+      loop do
+        select
+        when event = @output_queue.receive
+          if event.is_a?(BackgroundDone)
+            @done = true
+            return
+          end
+        else
+          break
+        end
+      end
+
+      if Time.instant.duration_since(@closing_since) >= @close_drain_timeout
+        @done = true
+        return
+      end
+
+      @app.after(self.class.poll_ms) { poll }
     end
 
     # Handles a single event drained from the output queue during #poll.
