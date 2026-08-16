@@ -832,6 +832,20 @@ module Teek
       @widget_counters.clear
     end
 
+    # A live snapshot of App's own per-path bookkeeping that #widgets
+    # doesn't cover - "is something still tracking a destroyed widget's
+    # path." Currently just @widget_types_by_path (#record_widget_type,
+    # read by #command on every call): unlike #widgets, it's written
+    # unconditionally regardless of track_widgets:, so it needs its own
+    # way to confirm #setup_destroy_cleanup actually keeps it bounded
+    # rather than growing across a create/destroy loop. A key absent from
+    # the result means empty, not present-as-zero.
+    def debug_info : Hash(Symbol, Int32)
+      info = {} of Symbol => Int32
+      info[:widget_types] = @widget_types_by_path.size unless @widget_types_by_path.empty?
+      info
+    end
+
     # Resolves a Crystal value to the plain string #raw_command passes as
     # one tcl_invoke argv element - no Tcl quoting of any kind, since
     # tcl_invoke (Tcl_EvalObjv) never re-parses its arguments.
@@ -966,6 +980,11 @@ module Teek
         path = args[0]
         callback_registry.forget_all_for_path(path)
         @destroy_observers.each(&.call(path))
+        # Unconditional, unlike @widgets below - #record_widget_type writes
+        # this one unconditionally too (not gated by track_widgets:), so a
+        # user who opted out of widget tracking still pays for the write
+        # and needs the matching delete.
+        @widget_types_by_path.delete(path)
         next if path.starts_with?(".teek_debug")
         @widgets.delete(path) if @track_widgets
       end

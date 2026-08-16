@@ -1123,6 +1123,33 @@ tk_test "should remove destroyed widgets from app.widgets" do |app|
   raise ".b_untrack should be gone" if app.widgets[".b_untrack"]?
 end
 
+tk_test "App#debug_info's :widget_types stays bounded across a create/destroy loop" do |app|
+  baseline = app.debug_info[:widget_types]? || 0
+
+  20.times do |i|
+    app.destroy(app.create_widget(:button, ".wt_loop#{i}", text: "x"))
+  end
+
+  after = app.debug_info[:widget_types]? || 0
+  raise "expected :widget_types back to baseline (#{baseline}), got #{after} - " \
+        "@widget_types_by_path leaked entries for destroyed widgets" unless after == baseline
+end
+
+# @widget_types_by_path is written unconditionally by #record_widget_type
+# (unlike #widgets, which #setup_widget_tracking only populates when
+# track_widgets: is on), so its cleanup on destroy has to be unconditional
+# too - a user who opts out of widget tracking still pays for the write.
+tk_test "App#debug_info's :widget_types is tracked and released even with track_widgets disabled" do |_app|
+  app2 = Teek::App.new(track_widgets: false)
+  baseline = app2.debug_info[:widget_types]? || 0
+
+  app2.command(:button, ".wt_no_track", text: "hello")
+  raise "expected :widget_types to grow even with track_widgets: false" unless (app2.debug_info[:widget_types]? || 0) == baseline + 1
+
+  app2.destroy(".wt_no_track")
+  raise "expected :widget_types back to baseline after destroy" unless (app2.debug_info[:widget_types]? || 0) == baseline
+end
+
 # A second App in the same process is safe here (no mainloop/timer
 # reliance on it - just tcl_eval/destroy) - Tk_Init is per-interpreter,
 # not a hard once-per-process limit (verified directly), though the
