@@ -11,6 +11,11 @@ require "../../src/tryst/ui"
 # Session#realize always constructs a brand-new Tryst::App.
 
 session = Tryst::UI.app(title: "scrollable fixture") do |builder|
+  # Empty container for case 16's own repeated create/destroy - kept
+  # separate from :scroller so that case's cleanup doesn't interact with
+  # the fixture's main scrollable above.
+  builder.panel(:pool)
+
   builder.scrollable(:scroller) do |region|
     # Deliberately nested one level deeper than the viewport, so the
     # widget under the pointer is NOT the canvas and not the viewport
@@ -103,6 +108,7 @@ raise "scrollable: expected TLabel among #{tags}" unless tags.includes?("TLabel"
 unless tags.last.starts_with?("TrystScrollRegion")
   raise "scrollable: expected the scroll tag appended last, got #{tags}"
 end
+wheel_tag = tags.last
 
 # Case 9: the handle addresses the outer frame - the whole region is what
 # a caller means by "the scrollable", not the canvas inside it.
@@ -162,6 +168,57 @@ app.update
 bindings_after = session.debug_info[:event_bindings]? || 0
 unless bindings_after.zero?
   raise "scrollable: expected every binding released, #{bindings_before} became #{bindings_after}"
+end
+
+# Case 15: the wheel-region bindtag's own Tcl-side bindings are cleared
+# too, not just the Crystal-side callback ids case 14 already checked.
+# `bind all <Destroy>` only ever released the ids via
+# CallbackRegistry#forget_all_for_path - wheel_tag itself isn't a
+# window and never fires its own <Destroy>, so without a fix, `bind
+# wheel_tag <event>` would still report the (now-dangling) script here.
+["<MouseWheel>", "<Button-4>", "<Button-5>"].each do |event|
+  script = app.command(:bind, wheel_tag, event)
+  unless script.empty?
+    raise "scrollable: expected #{wheel_tag} #{event} cleared on destroy, got #{script.inspect}"
+  end
+end
+
+# Case 16: the same guarantee holds across many distinct scrollables,
+# not just this one - each gets its own tag (derived from its own
+# canvas path), so nothing about a single case above rules out the
+# table still growing by one new tag's worth of dead entries per
+# create/destroy cycle. Matches the bug's own "1,000 tab opens" failure
+# scenario: repeat build-then-destroy and check every prior tag stays
+# clear, not just the last one.
+seen_tags = [] of String
+5.times do |i|
+  name = :"loop_scroll_#{i}"
+  session.add(:pool) do |pool|
+    pool.scrollable(name, &.label(text: "content #{i}"))
+  end
+  app.update
+
+  loop_path = session[name].path
+  loop_canvas = "#{loop_path}.canvas"
+  loop_tags = app.split_list(app.command(:bindtags, loop_canvas))
+  loop_tag = loop_tags.last
+  unless loop_tag.starts_with?("TrystScrollRegion")
+    raise "scrollable: expected a fresh scroll tag on iteration #{i}, got #{loop_tags}"
+  end
+  seen_tags << loop_tag
+
+  app.destroy(loop_path)
+  app.update
+
+  seen_tags.each do |prior_tag|
+    script = app.command(:bind, prior_tag, "<MouseWheel>")
+    unless script.empty?
+      raise "scrollable: expected #{prior_tag} cleared after iteration #{i}, got #{script.inspect}"
+    end
+  end
+end
+unless seen_tags.uniq.size == seen_tags.size
+  raise "scrollable: expected a distinct tag per iteration, got #{seen_tags}"
 end
 
 app.destroy

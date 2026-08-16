@@ -407,10 +407,12 @@ module Tryst
           child.each { |descendant| descendant.realized.try { |realized| add_bindtag(realized.path, tag) } }
         end
 
-        wire_wheel_axis(canvas_path, tag, "yview", "") if y
+        event_strs = [] of String
+        event_strs.concat(wire_wheel_axis(canvas_path, tag, "yview", "")) if y
         # Shift+wheel is the conventional "scroll sideways" gesture, and
         # the only wheel most mice have.
-        wire_wheel_axis(canvas_path, tag, "xview", "Shift-") if x
+        event_strs.concat(wire_wheel_axis(canvas_path, tag, "xview", "Shift-")) if x
+        release_wheel_bindings_on_destroy(canvas_path, tag, event_strs)
         tag
       end
 
@@ -425,16 +427,47 @@ module Tryst
       # and every other one the app ever builds. The canvas is the honest
       # owner: the tag is derived from its path and means nothing without
       # it. See App#bind.
+      # Returns the event strings it bound, so #wire_wheel_scroll can hand
+      # the full set (both axes) to #release_wheel_bindings_on_destroy in
+      # one pass.
       private def wire_wheel_axis(canvas_path : String, tag : String,
-                                  view_command : String, modifier : String) : Nil
-        @app.bind(tag, "<#{modifier}MouseWheel>", :mouse_wheel, owner: canvas_path) do |values, _signal|
+                                  view_command : String, modifier : String) : Array(String)
+        mouse_wheel = "<#{modifier}MouseWheel>"
+        button_4 = "<#{modifier}Button-4>"
+        button_5 = "<#{modifier}Button-5>"
+
+        @app.bind(tag, mouse_wheel, :mouse_wheel, owner: canvas_path) do |values, _signal|
           scroll_wheel(canvas_path, view_command, wheel_units(values[0]))
         end
-        @app.bind(tag, "<#{modifier}Button-4>", owner: canvas_path) do |_values, _signal|
+        @app.bind(tag, button_4, owner: canvas_path) do |_values, _signal|
           scroll_wheel(canvas_path, view_command, -1)
         end
-        @app.bind(tag, "<#{modifier}Button-5>", owner: canvas_path) do |_values, _signal|
+        @app.bind(tag, button_5, owner: canvas_path) do |_values, _signal|
           scroll_wheel(canvas_path, view_command, 1)
+        end
+
+        [mouse_wheel, button_4, button_5]
+      end
+
+      # owner: on the binds above releases their Crystal-side callback ids
+      # once canvas_path is destroyed, but the Tcl-side `bind <tag> <event>
+      # <script>` entries themselves are a different piece of state - they
+      # live on `tag`, a synthetic bindtag with no window of its own, so
+      # they never fire a <Destroy> of their own and Tk never garbage-
+      # collects an orphaned tag's bindings on its own. Left alone, that
+      # table grows by 3-6 entries (both axes' worth) every time a
+      # scrollable is created and destroyed, forever.
+      #
+      # Hooking canvas_path's own real <Destroy> is what actually clears
+      # them - `bind <tag> <event> {}` for each event wired, mirroring
+      # #unbind. This bind's own callback id is released the ordinary way
+      # (owner: canvas_path, same ordinary case as any other widget-owned
+      # binding), so nothing here leaks in turn.
+      private def release_wheel_bindings_on_destroy(canvas_path : String, tag : String,
+                                                    event_strs : Array(String)) : Nil
+        @app.bind(canvas_path, "<Destroy>", owner: canvas_path) do |_values, _signal|
+          event_strs.each { |event_str| @app.command(:bind, ([tag, event_str, ""] of TclArgValue), EMPTY_KWARGS) }
+          nil
         end
       end
 
