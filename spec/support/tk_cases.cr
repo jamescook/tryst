@@ -2940,6 +2940,53 @@ tk_test "on_message and send_message work bidirectionally" do |app|
   raise "expected 'echo:hello' in #{received_by_main.inspect}" unless received_by_main.includes?("echo:hello")
 end
 
+# Each of the three builder methods starts the task on its own (see
+# #maybe_start) - one test per method, wiring up ONLY that one callback,
+# so a regression in any single builder's own maybe_start call can't hide
+# behind one of the other two also being present.
+tk_test "BackgroundWork#on_progress alone starts the task" do |app|
+  Tryst::BackgroundWork.drop_intermediate = false
+  results = [] of Int32
+
+  Tryst::BackgroundWork(Int32, Int32).new(app, 5) do |ctx, count|
+    ctx.yield(count * 2)
+  end.on_progress do |result|
+    results << result
+  end
+
+  app.interp.wait_until(2.seconds) { results.includes?(10) }
+  Tryst::BackgroundWork.drop_intermediate = true
+
+  raise "expected on_progress alone to start the task, got #{results.inspect}" unless results.includes?(10)
+end
+
+tk_test "BackgroundWork#on_done alone starts the task" do |app|
+  done = false
+
+  Tryst::BackgroundWork(Nil, Symbol).new(app, nil) do |_ctx, _data|
+  end.on_done do
+    done = true
+  end
+
+  app.interp.wait_until(2.seconds) { done }
+
+  raise "expected on_done alone to start the task" unless done
+end
+
+tk_test "BackgroundWork#on_message alone starts the task and delivers messages" do |app|
+  received = [] of String
+
+  Tryst::BackgroundWork(Nil, Symbol).new(app, nil) do |ctx, _data|
+    ctx.send_message("hello")
+  end.on_message do |msg|
+    received << msg
+  end
+
+  app.interp.wait_until(2.seconds) { received.includes?("hello") }
+
+  raise "expected on_message alone to start the task and deliver messages, got #{received.inspect}" unless received.includes?("hello")
+end
+
 tk_test "TaskContext#check_message returns nil when empty" do |app|
   Tryst::BackgroundWork.drop_intermediate = false
   results = [] of String

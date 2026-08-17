@@ -211,6 +211,7 @@ module Tryst
     # Called when the worker sends a non-result message back.
     def on_message(&block : String -> Nil) : self
       @callback_message = block
+      maybe_start
       self
     end
 
