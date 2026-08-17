@@ -1,12 +1,9 @@
 module Tryst
   module UI
     # One typed event, Qt/GObject style, and the only public event
-    # mechanism this DSL offers - there used to be a second, a
-    # Symbol-keyed EventBus exposed as Session#on/#emit/#off, but two
-    # public ways to do one thing was a permanent which-do-I-use tax with
-    # nothing to show for it, so that surface is gone. EventBus itself
-    # lives on internally (see its own doc comment) for Document's
-    # build-time hooks - nothing outside Document should reach for it.
+    # mechanism this DSL offers. EventBus lives on internally (see its own
+    # doc comment) for Document's build-time hooks - nothing outside
+    # Document should reach for it.
     #
     #   file_saved = Tryst::UI::Signal(String, Int64).new
     #   file_saved.connect { |path, bytes| status.value = "Saved #{path} (#{bytes} bytes)" }
