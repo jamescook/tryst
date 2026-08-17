@@ -374,6 +374,24 @@ describe Tryst::UI::Handle do
     document.find(:box).should be_nil
   end
 
+  # destroy! used to release the node's NAME (#unregister) but never its
+  # claimed Tk path segment, so a subtree destroyed and rebuilt under the
+  # same name kept drifting to a new disambiguated path (.box, .box#2,
+  # .box#3, ...) instead of reclaiming .box every time.
+  it "destroy!(defer: false) releases the node's claimed path segment" do
+    app = FakeApp.new
+    document = Tryst::UI::Document.new
+    node = document.create(type: :panel, name: :box)
+    document.root.add_child(node)
+    node.claimed_segment = {".", document.claim_path_segment(".", "box")}
+    node.realized = Tryst::UI::RealizedNode.new(app: app, path: ".box")
+    handle = Tryst::UI::Handle.new(node)
+
+    handle.destroy!(defer: false)
+
+    document.claim_path_segment(".", "box").should eq("box")
+  end
+
   it "destroy!(defer: true) queues an after_idle teardown instead of running immediately" do
     app = FakeApp.new
     node = Tryst::UI::Node.new(type: :panel, name: :box)

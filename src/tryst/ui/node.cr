@@ -95,6 +95,15 @@ module Tryst
       property key : String?
       getter realized : RealizedNode?
 
+      # The (parent_path, segment) pair Document#claim_path_segment
+      # returned for this node's own real Tk path segment, if any - set
+      # by Realizer#allocate_path right after claiming. nil for a node
+      # that never claimed one (a structural node or :root, which reuse
+      # their parent's exact path, or a node that's never been realized
+      # at all). Read and cleared by Document#release_path_segment on
+      # destroy - see its own comment for why that matters.
+      property claimed_segment : {String, String}? = nil
+
       # Whether this child takes the leftover space on its parent flow
       # container's main axis - the grow: option, and what ui.spacer is.
       property? grow = false

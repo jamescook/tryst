@@ -191,8 +191,13 @@ end
 # scenario: repeat build-then-destroy and check every prior tag stays
 # clear, not just the last one.
 seen_tags = [] of String
+# Symbol literals aren't string-interpolated in Crystal (:"loop_scroll_#{i}"
+# would produce the literal symbol :"loop_scroll_\#{i}", the same one every
+# iteration) - a fixed array of distinct names stands in for what a real
+# app would build from actually-dynamic data (a document id, say).
+loop_names = [:loop_scroll_0, :loop_scroll_1, :loop_scroll_2, :loop_scroll_3, :loop_scroll_4]
 5.times do |i|
-  name = :"loop_scroll_#{i}"
+  name = loop_names[i]
   session.add(:pool) do |pool|
     pool.scrollable(name, &.label(text: "content #{i}"))
   end

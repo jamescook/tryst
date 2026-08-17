@@ -604,14 +604,19 @@ module Tryst
       end
 
       # Removes this node (and every named descendant of its own
-      # subtree) from Document's name index, then removes the node
-      # itself from its own parent's children. Both steps are safe to
-      # run even if @node.document is nil (a raw Node.new built directly,
-      # mostly in headless tests) or @node.parent is nil (already
-      # unlinked, or never attached).
+      # subtree) from Document's name index and releases whatever real Tk
+      # path segment it claimed, then removes the node itself from its
+      # own parent's children - so a later rebuild of the same subtree
+      # gets both its name and its exact path segment back. Both steps
+      # are safe to run even if @node.document is nil (a raw Node.new
+      # built directly, mostly in headless tests) or @node.parent is nil
+      # (already unlinked, or never attached).
       private def unlink! : Nil
         if document = @node.document
-          @node.each { |descendant| document.unregister(descendant) }
+          @node.each do |descendant|
+            document.unregister(descendant)
+            document.release_path_segment(descendant)
+          end
         end
         @node.parent.try(&.remove_child(@node))
       end

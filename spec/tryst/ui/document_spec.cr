@@ -245,6 +245,52 @@ describe Tryst::UI::Document do
     document.claim_path_segment(".main", "save").should eq("save")
   end
 
+  it "release_path_segment frees a claimed segment for reuse" do
+    document = Tryst::UI::Document.new
+    node = document.create(type: :button, name: :save)
+    node.claimed_segment = {".list", document.claim_path_segment(".list", "save")}
+
+    document.release_path_segment(node)
+
+    document.claim_path_segment(".list", "save").should eq("save")
+  end
+
+  it "release_path_segment clears the node's own claimed_segment" do
+    document = Tryst::UI::Document.new
+    node = document.create(type: :button, name: :save)
+    node.claimed_segment = {".list", document.claim_path_segment(".list", "save")}
+
+    document.release_path_segment(node)
+
+    node.claimed_segment.should be_nil
+  end
+
+  it "release_path_segment is a safe no-op for a node that never claimed a segment" do
+    document = Tryst::UI::Document.new
+    node = document.create(type: :button, name: :save)
+
+    document.release_path_segment(node)
+  end
+
+  it "release_path_segment does not disturb a still-live sibling under the same base segment" do
+    document = Tryst::UI::Document.new
+    # Two distinct scopes, same name - the "reusable component mounted
+    # twice under the same real parent" case #claim_path_segment's own
+    # comment describes; Document's separate name index (keyed on
+    # {scope, name}) allows this even though the path segment collides.
+    first = document.create(type: :button, name: :row, scope: Tryst::UI::Scope.new)
+    first.claimed_segment = {".list", document.claim_path_segment(".list", "row")}
+    second = document.create(type: :button, name: :row, scope: Tryst::UI::Scope.new)
+    second.claimed_segment = {".list", document.claim_path_segment(".list", "row")}
+
+    document.release_path_segment(first)
+
+    # first's plain "row" is free again, but second's disambiguated
+    # "row#2" is still claimed - a third claimant gets "row" back, not a
+    # collision with second.
+    document.claim_path_segment(".list", "row").should eq("row")
+  end
+
   it "find_by_path returns the node whose realized path matches" do
     document = Tryst::UI::Document.new
     node = document.create(type: :button, name: :save)
@@ -337,6 +383,41 @@ describe Tryst::UI::Document do
 
     document.node_destroyed(".save")
     document.node_destroyed(".save")
+  end
+
+  it "node_destroyed releases the node's claimed path segment" do
+    document = Tryst::UI::Document.new
+    parent = document.create(type: :panel, name: :host)
+    document.root.add_child(parent)
+    node = document.create(type: :button, name: :save)
+    parent.add_child(node)
+    node.claimed_segment = {".host", document.claim_path_segment(".host", "save")}
+    node.realized = Tryst::UI::RealizedNode.new(app: nil, path: ".host.save")
+
+    document.node_destroyed(".host.save")
+
+    document.claim_path_segment(".host", "save").should eq("save")
+  end
+
+  # Without releasing the segment claim on destroy, a repeatedly rebuilt
+  # named subtree drifts (.save, .save#2, .save#3, ...) instead of
+  # landing back on the same path, and the claim table grows without
+  # bound.
+  it "destroying and rebuilding a named subtree N times reuses the same Tk path every time" do
+    document = Tryst::UI::Document.new
+    parent = document.create(type: :panel, name: :host)
+    document.root.add_child(parent)
+
+    5.times do
+      node = document.create(type: :button, name: :save)
+      parent.add_child(node)
+      segment = document.claim_path_segment(".host", "save")
+      segment.should eq("save")
+      node.claimed_segment = {".host", segment}
+      node.realized = Tryst::UI::RealizedNode.new(app: nil, path: ".host.save")
+
+      document.node_destroyed(".host.save")
+    end
   end
 
   it "claim_path_segment persists across separate calls, not just one realizer instance" do

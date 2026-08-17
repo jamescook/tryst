@@ -21,7 +21,7 @@ module Tryst
         @index = {} of {Scope, Symbol} => Node
         @path_index = {} of String => Node
         @next_auto_key = 0
-        @used_segments = {} of String => Hash(String, Int32)
+        @used_segments = {} of String => Set(String)
         @events = EventBus(Node | String).new
         # Built with document: nil, then patched immediately after -
         # passing self to Node.new directly (document: self) here doesn't
@@ -158,6 +158,7 @@ module Tryst
         node.vars.each(&.unrealize)
         node.realized = nil
         unregister(node)
+        release_path_segment(node)
         node.parent.try(&.remove_child(node))
       end
 
@@ -170,11 +171,46 @@ module Tryst
       # (e.g. a reusable row/screen, realized more than once - see
       # WidgetDSL#component) get distinct, disambiguated segments; the
       # common, non-colliding case keeps its plain segment unchanged.
+      #
+      # Tracked as the SET of currently-claimed segments per parent, not a
+      # monotonic counter - #release_path_segment frees one back into this
+      # set on destroy, and picking the lowest still-unclaimed "#N" suffix
+      # (rather than always incrementing) is what makes that safe however
+      # far out of order claims are released, not just LIFO.
       def claim_path_segment(parent_path : String, segment : String) : String
-        seen = (@used_segments[parent_path] ||= {} of String => Int32)
-        count = seen.fetch(segment, 0)
-        seen[segment] = count + 1
-        count.zero? ? segment : "#{segment}##{count + 1}"
+        claimed = (@used_segments[parent_path] ||= Set(String).new)
+        candidate = segment
+        n = 2
+        while claimed.includes?(candidate)
+          candidate = "#{segment}##{n}"
+          n += 1
+        end
+        claimed << candidate
+        candidate
+      end
+
+      # @api private - the release half of #claim_path_segment. Frees the
+      # segment a now-dead node claimed back into its parent's pool, so a
+      # subtree destroyed and rebuilt under the same name gets the exact
+      # same Tk path back instead of the claim table growing by one entry
+      # every cycle forever (see #claim_path_segment's own comment on the
+      # 1,000-tab-opens failure mode this exists to close off).
+      #
+      # Called from both destroy paths that ever remove a node -
+      # #node_destroyed (an implicit Tk-driven destroy) and Handle#unlink!
+      # (an explicit Handle#destroy!, which unregisters synchronously
+      # ahead of the <Destroy> event #node_destroyed would otherwise
+      # handle for the same node - see Node#realized= and
+      # #node_destroyed's own comment). A no-op for a node that never
+      # claimed a segment (structural/:root, or one that was never
+      # realized at all).
+      def release_path_segment(node : Node) : Nil
+        claim = node.claimed_segment
+        return unless claim
+
+        parent_path, segment = claim
+        @used_segments[parent_path]?.try(&.delete(segment))
+        node.claimed_segment = nil
       end
 
       # Removes node from the name index, scoped exactly like #register

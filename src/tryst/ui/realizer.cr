@@ -783,6 +783,7 @@ module Tryst
         # across separate realize_subtree calls (each gets its own
         # Realizer instance, e.g. one per Session#add call).
         segment = @document.claim_path_segment(parent_path, node.name ? node.name.to_s : node.key.to_s)
+        node.claimed_segment = {parent_path, segment}
         parent_path == "." ? ".#{segment}" : "#{parent_path}.#{segment}"
       end
     end
