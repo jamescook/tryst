@@ -165,6 +165,63 @@ module Tryst
       @interp.tcl_invoke(args)
     end
 
+    # Add a directory to Tcl's package search path (::auto_path). Goes
+    # through #tcl_invoke, not the string-interpolated `lappend
+    # ::auto_path {#{path}}` ruby-tryst builds - path is exactly the kind
+    # of externally-supplied value #tcl_invoke exists to pass safely.
+    def add_package_path(path : String) : Nil
+      tcl_invoke("lappend", "::auto_path", path)
+    end
+
+    # Load a Tcl package into this interpreter. Raises TclError (with a
+    # clearer message naming the package) if it isn't found on
+    # ::auto_path - see #add_package_path.
+    def require_package(name : String, version : String? = nil) : String
+      if version
+        tcl_invoke("package", "require", name, version)
+      else
+        tcl_invoke("package", "require", name)
+      end
+    rescue ex : TclError
+      raise TclError.new("Package '#{name}' not found. Ensure it is installed and on Tcl's auto_path. (#{ex.message})",
+        errorinfo: ex.errorinfo, errorcode: ex.errorcode)
+    end
+
+    # Every package this interpreter currently knows about - scans
+    # ::auto_path for package indexes first (see #scan_packages), so a
+    # package nothing has required yet still shows up.
+    def package_names : Array(String)
+      scan_packages
+      split_list(tcl_invoke("package", "names"))
+    end
+
+    # Whether a package is already loaded (`package require`d, not just
+    # discoverable on ::auto_path) in this interpreter.
+    def package_present?(name : String) : Bool
+      tcl_invoke("package", "present", name)
+      true
+    rescue TclError
+      false
+    end
+
+    # Every version of a package available on ::auto_path - scans first,
+    # same as #package_names.
+    def package_versions(name : String) : Array(String)
+      scan_packages
+      split_list(tcl_invoke("package", "versions", name))
+    end
+
+    # Forces Tcl to (re-)scan ::auto_path for pkgIndex.tcl files, which
+    # `package names`/`package versions` otherwise only reflect lazily.
+    # Requiring a package that can't possibly exist is the standard Tcl
+    # idiom for this - the `catch` discards the resulting error, since
+    # only the scan side effect (Tcl's package unknown handler walking
+    # every directory on ::auto_path) is wanted. Static script, no
+    # interpolation, so #tcl_eval (not #tcl_invoke) is the right tool.
+    private def scan_packages : Nil
+      tcl_eval("catch {package require __tryst_scan__}")
+    end
+
     # Set a Tcl variable. Useful for widget textvariable and variable
     # options. Goes through Tcl_SetVar directly (no re-parsing), so the
     # value never needs escaping - braces, backslashes, $, [, whatever,
