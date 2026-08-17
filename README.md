@@ -28,7 +28,12 @@ end.run
 
 - Crystal >= 1.21.0
 - Tcl/Tk 8.6 (preinstalled on macOS; `apt install tcl-dev tk-dev` or
-  equivalent on Linux)
+  equivalent on Linux; on Windows, install both Crystal and Tcl/Tk via
+  [MSYS2](https://www.msys2.org/) - from a **UCRT64** MSYS2 shell:
+  `pacman -S mingw-w64-ucrt-x86_64-crystal mingw-w64-ucrt-x86_64-tcl mingw-w64-ucrt-x86_64-tk mingw-w64-ucrt-x86_64-pkgconf`,
+  then make sure that environment's `bin/` is on `PATH` when running
+  `crystal build`/`crystal run`. MSYS2 currently packages Tcl/Tk 8.6 only,
+  not 9.x.)
 
 ## Installation
 

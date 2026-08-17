@@ -1,5 +1,6 @@
 require "./event_source"
 require "./notifier"
+require "./tcltk_link_windows"
 
 # Deliberately skips Tcl/Tk's stub-library mechanism. Stubs exist to let one
 # compiled artifact run against multiple Tcl/Tk runtime versions, but that
@@ -41,35 +42,37 @@ require "./notifier"
 # -Wl,-rpath at all and crashes trying to dlopen the literal string as a
 # path, so it gets the plain flags instead and relies on
 # DYLD_LIBRARY_PATH/LD_LIBRARY_PATH being set in the environment instead.
-{% if env("TCL_VERSION") == "9" %}
-  {% if flag?(:interpreted) %}
-    @[Link(ldflags: "`
-      if command -v pkg-config >/dev/null && pkg-config --exists tcl9.0 tk9.0 2>/dev/null; then
-        pkg-config --libs tcl9.0 tk9.0
-      elif command -v pkg-config >/dev/null && pkg-config --exists tcl tk 2>/dev/null; then
-        pkg-config --libs tcl tk
-      else
-        p=$(brew --prefix tcl-tk@9 2>/dev/null || brew --prefix tcl-tk 2>/dev/null)
-        if [ -n \"$p\" ]; then echo -L$p/lib -ltcl9.0 -ltcl9tk9.0; else echo -ltcl9.0 -ltcl9tk9.0; fi
-      fi
-    `")]
+{% unless flag?(:windows) %}
+  {% if env("TCL_VERSION") == "9" %}
+    {% if flag?(:interpreted) %}
+      @[Link(ldflags: "`
+        if command -v pkg-config >/dev/null && pkg-config --exists tcl9.0 tk9.0 2>/dev/null; then
+          pkg-config --libs tcl9.0 tk9.0
+        elif command -v pkg-config >/dev/null && pkg-config --exists tcl tk 2>/dev/null; then
+          pkg-config --libs tcl tk
+        else
+          p=$(brew --prefix tcl-tk@9 2>/dev/null || brew --prefix tcl-tk 2>/dev/null)
+          if [ -n \"$p\" ]; then echo -L$p/lib -ltcl9.0 -ltcl9tk9.0; else echo -ltcl9.0 -ltcl9tk9.0; fi
+        fi
+      `")]
+    {% else %}
+      @[Link(ldflags: "`
+        if command -v pkg-config >/dev/null && pkg-config --exists tcl9.0 tk9.0 2>/dev/null; then
+          pkg-config --libs tcl9.0 tk9.0
+        elif command -v pkg-config >/dev/null && pkg-config --exists tcl tk 2>/dev/null; then
+          pkg-config --libs tcl tk
+        else
+          p=$(brew --prefix tcl-tk@9 2>/dev/null || brew --prefix tcl-tk 2>/dev/null)
+          if [ -n \"$p\" ]; then echo -L$p/lib -Wl,-rpath,$p/lib -ltcl9.0 -ltcl9tk9.0; else echo -ltcl9.0 -ltcl9tk9.0; fi
+        fi
+      `")]
+    {% end %}
   {% else %}
-    @[Link(ldflags: "`
-      if command -v pkg-config >/dev/null && pkg-config --exists tcl9.0 tk9.0 2>/dev/null; then
-        pkg-config --libs tcl9.0 tk9.0
-      elif command -v pkg-config >/dev/null && pkg-config --exists tcl tk 2>/dev/null; then
-        pkg-config --libs tcl tk
-      else
-        p=$(brew --prefix tcl-tk@9 2>/dev/null || brew --prefix tcl-tk 2>/dev/null)
-        if [ -n \"$p\" ]; then echo -L$p/lib -Wl,-rpath,$p/lib -ltcl9.0 -ltcl9tk9.0; else echo -ltcl9.0 -ltcl9tk9.0; fi
-      fi
-    `")]
-  {% end %}
-{% else %}
-  {% if flag?(:interpreted) %}
-    @[Link(ldflags: "`command -v pkg-config >/dev/null && pkg-config --exists tcl8.6 tk8.6 2>/dev/null && pkg-config --libs tcl8.6 tk8.6 || sh -c 'p=$(brew --prefix tcl-tk@8 2>/dev/null) && echo -L$p/lib -ltcl8.6 -ltk8.6 || echo -ltcl8.6 -ltk8.6'`")]
-  {% else %}
-    @[Link(ldflags: "`command -v pkg-config >/dev/null && pkg-config --exists tcl8.6 tk8.6 2>/dev/null && pkg-config --libs tcl8.6 tk8.6 || sh -c 'p=$(brew --prefix tcl-tk@8 2>/dev/null) && echo -L$p/lib -Wl,-rpath,$p/lib -ltcl8.6 -ltk8.6 || echo -ltcl8.6 -ltk8.6'`")]
+    {% if flag?(:interpreted) %}
+      @[Link(ldflags: "`command -v pkg-config >/dev/null && pkg-config --exists tcl8.6 tk8.6 2>/dev/null && pkg-config --libs tcl8.6 tk8.6 || sh -c 'p=$(brew --prefix tcl-tk@8 2>/dev/null) && echo -L$p/lib -ltcl8.6 -ltk8.6 || echo -ltcl8.6 -ltk8.6'`")]
+    {% else %}
+      @[Link(ldflags: "`command -v pkg-config >/dev/null && pkg-config --exists tcl8.6 tk8.6 2>/dev/null && pkg-config --libs tcl8.6 tk8.6 || sh -c 'p=$(brew --prefix tcl-tk@8 2>/dev/null) && echo -L$p/lib -Wl,-rpath,$p/lib -ltcl8.6 -ltk8.6 || echo -ltcl8.6 -ltk8.6'`")]
+    {% end %}
   {% end %}
 {% end %}
 lib LibTcl
@@ -509,8 +512,12 @@ module Tryst
     def initialize
       # Must run before the very first Tcl_CreateInterp call below (which
       # triggers Tcl_InitNotifier internally) - see Tryst::Notifier for why
-      # this only applies on Linux/Windows, not macOS.
-      {% unless flag?(:darwin) %}
+      # this only applies on Linux, not macOS or Windows. (Notifier's own
+      # header comment claims Linux/Windows, but its poll(2)-based
+      # implementation is POSIX-only and was never actually ported to
+      # Windows's Handle-typed fds/WSAPoll - Windows falls back to the same
+      # poll+sleep loop as macOS below in #mainloop instead.)
+      {% unless flag?(:darwin) || flag?(:windows) %}
         Tryst::Notifier.install_once
       {% end %}
 
@@ -757,7 +764,7 @@ module Tryst
     # this loop (unlike #update) never returns on its own for App#mainloop's
     # caller to check between calls.
     def mainloop(on_tick : (-> Nil)? = nil) : Nil
-      {% if flag?(:darwin) %}
+      {% if flag?(:darwin) || flag?(:windows) %}
         while main_windows > 0
           LibTcl.do_one_event(LibTcl::TCL_DONT_WAIT)
           drain_main_queue

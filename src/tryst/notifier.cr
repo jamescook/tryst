@@ -4,6 +4,15 @@
 # does - see Interp#mainloop's doc comment for the bug this fixes (any
 # fiber spawned before #mainloop silently never runs again).
 #
+# Linux only, despite this file's own prose below still saying otherwise in
+# places - the poll(2)-based implementation (LibPoll) and its Int32 fd
+# assumptions never had a real Windows port (Windows pipe/handle fds aren't
+# small POSIX integers, and there's no poll(2)/WSAPoll binding here). The
+# whole file is compiled out on Windows; Interp#mainloop falls back to the
+# same poll+sleep loop it already uses on macOS instead. Fixing this for
+# real means writing a WSAPoll-based poll_once and Handle-typed fd table.
+{% unless flag?(:windows) %}
+#
 # Linux/Windows only. Not installed on macOS at all - Tk's real Aqua
 # notifier (macosx/tkMacOSXNotify.c, macosx/tclMacOSXNotify.c in the real
 # Tcl/Tk source) waits via CFRunLoopRunInMode, Apple's Cocoa run loop; real
@@ -425,3 +434,4 @@ fun tryst_notifier_wait_for_event(time_ptr : LibTcl::Time*) : LibC::Int
     sleep Tryst::Notifier::POLL_INTERVAL
   end
 end
+{% end %}
