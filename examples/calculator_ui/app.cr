@@ -32,7 +32,7 @@ keypad = nil.as(Tryst::UI::Handle?)
 
 session = Tryst::UI.app(title: "Calculator") do |builder|
   display = builder.var(service.display_value)
-  service.on_change { |value| display.value = value }
+  service.on_change.connect { |value| display.value = value }
 
   keypad = builder.grid(gap: 2) do |grid|
     grid.cell(row: 0, col: 0, colspan: 4, sticky: :ew, ipady: 8) do

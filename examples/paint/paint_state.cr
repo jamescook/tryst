@@ -2,11 +2,12 @@
 # vector-level drawing operations (flood fill, spray, freehand strokes).
 # No Tryst::UI reference at all - it drives the canvas through the same
 # raw Tryst::App/Tryst::Widget calls Layer and LayerManager already use,
-# and talks to a view through its own typed EventBus(PaintEvent) rather
-# than reaching into any widget itself. paint_demo.cr subscribes and
+# and talks to a view through its own typed Signal per event rather than
+# reaching into any widget itself. paint_demo.cr connects to each and
 # decides what to draw or enable in response; this file never touches a
-# Handle, a Var, or the DSL tree.
-require "../../src/tryst/ui/event_bus"
+# Handle, a Var, or the DSL tree. Signal itself is plain Crystal (see its
+# own doc comment), so this require doesn't pull Tk in either.
+require "../../src/tryst/ui/signal"
 require "./layer_manager"
 require "./commands"
 
@@ -51,12 +52,15 @@ enum Tool
   end
 end
 
-# Emits (event, payload):
-#   :tool_changed   Tool    - the active tool changed
-#   :color_changed  String  - the active brush color changed (hex)
-#   :layer_changed  String  - the active layer's "[index] Name" label
+# Each Signal fires with its own typed payload - no Array(T) union, no
+# casting back out at the subscriber:
+#   tool_changed   Tool    - the active tool changed
+#   color_changed  String  - the active brush color changed (hex)
+#   layer_changed  String  - the active layer's "[index] Name" label
 class PaintState
-  alias PaintEvent = Tool | String
+  getter tool_changed = Tryst::UI::Signal(Tool).new
+  getter color_changed = Tryst::UI::Signal(String).new
+  getter layer_changed = Tryst::UI::Signal(String).new
 
   MAX_UNDO = 10
 
@@ -72,8 +76,6 @@ class PaintState
 
   def initialize(@app : Tryst::App, @canvas : Tryst::Widget, @layers : LayerManager,
                  @canvas_width : Int32, @canvas_height : Int32)
-    @bus = Tryst::UI::EventBus(PaintEvent).new
-
     @brush_color = "#000000"
     @bg_color_hex = "#FFFFFF"
     @brush_size = 1
@@ -89,10 +91,6 @@ class PaintState
     @current_stroke_items = [] of String
   end
 
-  def on(event : Symbol, &block : Array(PaintEvent) -> Nil) : Proc(Array(PaintEvent), Nil)
-    @bus.on(event, &block)
-  end
-
   def layer_info : String
     layer = @layers.active_layer
     layer ? "[#{@layers.active_index}] #{layer.name}" : ""
@@ -102,12 +100,12 @@ class PaintState
 
   def select_tool(tool : Tool) : Nil
     @current_tool = tool
-    @bus.emit(:tool_changed, tool)
+    tool_changed.emit(tool)
   end
 
   def select_color(color : String) : Nil
     @brush_color = color
-    @bus.emit(:color_changed, color)
+    color_changed.emit(color)
   end
 
   def update_brush_size(value : Int32) : Nil
@@ -216,14 +214,14 @@ class PaintState
 
   def add_layer : Nil
     @layers.add_layer
-    @bus.emit(:layer_changed, layer_info)
+    layer_changed.emit(layer_info)
   end
 
   def delete_layer : Nil
     return if @layers.layers.size <= 1
     @layers.remove_layer(@layers.active_index)
     @layers.refresh_all
-    @bus.emit(:layer_changed, layer_info)
+    layer_changed.emit(layer_info)
   end
 
   def toggle_layer_visibility : Nil
@@ -232,13 +230,13 @@ class PaintState
 
   def flatten_layers : Nil
     @layers.flatten
-    @bus.emit(:layer_changed, layer_info)
+    layer_changed.emit(layer_info)
   end
 
   def select_layer_by_number(index : Int32) : Nil
     return unless index >= 0 && index < @layers.layers.size
     @layers.active_index = index
-    @bus.emit(:layer_changed, layer_info)
+    layer_changed.emit(layer_info)
   end
 
   # -- Color helpers --------------------------------------------------------

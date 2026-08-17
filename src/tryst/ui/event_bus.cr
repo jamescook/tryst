@@ -7,10 +7,14 @@ module Tryst
     # pub/sub between parts of an app, never anything Tk evaluates, so
     # it has no business accepting a Widget or a callback Proc.
     #
-    # A domain object as a payload is the one thing this can't express -
-    # for that, skip Session's bus and hold an EventBus(YourType) of your
-    # own. That's the same shape a real app converges on anyway (see
-    # gemba's Gemba.bus), and it costs one ivar.
+    # A domain object as a payload is the one thing this can't express,
+    # and every subscriber still has to cast its Array(EventValue)
+    # payload back out by hand. For an app's own events, prefer Signal
+    # (./signal.cr) instead - one typed object per event name, connected
+    # to directly, with no Symbol to typo and no cast at the listener.
+    # This bus stays right for the quick-and-loose case: a handful of ad
+    # hoc app-level events (ui.on/ui.emit) where declaring a Signal per
+    # event would be more ceremony than the script is worth.
     alias EventValue = (Bool | Int32 | Int64 | Float64 | String | Symbol |
                         Array(EventValue) | Hash(Symbol, EventValue))?
 

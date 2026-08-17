@@ -2,26 +2,23 @@
 # string.
 #
 # Note what this file does NOT require: there is no `require "tryst"` here,
-# no Tryst::UI, no Tk of any kind. It knows nothing about how it's shown -
-# it just owns a display string and announces when that string changes.
-# Which means it can be exercised in a plain spec with no interpreter
-# running, and the UI file next door is the only thing that has to care
-# about widgets.
+# no Tryst::UI, no Tk of any kind. Signal itself is plain Crystal (see its
+# own doc comment), so requiring it doesn't pull Tk in either - it just
+# owns a display string and announces when that string changes. Which
+# means it can be exercised in a plain spec with no interpreter running,
+# and the UI file next door is the only thing that has to care about
+# widgets.
+require "../../src/tryst/ui/signal"
+
 class CalculatorService
   getter display_value : String = "0"
+  getter on_change = Tryst::UI::Signal(String).new
 
   @pending_op : String?
   @accumulator : Float64?
 
   def initialize
     @reset_on_next = false
-    @listeners = [] of String -> Nil
-  end
-
-  # Subscribe to display changes. The UI uses this to push each new value
-  # into a reactive var; a spec can use it to record what was shown.
-  def on_change(&block : String -> Nil) : Nil
-    @listeners << block
   end
 
   # One entry point for the whole keypad - the caller passes the label of
@@ -116,7 +113,7 @@ class CalculatorService
 
   private def update(value : String) : Nil
     @display_value = value
-    @listeners.each(&.call(value))
+    on_change.emit(value)
   end
 
   private def format_result(val : Float64) : String

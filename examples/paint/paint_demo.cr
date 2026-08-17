@@ -7,12 +7,15 @@
 # and the flood-fill/spray/stroke algorithms, all driven straight through
 # Tryst::App/Tryst::Widget the same way Layer and LayerManager already
 # are. This file is the view - it builds the DSL tree, wires Tk input to
-# PaintState's methods, and reacts to PaintState's own typed EventBus for
-# the handful of things that change from outside a click (the active
-# tool, the active layer's label). Roughly 80% of paint's substance is
-# inherently Tk-shaped (canvas items, photo blits) rather than DSL-shaped;
-# the declarative win here is confined to the chrome - the menu bar, the
-# status bar, the 4x4 color palette, and the tools palette.
+# PaintState's methods, and reacts to PaintState's own Signals for the
+# handful of things that change from outside a click (the active tool,
+# the active layer's label) - see paint_state.cr's own doc comment for
+# why each is its own typed Signal rather than a Symbol-keyed bus.
+# Roughly 80% of paint's substance is inherently Tk-shaped (canvas items,
+# photo blits) rather than DSL-shaped; the declarative win here is
+# confined to the chrome - the menu bar, the status bar, the 4x4 color
+# palette, and the
+# tools palette.
 #
 # What it shows off, beyond paint_demo's own logic:
 # - ui.window for the tools and color palettes (declared once, shown at
@@ -272,9 +275,7 @@ session.on_key("Ctrl-period") { state.toggle_layer_visibility }
 
 # -- React to PaintState's own events ------------------------------------
 
-state.on(:tool_changed) do |args|
-  tool = args.first.as(Tool)
-
+state.tool_changed.connect do |tool|
   tool_buttons.each_value do |button|
     button.configure(background: :white, highlightbackground: :gray, highlightthickness: 2)
   end
@@ -296,10 +297,9 @@ state.on(:tool_changed) do |args|
   end
 end
 
-state.on(:color_changed) { |args| color_indicator.configure(background: args.first.as(String)) }
+state.color_changed.connect { |color| color_indicator.configure(background: color) }
 
-state.on(:layer_changed) do |args|
-  info = args.first.as(String)
+state.layer_changed.connect do |info|
   layer_var.value = info
   app.set_window_title("Paint - #{info}")
 end

@@ -5,6 +5,7 @@ require "./widget_dsl"
 require "./realizer"
 require "./validator"
 require "./event_bus"
+require "./signal"
 require "./timer_handle"
 
 module Tryst
