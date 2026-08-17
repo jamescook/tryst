@@ -126,7 +126,7 @@ Two lanes, picked by what the work is waiting on:
   `BackgroundWork` runs the block on a real second OS thread
   (`Fiber::ExecutionContext::Isolated`) instead, and delivers
   `on_progress`/`on_done`/`on_message`/`on_error` back on the main
-  thread by polling. See `examples/threading_demo.cr`.
+  thread by polling. See `examples/threading_demo_ui/`.
 
 One rule holds in both lanes: Tk/widget/`Var` state, and emitting on a
 session's event bus, may only be touched from the main thread — the main

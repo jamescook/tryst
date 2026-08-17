@@ -57,8 +57,8 @@ class DialogsDemo
     # inside that block's call graph (here, every demo_* method calls
     # #log, which reads @log) as reachable at the point the block is
     # created, even though it's only ever actually invoked later from
-    # Tcl. See examples/threading_demo.cr for the same issue in more
-    # detail.
+    # Tcl. See examples/threading_demo_ui/app.cr's #wire_actions for the
+    # same issue in more detail.
     open_btn.command(:configure, command: @app.callback { demo_choose_open_file })
     save_btn.command(:configure, command: @app.callback { demo_choose_save_file })
     msgbox_btn.command(:configure, command: @app.callback { demo_message_box })

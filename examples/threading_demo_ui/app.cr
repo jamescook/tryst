@@ -1,36 +1,28 @@
 # Interactive example - run with `crystal run examples/threading_demo_ui/app.cr`.
 #
-# threading_demo.cr, rebuilt with the Tryst::UI DSL - worth reading next
-# to that file, the same file hasher written against raw widget creation
-# and manual set_variable calls. Split over two files the same way
-# examples/calculator_ui is:
+# A file hasher over Tryst::BackgroundWork, built on the Tryst::UI DSL:
+# combobox/scale/checkbutton/progressbar/labelframe/separator/scrollbar+
+# text widgets, live progress through a reactive var, and pause/resume/
+# stop. Split over two files the same way examples/calculator_ui is:
 #
 #   app.cr      (this file) - all UI. The widget tree, the wiring between
 #                             HashingService and the reactive vars, and
 #                             the BackgroundWork task that drives them.
 #   service.cr              - all logic: file collection, hashing,
 #                             chunking, and progress/metrics accounting.
-#                             No Tryst reference at all, so it runs in a
-#                             spec with no interpreter - see
-#                             spec/examples/threading_demo_ui_service_spec.cr.
+#                             No Tryst reference at all.
 #
 # The dependency runs one way: this file calls into the service and
 # pushes what it reports into the vars the widgets are bound to; the
 # service never sees a widget, a Var, or a BackgroundWork.
 #
-# Progress is a reactive var (bind:) rather than the original's manual
-# set_variable("::progress", pct) calls - the progressbar just tracks it.
+# Progress goes through a reactive var (bind:) rather than hand-written
+# set_variable calls - the progressbar just tracks it.
 #
 # A class, not a flat script like examples/calculator_ui/app.cr - unlike
 # the calculator, this app has real cross-callback mutable state (pause/
 # stop flags, the live background task, in-flight metrics) that several
-# button handlers all need to read and write, which is what the original
-# threading_demo.cr's own class shape was for in the first place.
-#
-# Kept alongside the original rather than replacing it: threading_demo.cr
-# is the main proof that Fiber::ExecutionContext-based BackgroundWork
-# works for something non-trivial, and having both makes the two styles
-# comparable.
+# button handlers all need to read and write.
 require "../../src/tryst/ui"
 require "./service"
 
@@ -60,11 +52,16 @@ class ThreadingDemoUI
 
   # -command handlers are wired here, once every ivar above (in
   # particular @session) is definitely assigned, rather than inline at
-  # widget-creation time inside #build - the same Crystal quirk
-  # threading_demo.cr's own #initialize documents: a &block captured as
-  # a Proc makes the compiler treat any instance-variable read inside
-  # its call graph as reachable at the point the block is CREATED, even
-  # though #on_action only ever invokes it later, from Tcl.
+  # widget-creation time inside #build. A real Crystal quirk, confirmed
+  # directly: a &block parameter captured-and-stored as a Proc (Handle
+  # #on_action's shape) makes the compiler conservatively treat any
+  # instance-variable read inside that block's call graph as reachable
+  # at the point the block is CREATED, even though it's only ever
+  # actually invoked later, from Tcl - so #start_hashing/#toggle_pause/
+  # #reset reading @session from inside these blocks would otherwise be
+  # flagged as reading it before #build's return value assigns it.
+  # Wiring after that assignment, rather than inline inside #build,
+  # satisfies the check with no ivar weakened to nilable.
   private def wire_actions : Nil
     @session[:start_btn].on_action { start_hashing }
     @session[:pause_btn].on_action { toggle_pause }

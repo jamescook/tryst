@@ -2,7 +2,7 @@
 #
 # The IO-bound half of this project's two-lane concurrency guidance (see
 # README's Concurrency section; Tryst::BackgroundWork's doc comment
-# covers the CPU-bound half, demonstrated in examples/threading_demo.cr).
+# covers the CPU-bound half, demonstrated in examples/threading_demo_ui/).
 #
 # A plain `spawn` fiber runs in Crystal's default execution context - the
 # SAME OS thread Tk's mainloop runs on. The notifier fix
