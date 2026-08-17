@@ -13,10 +13,9 @@
 # outright, not just left unported.
 #
 # What it demonstrates:
-#   - Splitting game rules from the view over a typed EventBus(YourType)
-#     of its own (see board.cr) - the pattern event_bus.cr's own doc
-#     comment points at, rather than the DSL's built-in EventBus(EventValue)
-#     Session already has.
+#   - Splitting game rules from the view over a typed Signal per event
+#     (see board.cr) - the DSL's own recommended shape for an app's
+#     events (see signal.cr's doc comment).
 #   - A canvas of image items as a game grid, with ONE click binding for
 #     the whole board instead of a callback per cell.
 #   - Loading PNGs and shrinking them with Tk's photo subsampling.
@@ -119,25 +118,25 @@ class Minesweeper
   end
 
   # The board never touches Tk or SDL directly - everything it does is
-  # react to typed events (see board.cr's own doc comment for the full
-  # list). Registered once, up front; #run triggers the first :new_game
+  # react to typed Signals (see board.cr's own doc comment for the full
+  # list). Connected once, up front; #run triggers the first new_game
   # after realize, the same way the old single-class version called
   # new_game explicitly.
   private def wire_board : Nil
-    @board.on(:tile) { |args| tile_changed(args.first.as(Yam::TileChanged)) }
-    @board.on(:face) { |args| @face.configure(text: face_text(args.first.as(Symbol))) }
-    @board.on(:mines) { |args| @mine_var.value = args.first.as(Int32) }
-    @board.on(:timer) { |args| args.first.as(Bool) ? start_timer : stop_timer }
-    @board.on(:new_game) { |_args| new_game }
+    @board.tile_changed.connect { |change| tile_changed(change) }
+    @board.face_changed.connect { |state| @face.configure(text: face_text(state)) }
+    @board.mines_changed.connect { |remaining| @mine_var.value = remaining }
+    @board.timer_toggled.connect { |running| running ? start_timer : stop_timer }
+    @board.new_game.connect { new_game }
 
-    @board.on(:cell_revealed) { |_args| @snd_click.play }
-    @board.on(:area_cleared) { |_args| @snd_sweep.play }
-    @board.on(:flag_toggled) { |_args| @snd_flag.play }
-    @board.on(:mine_hit) { |_args| @snd_explosion.play }
+    @board.cell_revealed.connect { @snd_click.play }
+    @board.area_cleared.connect { @snd_sweep.play }
+    @board.flag_toggled.connect { @snd_flag.play }
+    @board.mine_hit.connect { @snd_explosion.play }
   end
 
   # The tiles and the whole widget tree are declared already; realize
-  # turns them into real Tk, then the board's own :new_game handler
+  # turns them into real Tk, then the board's own new_game handler
   # (wired above, but never yet fired) draws the first board.
   def run : Nil
     app = @session.realize
@@ -228,7 +227,7 @@ class Minesweeper
     end
   end
 
-  # :new_game's handler: stop any running clock, then rebuild the canvas
+  # new_game's handler: stop any running clock, then rebuild the canvas
   # from scratch - the board may have just changed size, and the old
   # items belong to the old grid regardless.
   private def new_game : Nil

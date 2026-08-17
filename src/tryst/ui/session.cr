@@ -4,7 +4,6 @@ require "./document"
 require "./widget_dsl"
 require "./realizer"
 require "./validator"
-require "./event_bus"
 require "./signal"
 require "./timer_handle"
 
@@ -65,7 +64,6 @@ module Tryst
         @stack = [@document.root]
         @app = nil
         @in_add = false
-        @bus = EventBus(EventValue).new
         @timers = [] of QueuedTimer
       end
 
@@ -209,37 +207,6 @@ module Tryst
         raise_unless_realized!
         node = @document.find_by_path(path)
         node ? Handle.new(node) : nil
-      end
-
-      # Subscribe to a named app event. Returns the listener, to pass to
-      # a later #off. Pure Crystal pub/sub - not Tk events, no
-      # interpreter involved, so this works before realize as happily as
-      # after. See EventValue for what a payload can hold.
-      def on(event : Symbol, &block : Array(EventValue) -> Nil) : Proc(Array(EventValue), Nil)
-        @bus.on(event, &block)
-      end
-
-      # Emit a named app event carrying no payload - see EventBus#emit
-      # for why this is a separate overload.
-      #
-      # Main-thread only, like #on/#off - @bus's listener Hash has no
-      # locking. Emit from on_progress/on_done/on_message/on_error or a
-      # plain spawn fiber's body (same thread as mainloop), never from
-      # inside a BackgroundWork work block. See the README's Concurrency
-      # section.
-      def emit(event : Symbol) : Nil
-        @bus.emit(event)
-      end
-
-      # Emit a named app event to every current subscriber, in
-      # subscription order. Main-thread only - see the overload above.
-      def emit(event : Symbol, *args : EventValue) : Nil
-        @bus.emit(event, *args)
-      end
-
-      # Unsubscribe one specific listener - the one #on handed back.
-      def off(event : Symbol, listener : Proc(Array(EventValue), Nil)) : Nil
-        @bus.off(event, listener)
       end
 
       # Run a block every ms milliseconds, and keep doing it until the

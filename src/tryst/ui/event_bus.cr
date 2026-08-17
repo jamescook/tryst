@@ -1,23 +1,16 @@
 module Tryst
   module UI
-    # The payload type Session's own app-level bus (ui.on/ui.emit/ui.off)
-    # traffics in - scalars, plus arrays/hashes of them, which is what a
-    # "something happened, here's the id/label/count" event actually
-    # carries. Deliberately NOT TclArgValue: this bus is in-process
-    # pub/sub between parts of an app, never anything Tk evaluates, so
-    # it has no business accepting a Widget or a callback Proc.
+    # @api private
     #
-    # A domain object as a payload is the one thing this can't express,
-    # and every subscriber still has to cast its Array(EventValue)
-    # payload back out by hand. For an app's own events, prefer Signal
-    # (./signal.cr) instead - one typed object per event name, connected
-    # to directly, with no Symbol to typo and no cast at the listener.
-    # This bus stays right for the quick-and-loose case: a handful of ad
-    # hoc app-level events (ui.on/ui.emit) where declaring a Signal per
-    # event would be more ceremony than the script is worth.
-    alias EventValue = (Bool | Int32 | Int64 | Float64 | String | Symbol |
-                        Array(EventValue) | Hash(Symbol, EventValue))?
-
+    # Internal build-time plumbing for Document (see #subscribe/#notify) -
+    # not a public event mechanism. An app's own events are Signal
+    # (./signal.cr): one typed object per event name, connected to
+    # directly, with a compile-time-checked emit and no Symbol to typo.
+    # EventBus predates Signal and was briefly public itself
+    # (Session#on/#emit/#off); that surface is gone now that Signal
+    # covers what it covered, so nothing outside Document should
+    # construct one of these.
+    #
     # In-process publish/subscribe for decoupled events - not Tk events.
     # Pure Crystal, no Tk/interpreter involved.
     #
@@ -25,12 +18,10 @@ module Tryst
     # forwards arbitrary *args/**kwargs to each subscriber - Ruby doesn't
     # care what they are). Crystal needs every subscriber Proc's parameter
     # types fixed at compile time, so each owner picks its own T: Document
-    # (see #subscribe/#notify) uses one EventBus(Node | String) internally
-    # for its build-time :push/:pop/:append hooks; Session uses an
-    # EventBus(EventValue) for ui.on/ui.emit - a separate instance and a
-    # separate type parameter, never Document's. **kwargs forwarding
-    # itself is dropped entirely - nothing in this port's scope emits any,
-    # and a Proc can't accept them generically the way a Ruby block can.
+    # uses one EventBus(Node | String) internally for its build-time
+    # :push/:pop/:append hooks. **kwargs forwarding itself is dropped
+    # entirely - nothing in this port's scope emits any, and a Proc can't
+    # accept them generically the way a Ruby block can.
     class EventBus(T)
       @listeners = {} of Symbol => Array(Proc(Array(T), Nil))
 

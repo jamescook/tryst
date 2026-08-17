@@ -40,14 +40,12 @@ module Tryst
       # notifies :append; the build stack's own push/pop
       # (WidgetDSL#push_stack/WidgetDSL#pop_stack) notify :push/:pop.
       # Document has no idea what (if anything) is listening, or why -
-      # it's a plain EventBus, same mechanism Session's own public ui.on/
-      # ui.emit will use (with its own, differently-typed EventBus
-      # instance - see EventBus's own doc comment), just private and
-      # scoped to build-time instrumentation instead of app events. With
-      # nothing subscribed (the overwhelmingly common case), #notify costs
-      # one hash lookup into an empty list - not something a normal build
-      # needs to think about. See TreeInspector, the one built-in
-      # subscriber (Phase F).
+      # it's a plain EventBus (see that file's own doc comment - it's
+      # internal plumbing, this is its only caller), scoped to build-time
+      # instrumentation. With nothing subscribed (the overwhelmingly
+      # common case), #notify costs one hash lookup into an empty list -
+      # not something a normal build needs to think about. See
+      # TreeInspector, the one built-in subscriber (Phase F).
       def subscribe(event : Symbol, &block : Array(Node | String) -> Nil) : Proc(Array(Node | String), Nil)
         @events.on(event, &block)
       end

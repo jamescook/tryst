@@ -1,9 +1,12 @@
 module Tryst
   module UI
-    # One typed event, Qt/GObject style - the Crystal-native alternative
-    # to EventBus's Symbol-keyed, Array(EventValue)-payload shape (see
-    # that file's own doc comment for why EventBus stays as the
-    # quick-and-loose option rather than being replaced).
+    # One typed event, Qt/GObject style, and the only public event
+    # mechanism this DSL offers - there used to be a second, a
+    # Symbol-keyed EventBus exposed as Session#on/#emit/#off, but two
+    # public ways to do one thing was a permanent which-do-I-use tax with
+    # nothing to show for it, so that surface is gone. EventBus itself
+    # lives on internally (see its own doc comment) for Document's
+    # build-time hooks - nothing outside Document should reach for it.
     #
     #   file_saved = Tryst::UI::Signal(String, Int64).new
     #   file_saved.connect { |path, bytes| status.value = "Saved #{path} (#{bytes} bytes)" }
@@ -20,9 +23,9 @@ module Tryst
     #     getter row_picked = Signal(Int32).new
     #   end
     #
-    # one declaration per event, plumbed explicitly where EventBus was
-    # ambient. Real ceremony for a 50-line script - EventBus stays right
-    # for that.
+    # one declaration per event, plumbed explicitly. Real ceremony for a
+    # 50-line script, but the only public option now - see the class
+    # comment above for why.
     #
     # *T is a splat, not a single T: Signal(String, Int64) needs its
     # listener block to destructure two named, independently-typed
@@ -35,9 +38,9 @@ module Tryst
     # Only the fully bare `Signal.new`, with no type args at all, fails
     # to compile (T is unconstrained) - the empty parens are required.
     #
-    # #connect/#emit/#disconnect are main-thread-only, same as EventBus:
-    # emitting from inside a BackgroundWork work block corrupts the
-    # listener array rather than raising - emit from on_progress instead.
+    # #connect/#emit/#disconnect are main-thread-only: emitting from
+    # inside a BackgroundWork work block corrupts the listener array
+    # rather than raising - emit from on_progress instead.
     class Signal(*T)
       def initialize
         @listeners = [] of Proc(*T, Nil)
