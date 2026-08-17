@@ -4,7 +4,7 @@ Tcl/Tk bindings for Crystal, with a declarative UI DSL on top.
 
 Tryst builds real desktop apps — native widgets, menus, dialogs, canvases —
 from plain Crystal, compiled to a single binary, with Tcl/Tk as the only
-system dependency. It is a Crystal port of [teek], the Ruby Tcl/Tk binding.
+system dependency.
 
 ```crystal
 require "tryst/ui"
@@ -35,7 +35,7 @@ end.run
 ```yaml
 dependencies:
   tryst:
-    github: jamescook/crystal-teek
+    github: jamescook/tryst
 ```
 
 ## The UI DSL
@@ -151,5 +151,3 @@ Developed and tested on macOS (Aqua) and Linux (X11).
 ## License
 
 MIT
-
-[teek]: https://github.com/jamescook/teek
