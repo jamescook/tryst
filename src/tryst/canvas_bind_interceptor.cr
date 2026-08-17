@@ -40,11 +40,14 @@ module Tryst
     end
 
     # CallbackRegistry's tracked hash is Hash(String, String) - a
-    # (tagOrId, sequence) pair is encoded as a single space-joined key
-    # instead of widening CallbackRegistry's generic shape (already used
-    # by several shipped features) just for this one case; ruby-tryst's
-    # Hash has no such restriction and uses a real 2-element Array as the
-    # key directly.
+    # (tagOrId, sequence) pair is encoded as a single key via Tcl's own
+    # list quoting (Tryst.make_list/.split_list) instead of widening
+    # CallbackRegistry's generic shape (already used by several shipped
+    # features) just for this one case; ruby-tryst's Hash has no such
+    # restriction and uses a real 2-element Array as the key directly. A
+    # plain space-joined key doesn't round-trip for a tag containing a
+    # space - legal, since -tags is itself a Tcl list - which the list
+    # encoding handles the same way it handles any other list element.
     private def self.requery(app : App, path : String, before : Hash(String, String), sub : String?, args : Array(TclArgValue)) : Hash(String, String)
       keys = before.keys.map { |key| decode_key(key) }
       keys << {args[1].to_s, args[2].to_s} if sub == "bind" && args.size >= 4
@@ -70,11 +73,11 @@ module Tryst
     end
 
     private def self.encode_key(tag_or_id : String, seq : String) : String
-      "#{tag_or_id} #{seq}"
+      Tryst.make_list(tag_or_id, seq)
     end
 
     private def self.decode_key(key : String) : {String, String}
-      parts = key.split(' ', 2)
+      parts = Tryst.split_list(key)
       {parts[0], parts[1]? || ""}
     end
   end

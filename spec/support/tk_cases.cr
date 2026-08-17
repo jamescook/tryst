@@ -2125,6 +2125,55 @@ tk_test "destroying a canvas releases all its tracked item/tag binding callbacks
   raise "destroy should release all tracked item and tag binding callbacks" unless app.interp.callback_ids.size == baseline
 end
 
+# A canvas tag is a plain Tcl string - -tags is itself a Tcl list, so a
+# tag containing a space (or any other list-special character) is legal
+# and round-trips through Tk fine. What used to NOT round-trip was this
+# interceptor's own space-joined (tagOrId, sequence) tracking key -
+# CanvasBindInterceptor#decode_key split on the first space, so a tag
+# with a space in it decoded back to the wrong tagOrId/seq pair. That
+# only bites on a SECOND mutating call, once the space-tag's key is
+# already sitting in `before` and requery has to decode it back - the
+# very first bind never round-trips its own key at all (it comes
+# straight from args, not decode_key) - so each case below issues two
+# binds to actually exercise the decode path.
+tk_test "a tag binding containing a space via raw app.command is tracked and released" do |app|
+  app.command(:canvas, ".cvs8")
+  app.command(".cvs8", :create, :rectangle, 0, 0, 50, 50, tags: ["my tag"])
+  other_item = app.command(".cvs8", :create, :rectangle, 60, 0, 110, 50)
+  baseline = app.interp.callback_ids.size
+
+  app.command(".cvs8", :bind, "my tag", "<Button-1>", app.callback { })
+  raise "expected the space-containing tag's binding to be tracked" unless app.interp.callback_ids.size == baseline + 1
+
+  app.command(".cvs8", :bind, other_item, "<Button-1>", app.callback { })
+  unless app.interp.callback_ids.size == baseline + 2
+    raise "expected both bindings tracked after a second mutating call forced a requery"
+  end
+
+  app.destroy(".cvs8")
+
+  raise "destroy should release both tracked bindings" unless app.interp.callback_ids.size == baseline
+end
+
+tk_test "a tag binding containing a colon via raw app.command is tracked and released" do |app|
+  app.command(:canvas, ".cvs9")
+  app.command(".cvs9", :create, :rectangle, 0, 0, 50, 50, tags: "my:tag")
+  other_item = app.command(".cvs9", :create, :rectangle, 60, 0, 110, 50)
+  baseline = app.interp.callback_ids.size
+
+  app.command(".cvs9", :bind, "my:tag", "<Button-1>", app.callback { })
+  raise "expected the colon-containing tag's binding to be tracked" unless app.interp.callback_ids.size == baseline + 1
+
+  app.command(".cvs9", :bind, other_item, "<Button-1>", app.callback { })
+  unless app.interp.callback_ids.size == baseline + 2
+    raise "expected both bindings tracked after a second mutating call forced a requery"
+  end
+
+  app.destroy(".cvs9")
+
+  raise "destroy should release both tracked bindings" unless app.interp.callback_ids.size == baseline
+end
+
 tk_test "set_variable/get_variable round-trip" do |app|
   app.set_variable("myvar", "hello")
   raise "expected 'hello'" unless app.get_variable("myvar") == "hello"
