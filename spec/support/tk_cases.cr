@@ -1517,6 +1517,28 @@ tk_test "command(:bind) folds multiple %-codes into the callback script" do |app
   raise "expected y=17, got #{got_y.inspect}" unless got_y == "17"
 end
 
+tk_test "command's Proc handling only absorbs a real %-code, not any string starting with %" do |app|
+  cb = app.callback { |_values, _signal| }
+
+  # "list" rather than a real Tk subcommand: it accepts any number of
+  # args and hands each one back as its own list element, so this
+  # observes exactly what raw_command_argv built without an unrelated
+  # subcommand's own arity limit getting in the way.
+  result = app.command("list", cb, "%50 discount")
+  parts = app.split_list(result)
+
+  raise "expected 2 argv elements, got #{parts.inspect}" unless parts.size == 2
+  script, trailing = parts
+
+  # Anchored the same way TagBindInterceptor/MenuInterceptor's own
+  # leak-tracking regex is - the whole point of this test is that a
+  # non-code % string can't push extra text past this anchor.
+  unless script.matches?(/\Acrystal_callback \S+\z/)
+    raise "expected a bare 'crystal_callback <id>' script, got #{script.inspect}"
+  end
+  raise "expected \"%50 discount\" passed through untouched, got #{trailing.inspect}" unless trailing == "%50 discount"
+end
+
 tk_test "App#unbind removes a binding" do |app|
   count = 0
 

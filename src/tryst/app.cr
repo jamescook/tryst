@@ -1082,7 +1082,16 @@ module Tryst
         if arg.is_a?(Proc)
           id = register_callback(&arg)
           subs = [] of String
-          while i + 1 < args.size && (next_arg = args[i + 1]).is_a?(String) && next_arg.starts_with?('%')
+          # Only a String matching a real Tk %-code (RAW_SUB_PATTERN, the
+          # same check #bind applies) is absorbed into the callback
+          # script - anything else starting with % (e.g. "%50 discount")
+          # is left as its own ordinary argv element instead of being
+          # silently swallowed into the script string. TagBindInterceptor
+          # and MenuInterceptor both anchor their leak-tracking regex to a
+          # bare "crystal_callback <id>" with nothing after it - a
+          # non-code % string absorbed here would move that id outside
+          # what those regexes match, leaking it.
+          while i + 1 < args.size && (next_arg = args[i + 1]).is_a?(String) && next_arg.matches?(RAW_SUB_PATTERN)
             subs << next_arg
             i += 1
           end
