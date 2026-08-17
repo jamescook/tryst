@@ -7,7 +7,7 @@ require "../../src/tryst/ui/widget_dsl"
 # exists (src/tryst/ui/session.cr); this harness stays useful precisely
 # because it skips constructing a real Tryst::App, so specs built against
 # it stay headless - see the project's own "provisional spec layout"
-# precedent (spec/support/tk_cases.cr's own doc comment) for the general
+# precedent (tk_test_registry.cr's own doc comment) for the general
 # pattern this follows.
 class WidgetDslHarness
   include Tryst::UI::WidgetDSL

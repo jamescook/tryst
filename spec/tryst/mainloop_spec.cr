@@ -31,8 +31,8 @@ describe "Interp#mainloop" do
   # like a GVL, so this specific starvation bug can't occur here
   # regardless of any timer setting - already covered implicitly by the
   # "a Fiber::ExecutionContext::Isolated context executes alongside Tk"
-  # case in spec/support/tk_cases.cr. Skipped rather than ported.
-  pending "background Isolated contexts aren't starved by a blocking mainloop (see the Isolated-context case in tk_cases.cr instead)"
+  # case in spec/support/tk_cases/concurrency.cr. Skipped rather than ported.
+  pending "background Isolated contexts aren't starved by a blocking mainloop (see the Isolated-context case in tk_cases/concurrency.cr instead)"
 
   # ruby-tryst's
   # test_mainloop_blocking_mode_responds_to_a_pending_interrupt_promptly
