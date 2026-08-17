@@ -3075,6 +3075,25 @@ tk_test "TaskContext#check_message returns nil when empty" do |app|
   raise "expected ['none'], got #{results.inspect}" unless results == ["none"]
 end
 
+tk_test "TaskContext#check_pause buffers a String message instead of dropping it, so a later check_message still returns it" do |app|
+  Tryst::BackgroundWork.drop_intermediate = false
+  received = nil
+  done = false
+
+  task = Tryst::BackgroundWork(Nil, String?).new(app, nil) do |ctx, _data|
+    ctx.check_pause
+    ctx.yield(ctx.check_message.as?(String))
+  end
+
+  task.send_message("recalculate")
+  task.on_progress { |msg| received = msg }.on_done { done = true }
+
+  app.interp.wait_until(3.seconds) { done }
+  Tryst::BackgroundWork.drop_intermediate = true
+
+  raise "expected 'recalculate', got #{received.inspect}" unless received == "recalculate"
+end
+
 tk_test "BackgroundWork#stop terminates the worker" do |app|
   progress_count = 0
   done = false

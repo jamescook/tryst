@@ -37,6 +37,7 @@ module Tryst
     def initialize(@output_queue : Channel(BackgroundDone | BackgroundProgress(Result) | BackgroundUserMessage | BackgroundFailure),
                    @message_queue : Channel(BackgroundMessage))
       @paused = false
+      @pending = Deque(String).new
     end
 
     # Yield a result to the main thread.
@@ -49,8 +50,12 @@ module Tryst
     # message, or nil if none. Crystal's select/else (used here) checks
     # emptiness and receives atomically, unlike ruby-tryst's separate
     # #empty?-then-#pop(true) - so there's no equivalent race to rescue
-    # ThreadError for.
+    # ThreadError for. Checks @pending first.
     def check_message : BackgroundMessage?
+      if buffered = @pending.shift?
+        return buffered
+      end
+
       select
       when received = @message_queue.receive
         handle_control_message(received)
@@ -60,8 +65,12 @@ module Tryst
       end
     end
 
-    # Blocking wait for the next message.
+    # Blocking wait for the next message. Checks @pending first.
     def wait_message : BackgroundMessage
+      if buffered = @pending.shift?
+        return buffered
+      end
+
       msg = @message_queue.receive
       handle_control_message(msg)
       msg
@@ -72,19 +81,28 @@ module Tryst
       @output_queue.send(BackgroundUserMessage.new(msg))
     end
 
-    # Check pause state, blocking while paused.
+    # Check pause state, blocking while paused. A String message drained
+    # along the way is buffered onto @pending, not discarded.
     def check_pause : Nil
       loop do
         select
         when msg = @message_queue.receive
-          handle_control_message(msg)
+          buffer_or_handle(msg)
         else
           break
         end
       end
 
       while @paused
-        handle_control_message(@message_queue.receive)
+        buffer_or_handle(@message_queue.receive)
+      end
+    end
+
+    private def buffer_or_handle(msg : BackgroundMessage) : Nil
+      if msg.is_a?(String)
+        @pending << msg
+      else
+        handle_control_message(msg)
       end
     end
 
