@@ -196,6 +196,7 @@ module Tryst
       @callback_progress = nil
       @callback_done = nil
       @callback_message = nil
+      @callback_error = nil
       @started = false
       @done = false
       @paused = false
@@ -229,6 +230,22 @@ module Tryst
     # Called when the worker sends a non-result message back.
     def on_message(&block : String -> Nil) : self
       @callback_message = block
+      maybe_start
+      self
+    end
+
+    # Called when the work block raises. text is "ExceptionClass: message"
+    # plus a trimmed backtrace - the exception object itself never crosses
+    # the thread boundary, so this is the payload, not a Crystal
+    # Exception. #on_done still fires afterward (the worker's rescue sends
+    # BackgroundFailure then BackgroundDone); done? is true either way.
+    # With no handler set, a failure prints to STDERR instead - the
+    # pre-#on_error behavior, unchanged for existing code. A failure that
+    # arrives after #close is silently dropped, same as every other event
+    # #close's drain discards - the caller already asked to tear this
+    # down, not to be told how it ended.
+    def on_error(&block : String -> Nil) : self
+      @callback_error = block
       maybe_start
       self
     end
@@ -453,7 +470,11 @@ module Tryst
         @callback_message.try(&.call(event.value))
         {last_progress, results_this_poll, false}
       in BackgroundFailure
-        STDERR.puts "[Tryst::BackgroundWork] Background work error: #{event.text}"
+        if callback_error = @callback_error
+          callback_error.call(event.text)
+        else
+          STDERR.puts "[Tryst::BackgroundWork] Background work error: #{event.text}"
+        end
         {last_progress, results_this_poll, false}
       end
     end

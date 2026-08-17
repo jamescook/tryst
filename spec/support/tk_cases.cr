@@ -3094,6 +3094,49 @@ tk_test "TaskContext#check_pause buffers a String message instead of dropping it
   raise "expected 'recalculate', got #{received.inspect}" unless received == "recalculate"
 end
 
+tk_test "BackgroundWork#on_error fires with the failure text, and on_done still fires afterward" do |app|
+  error_text = nil
+  done = false
+
+  task = Tryst::BackgroundWork(Nil, Nil).new(app, nil) do |_ctx, _data|
+    raise "boom"
+  end.on_error { |text| error_text = text }
+    .on_done { done = true }
+
+  app.interp.wait_until(3.seconds) { done }
+
+  raise "expected on_done to fire" unless done
+  raise "expected done? true" unless task.done?
+  raise "expected error text mentioning 'boom', got #{error_text.inspect}" unless error_text.try(&.includes?("boom"))
+end
+
+tk_test "BackgroundWork with no on_error handler falls back to STDERR and still completes" do |app|
+  done = false
+
+  task = Tryst::BackgroundWork(Nil, Nil).new(app, nil) do |_ctx, _data|
+    raise "boom"
+  end.on_done { done = true }
+
+  app.interp.wait_until(3.seconds) { done }
+
+  raise "expected on_done to fire even with no on_error handler" unless done
+  raise "expected done? true" unless task.done?
+end
+
+tk_test "BackgroundWork#on_error does not fire for a failure that arrives after #close" do |app|
+  error_fired = false
+
+  task = Tryst::BackgroundWork(Nil, Nil).new(app, nil) do |_ctx, _data|
+    sleep 100.milliseconds
+    raise "too late"
+  end.on_error { |_| error_fired = true }
+
+  task.close
+  app.interp.wait_until(3.seconds) { task.done? }
+
+  raise "expected on_error not to fire for a failure that arrived after #close" if error_fired
+end
+
 tk_test "BackgroundWork#stop terminates the worker" do |app|
   progress_count = 0
   done = false
