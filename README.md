@@ -168,14 +168,15 @@ crystal run examples/button_label_demo.cr    # hello world, no DSL
 crystal run examples/calculator.cr           # calculator against the App layer
 crystal run examples/calculator_ui/app.cr    # same calculator on the UI DSL
 crystal run examples/paint/paint_demo.cr     # layers, canvas, pixel buffers
-crystal run examples/yam/yam.cr              # minesweeper
 ```
 
 ## tryst-sdl
 
 [tryst-sdl](tryst-sdl/) adds SDL3 audio, rendering and gamepad input as a
 separate shard in this repo, so tryst itself never grows an SDL
-dependency. See its own README.
+dependency. See its own README - `examples/yam/` (minesweeper, with sound
+effects) lives there rather than here, since it's the one example that
+needs it.
 
 ## Tests
 

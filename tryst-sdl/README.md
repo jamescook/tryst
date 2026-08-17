@@ -117,13 +117,18 @@ crystal run examples/music.cr           # loop, pause, seek, graceful end, fade 
 crystal run examples/panning.cr         # hard pans, a sweep, and a 3D orbit
 crystal run examples/capture.cr         # record the mix to a WAV
 crystal run examples/theremin.cr        # Tk sliders driving generated audio
+crystal run examples/yam/yam.cr         # minesweeper, with sound effects
 ```
 
 The audio examples make sound — which is the point of them, since the
-specs run on a device-less mixer and never do. They generate the audio
-they need at runtime, so there is nothing to download and no binary
-asset in the repo. `geometry.cr` and `theremin.cr` open a window and
-need a display; the rest are console only.
+specs run on a device-less mixer and never do. Every one but `yam.cr`
+generates the audio it needs at runtime, so there is nothing to download
+and no binary asset in the repo for those. `yam.cr` is the exception: its
+four sound effects and its tile artwork are real committed files (see
+`examples/yam/assets/`), the same way `examples/paint/`'s brush icons are
+in the main tryst shard - some examples are inherently asset-heavy rather
+than proceduralizable. `geometry.cr`, `theremin.cr` and `yam.cr` open a
+window and need a display; the rest are console only.
 
 ## Tests
 
