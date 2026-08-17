@@ -332,7 +332,7 @@ module Tryst
     def self.delete_task(name : String, app : App) : Proc(Nil)
       -> do
         begin
-          app.tcl_eval("catch {image delete #{name}}")
+          app.tcl_invoke("catch", Tryst.make_list("image", "delete", name))
         rescue TclError
         end
         nil
@@ -495,7 +495,7 @@ module Tryst
     def delete : Nil
       return if @deleted
       @deleted = true
-      @app.tcl_eval("image delete #{@name}")
+      @app.tcl_invoke("image", "delete", @name)
     end
 
     # :nodoc: called by the GC, and directly by specs. Enqueues
@@ -510,7 +510,7 @@ module Tryst
 
     # Whether the underlying Tk image is still there.
     def exists? : Bool
-      @app.tcl_eval("image type #{@name}") == "photo"
+      @app.tcl_invoke("image", "type", @name) == "photo"
     rescue TclError
       false
     end

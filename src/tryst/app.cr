@@ -387,7 +387,7 @@ module Tryst
     # Destroy a widget and all its children. widget accepts a Widget, a
     # path String, or the default (the root window).
     def destroy(widget = ".") : Nil
-      tcl_eval("destroy #{widget}")
+      tcl_invoke("destroy", widget.to_s)
     end
 
     # Show a window. Defaults to the root window ("."). window accepts a

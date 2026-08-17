@@ -37,7 +37,7 @@ module Tryst
 
     def self.live_command_ids(app : App, path : String) : Hash(String, String)
       app.ensure_tcl_helper(:tag_live_commands) { LIVE_COMMANDS_TCL_PROC }
-      raw = app.tcl_eval("::tryst_tag_live_commands #{path}")
+      raw = app.tcl_invoke("::tryst_tag_live_commands", path)
 
       ids = {} of String => String
       app.split_list(raw).each do |cmd|

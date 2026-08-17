@@ -803,10 +803,10 @@ module Tryst
     # "-key value" pairs (e.g. x: 10, y: 10 for a mouse event's
     # coordinates).
     def simulate_event(path : String, event : String, **options) : Nil
-      toplevel = tcl_eval("winfo toplevel #{path}")
-      tcl_eval("wm deiconify #{toplevel}")
+      toplevel = tcl_invoke("winfo", "toplevel", path)
+      tcl_invoke("wm", "deiconify", toplevel)
       tcl_eval("update")
-      tcl_eval("focus -force #{path}")
+      tcl_invoke("focus", "-force", path)
       tcl_eval("update")
 
       args = ["event", "generate", path, event]

@@ -179,7 +179,7 @@ module Tryst
     def on_close(&block : Array(String), CallbackSignal -> Nil) : Nil
       cb = @app.register_callback(relay_break: false, &block)
       @app.callback_registry.reconcile({:wm_protocol, @path}) { |before| before.merge({"WM_DELETE_WINDOW" => cb}) }
-      @app.tcl_eval("wm protocol #{@path} WM_DELETE_WINDOW {crystal_callback #{cb}}")
+      @app.tcl_invoke("wm", "protocol", @path, "WM_DELETE_WINDOW", "crystal_callback #{cb}")
     end
 
     # Set the input grab on the window - while held, mouse and keyboard

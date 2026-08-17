@@ -1444,6 +1444,24 @@ tk_test "App#bind still accepts a genuine raw %-code sub" do |app|
   raise "expected .e_bind_raw_sub, got #{got_widget.inspect}" unless got_widget == ".e_bind_raw_sub"
 end
 
+# App#destroy used to build "destroy #{widget}" via tcl_eval interpolation
+# - a widget value containing a space and a semicolon could close the
+# destroy command early and run whatever followed as its own Tcl command.
+# Now goes through tcl_invoke, so widget is always one argv element.
+tk_test "App#destroy does not evaluate extra Tcl commands smuggled in the widget argument" do |app|
+  app.set_variable("::tk_case_destroy_injection_probe", "none")
+  malicious = ". ; set ::tk_case_destroy_injection_probe hit"
+
+  begin
+    app.destroy(malicious)
+  rescue Tryst::TclError
+    # expected - not a real widget path, just not one that runs as two commands
+  end
+
+  probe = app.tcl_eval("set ::tk_case_destroy_injection_probe")
+  raise "expected the injected fragment to not run, probe=#{probe.inspect}" unless probe == "none"
+end
+
 tk_test "App#bind does not double-wrap <> in the event string" do |app|
   fired = false
 
@@ -3346,6 +3364,20 @@ ensure
   photo.try(&.delete)
 end
 
+# Photo#delete/#exists? used to build "image delete #{@name}"/"image type
+# #{@name}" via tcl_eval interpolation - a name containing a brace or
+# semicolon could close the command early and run whatever followed as
+# its own Tcl command. Now goes through tcl_invoke, so @name is always
+# one argv element regardless of its content.
+tk_test "Photo#delete and #exists? work for a name containing } and ;" do |app|
+  photo = Tryst::Photo.new(app, name: "weird}photo;name", width: 2, height: 2)
+
+  raise "expected the photo to exist" unless photo.exists?
+
+  photo.delete
+  raise "expected the photo to no longer exist after #delete" if photo.exists?
+end
+
 tk_test "Photo's constructor sets its dimensions" do |app|
   photo = Tryst::Photo.new(app, width: 42, height: 17)
 
@@ -3752,6 +3784,22 @@ tk_test "Photo.finalizer_for's proc deletes the image it names" do |app|
 
   names = app.split_list(app.tcl_eval("image names"))
   raise "expected the finalizer proc to have deleted the image" if names.includes?("tryst_test_finalizer_target")
+end
+
+# .delete_task (what .finalizer_for wraps) used to build its `catch`
+# script via tcl_eval interpolation - "catch {image delete #{name}}"
+# doesn't round-trip a name containing a brace. Now builds the inner
+# script with Tryst.make_list instead, so any name is safe.
+tk_test "Photo.finalizer_for's proc deletes the image even when its name contains } and ;" do |app|
+  hazard_name = "weird}photo;target"
+  app.command(:image, :create, :photo, hazard_name, width: 5, height: 5)
+  raise "expected the image to exist first" unless app.split_list(app.tcl_eval("image names")).includes?(hazard_name)
+
+  Tryst::Photo.finalizer_for(hazard_name, app).call
+  app.interp.pump_once
+
+  names = app.split_list(app.tcl_eval("image names"))
+  raise "expected the finalizer proc to have deleted the image" if names.includes?(hazard_name)
 end
 
 tk_test "an explicitly deleted Photo's finalizer can't delete a later same-named image" do |app|
