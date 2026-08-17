@@ -220,12 +220,18 @@ module Tryst
 
       # Emit a named app event carrying no payload - see EventBus#emit
       # for why this is a separate overload.
+      #
+      # Main-thread only, like #on/#off - @bus's listener Hash has no
+      # locking. Emit from on_progress/on_done/on_message/on_error or a
+      # plain spawn fiber's body (same thread as mainloop), never from
+      # inside a BackgroundWork work block. See the README's Concurrency
+      # section.
       def emit(event : Symbol) : Nil
         @bus.emit(event)
       end
 
       # Emit a named app event to every current subscriber, in
-      # subscription order.
+      # subscription order. Main-thread only - see the overload above.
       def emit(event : Symbol, *args : EventValue) : Nil
         @bus.emit(event, *args)
       end

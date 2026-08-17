@@ -130,6 +130,19 @@ module Tryst
   # ractor_support.rb are dropped entirely, per the epic's agreed
   # simplification) - this is the only implementation.
   #
+  # For CPU-bound work only. Isolated buys a real second OS thread, which
+  # is what a busy fiber needs to not starve the default context's other
+  # fibers (Tk's mainloop included) - but for IO-bound work (an HTTP
+  # fetch, file/socket IO through Crystal's IO layer), a plain `spawn`
+  # fiber already runs alongside mainloop with no thread at all: see
+  # examples/fiber_io_demo.cr and the README's Concurrency section. The
+  # work block below never gets a way to touch Tk/widget/Var state
+  # directly, for the same reason: it runs on a different OS thread, and
+  # that state has no locking around it. Only on_progress/on_done/
+  # on_message/on_error - invoked back on the main thread from #poll -
+  # may touch it, same rule a plain spawn fiber's body already satisfies
+  # by virtue of sharing mainloop's own thread.
+  #
   # @example
   #   task = Tryst::BackgroundWork.new(app, data) do |t, d|
   #     d.each do |item|

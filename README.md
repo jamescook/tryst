@@ -107,9 +107,43 @@ The session carries the app-level conveniences: `every(ms)` and
 `after(ms)` timers (declarable right inside the build block), native file
 open/save dialogs, `message`, `choose_color`, `choose_dir`, a `toast` for
 transient feedback, a `busy` cursor block, and clipboard access. UIs that
-grow at runtime append validated subtrees with `add`. For work that
-shouldn't block the UI, `Tryst::BackgroundWork` runs a block on its own
-thread and delivers progress back to the event loop.
+grow at runtime append validated subtrees with `add`.
+
+### Concurrency: fiber vs `BackgroundWork`
+
+Two lanes, picked by what the work is waiting on:
+
+- **IO-bound** (an HTTP fetch, file/socket reads through Crystal's `IO`
+  layer): a plain `spawn` fiber is enough. It runs in Crystal's default
+  execution context — the same OS thread Tk's mainloop runs on — so it
+  cooperates with mainloop instead of blocking it, and touching a `Var`
+  or widget directly from inside it is exactly as safe as touching one
+  from a button's `on_action`. No `BackgroundWork`, no thread, no
+  marshaling. See `examples/fiber_io_demo.cr`.
+- **CPU-bound** (parsing, image processing, hashing): `Tryst::BackgroundWork`.
+  A busy fiber never yields on its own, so it would starve the default
+  context and freeze the UI between its rare yield points.
+  `BackgroundWork` runs the block on a real second OS thread
+  (`Fiber::ExecutionContext::Isolated`) instead, and delivers
+  `on_progress`/`on_done`/`on_message`/`on_error` back on the main
+  thread by polling. See `examples/threading_demo.cr`.
+
+One rule holds in both lanes: Tk/widget/`Var` state, and emitting on a
+session's event bus, may only be touched from the main thread — the main
+fiber, a plain `spawn` fiber (same thread, safe), `on_progress`/`on_done`/
+`on_message`/`on_error`, or `after`/`every`. Never from inside a
+`BackgroundWork` work block or a hand-rolled `Isolated` fiber's body —
+those run on a different OS thread, and Tk/Var state has no locking
+around it. `BackgroundWork` doesn't hand its work block a way to touch
+these directly for exactly this reason.
+
+Cost: `BackgroundWork` is one real OS thread per task — fine for a
+handful running at once, not the shape for hundreds. There's no hard
+kill (Crystal has no `Thread#kill` equivalent); `#stop`/`#close` ask the
+worker to stop cooperatively, at its next `check_message`/`check_pause`.
+Delivery in either lane has a small latency floor (mainloop's own
+poll/wait interval, not app-controllable per call) — fine for UI updates,
+worth knowing if you need sub-millisecond timing.
 
 ### Validation
 
