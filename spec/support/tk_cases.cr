@@ -928,6 +928,125 @@ tk_test "Window#modal releases the grab if its window is destroyed without an ex
   raise "expected the grab to be released after destroy" unless app.tcl_eval("grab current") == ""
 end
 
+# A crystal_callback error never unwinds into Crystal -
+# #dispatch_callback reports it to Tcl as a script error instead, so it
+# reaches Tk's own bgerror, not a raised Crystal exception - a spec that
+# only checks Crystal-side assertions after app.destroy can pass clean
+# while a real, ordinary destroy is quietly raising "unknown callback
+# id" behind its back (this exact bug: the grab-release safety net's
+# own bindtag used to be appended AFTER "all", so App's global
+# <Destroy> cleanup swept its callback id before the tag's own binding
+# got a chance to run it). See "after_idle releases its callback even
+# when the block raises" above for the same bgerror-redirect pattern.
+tk_test "Window#modal's grab-release safety net does not raise an unknown-callback-id error on ordinary destroy" do |app|
+  app.tcl_eval("toplevel .t")
+  app.update
+
+  original_bgerror = app.tcl_invoke("interp", "bgerror", "")
+  app.tcl_eval(<<-TCL)
+    proc ::tryst_test_modal_bgerror {msg opts} {
+      set ::tryst_test_modal_bgerror_msg $msg
+    }
+    TCL
+  app.tcl_invoke("interp", "bgerror", "", "::tryst_test_modal_bgerror")
+  app.tcl_eval("set ::tryst_test_modal_bgerror_msg {}")
+
+  begin
+    w = app.window(".t")
+    w.modal
+    app.destroy(".t")
+    app.update
+
+    msg = app.tcl_eval("set ::tryst_test_modal_bgerror_msg")
+    raise "expected no background error from an ordinary destroy, got #{msg.inspect}" unless msg.empty?
+  ensure
+    app.tcl_invoke("interp", "bgerror", "", original_bgerror)
+  end
+end
+
+# Window#modal's own <Destroy> safety net used to go through
+# Interp#bind directly, bypassing CallbackRegistry - unreachable for
+# cleanup, so re-invoking #modal on the same still-live window (the
+# common case: Handle#show calling it again on every show) leaked one
+# more callback id per call, forever.
+tk_test "Window#modal's <Destroy> safety net doesn't leak a callback id across repeated opens" do |app|
+  app.tcl_eval("toplevel .t")
+  app.update
+
+  w = app.window(".t")
+  baseline = app.interp.callback_ids.size
+
+  5.times do
+    w.modal
+    w.grab_release
+  end
+
+  after = app.interp.callback_ids.size
+  unless after == baseline + 1
+    raise "expected a constant callback id count (baseline #{baseline} + 1), got #{after}"
+  end
+
+  app.destroy(".t")
+end
+
+# The leak above was also invisible to the app's own leak detector -
+# routing through Interp#bind rather than App#bind meant
+# CallbackRegistry never heard about this id at all.
+tk_test "Window#modal's <Destroy> safety net is visible in the callback registry" do |app|
+  app.tcl_eval("toplevel .t")
+  app.update
+
+  w = app.window(".t")
+  before = app.callback_registry.counts_by_tag[:bind]? || 0
+
+  w.modal
+
+  after = app.callback_registry.counts_by_tag[:bind]? || 0
+  raise "expected the :bind count to grow by 1, got #{before} -> #{after}" unless after == before + 1
+
+  w.grab_release
+  app.destroy(".t")
+end
+
+# Tcl's bind replaces rather than appends per tag+event - binding
+# <Destroy> straight on .t's own path (as Window#modal used to) would
+# silently clobber whichever of the two registered second: the user's
+# handler set before #modal, or the grab-release safety net #modal sets
+# up. Both have to fire regardless of order.
+tk_test "Window#modal's grab-release safety net still fires alongside a user's own prior <Destroy> binding" do |app|
+  app.tcl_eval("toplevel .t")
+  app.update
+
+  w = app.window(".t")
+  user_fired = false
+  app.bind(".t", "Destroy") { user_fired = true }
+
+  w.modal
+  raise "expected .t to hold the grab" unless app.tcl_eval("grab current .t") == ".t"
+
+  app.destroy(".t")
+
+  raise "expected the user's own <Destroy> binding to still fire" unless user_fired
+  raise "expected the grab to be released too" unless app.tcl_eval("grab current") == ""
+end
+
+tk_test "a user's own <Destroy> binding set after #modal still fires alongside the grab-release safety net" do |app|
+  app.tcl_eval("toplevel .t")
+  app.update
+
+  w = app.window(".t")
+  w.modal
+  raise "expected .t to hold the grab" unless app.tcl_eval("grab current .t") == ".t"
+
+  user_fired = false
+  app.bind(".t", "Destroy") { user_fired = true }
+
+  app.destroy(".t")
+
+  raise "expected the user's own <Destroy> binding to fire" unless user_fired
+  raise "expected the grab to be released too" unless app.tcl_eval("grab current") == ""
+end
+
 tk_test "App#grab_set/#grab_release set and clear the current grab" do |app|
   app.tcl_eval("toplevel .t")
   app.update

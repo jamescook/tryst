@@ -17,6 +17,8 @@ module Tryst
   class Window
     getter path : String
 
+    private EMPTY_KWARGS = {} of String => TclArgValue
+
     def initialize(@app : App, path)
       @path = path.to_s
     end
@@ -219,7 +221,17 @@ module Tryst
       # (plain `focus` only takes effect once the app already has input
       # focus at the OS/WM level).
       @app.tcl_invoke("focus", "-force", @path)
-      @app.interp.bind(@path, "<Destroy>") { grab_release }
+
+      tag = grab_release_tag
+      @app.bind(tag, "<Destroy>", owner: @path) do |_values, _signal|
+        grab_release
+        # Not a real window - clears the same way a scroll region's
+        # shared wheel tag does (Realizer#release_wheel_bindings_on_destroy),
+        # or a dialog that's shown once and never reopened at this exact
+        # path leaves this entry in Tcl's global bind table forever.
+        @app.command(:bind, ([tag, "<Destroy>", ""] of TclArgValue), EMPTY_KWARGS)
+        nil
+      end
       yield
     rescue ex
       grab_release
@@ -229,6 +241,38 @@ module Tryst
     # Grabs and focuses with no setup block to run.
     def modal(global : Bool = false) : Nil
       modal(global: global) { }
+    end
+
+    # A dedicated bindtag for #modal's own <Destroy> safety net, rather
+    # than binding straight on @path - Tcl's bind replaces rather than
+    # appends per tag+event, so a binding placed directly on the
+    # window's own path would silently clobber (or be clobbered by) any
+    # <Destroy> handler user code binds on that same path with
+    # App#bind. Both fire independently once they're on separate tags -
+    # the same trick Realizer#wire_wheel_axis uses for a scroll region's
+    # shared wheel tag. Idempotent: calling #modal again on an
+    # already-tagged window (Handle#show re-invoking it on every show)
+    # doesn't grow @path's bindtags list, and re-binding the same
+    # (tag, event) pair below replaces rather than accumulates.
+    #
+    # PREPENDED, not appended: Tk's default bindtags end with "all",
+    # which is where App#setup_destroy_cleanup's own <Destroy> handler
+    # lives - the one that calls CallbackRegistry#forget_all_for_path
+    # and unregisters this binding's own callback id. Appended, our tag
+    # would fire AFTER "all" already swept that id, so the dispatch
+    # trampoline would find nothing to call ("unknown callback id").
+    # Firing first means our callback runs (and self-clears its own Tcl
+    # binding) before anything releases the id it's still using.
+    private def grab_release_tag : String
+      tag = "TrystModalGrab#{@path.tr(".", "_")}"
+      current = @app.split_list(@app.command(:bindtags, ([@path] of TclArgValue), EMPTY_KWARGS))
+      return tag if current.includes?(tag)
+
+      tags = Array(TclArgValue).new
+      tags << tag
+      current.each { |existing| tags << existing }
+      @app.command(:bindtags, ([@path, tags] of TclArgValue), EMPTY_KWARGS)
+      tag
     end
   end
 end
