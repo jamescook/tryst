@@ -3,16 +3,13 @@ require "../pane_validator"
 
 module Tryst
   module UI
-    # @api private
-    #
     # Adds a freshly created :pane's own frame to the enclosing
     # panedwindow as a managed region, weighted with whatever
     # WidgetDSL#pane stashed as pane_weight. That add IS the region's whole
     # placement - unlike every other container, a pane's frame is never
-    # pack/grid-managed on its own (see arranged: false below). Registered
-    # as :pane's own post_create.
-    module PaneRealize
-      def self.post_create(app : AppContract, node : Node, path : String, parent_path : String) : Nil
+    # pack/grid-managed on its own (see arranged: false below).
+    class PaneType < WidgetType
+      def post_create(app : AppContract, node : Node, path : String, parent_path : String) : Nil
         opts = {} of String => TclArgValue
         # Left off entirely when unset, rather than sent as a 0, so an
         # unweighted pane gets whatever ttk::panedwindow's own default is
@@ -27,9 +24,8 @@ module Tryst
     # weight: as its own parameter and checks it's being declared inside a
     # ui.split.
     WidgetTypes.register(
-      WidgetType.new(
+      PaneType.new(
         type: :pane, tk_command: "ttk::frame", leaf: false, arranged: false,
-        post_create: PostCreateHook.new { |app, node, path, parent_path| PaneRealize.post_create(app, node, path, parent_path) },
         validator: ValidatorProc.new { |node, parent, document, errors| PaneValidator.call(node, parent, document, errors) }
       )
     )

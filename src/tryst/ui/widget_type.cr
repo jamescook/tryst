@@ -5,18 +5,17 @@ require "./flow_align"
 
 module Tryst
   module UI
-    # @api private
-    #
     # Flow-packing config for a column/row-style container - side/
     # main_pad/cross_pad/main_fill/cross_fill/anchor. A convenience over
-    # arrange: for exactly this shape: giving flow: computes an arrange:
-    # that delegates to Realizer#arrange_flow with this data, so most
-    # flow containers never need to touch arrange: directly. A dedicated
-    # record rather than a Hash(Symbol, TclArgValue) (unlike opts/layout
-    # elsewhere) - ruby's own flow: hash nests another hash for anchor:,
-    # which doesn't fit TclArgValue's closed union, and this is
-    # realize-internal metadata that was never going to reach
-    # App#command as a real Tk option anyway.
+    # overriding #arrange for exactly this shape: giving flow: to
+    # WidgetType.new is enough for #arrange's own default body to delegate
+    # to Realizer#arrange_flow with this data, so most flow containers
+    # never need to touch #arrange directly. A dedicated record rather
+    # than a Hash(Symbol, TclArgValue) (unlike opts/layout elsewhere) -
+    # ruby's own flow: hash nests another hash for anchor:, which doesn't
+    # fit TclArgValue's closed union, and this is realize-internal
+    # metadata that was never going to reach App#command as a real Tk
+    # option anyway.
     record FlowConfig,
       side : String,
       main_pad : Symbol,
@@ -28,59 +27,62 @@ module Tryst
       # instead of anchoring, so it never reaches a lookup here.
       anchor : Hash(FlowAlign, String)
 
-    # Forward declaration, so the hook aliases below can name it. The real
-    # definition is realizer.cr, which requires this file rather than the
-    # other way round - and an alias resolves its types immediately, unlike
-    # the method-signature restrictions these replaced.
+    # Forward declaration, so #arrange/#custom_children/#custom_create
+    # below can name it. The real definition is realizer.cr, which
+    # requires this file rather than the other way round - and an alias
+    # or a bare type reference in a method signature resolves lazily
+    # enough for that to work, unlike the method-signature restrictions
+    # this replaced.
     class Realizer; end
 
-    # The shapes a WidgetType's hooks take. Named because a registration
-    # has to spell the type out to build the Proc, and the bare Proc(...)
-    # form is most of the line.
-
-    # Replaces the generic pack arrangement for a container's children.
-    alias ArrangeHook = Proc(Realizer, Node, Array(Node), Nil)
-
-    # Replaces the realizer's entire per-node create/link handling.
-    # Receives the PARENT's path, since it allocates its own.
-    alias CreateHook = Proc(Realizer, Node, String, Nil)
-
-    # Replaces only the "create every child under this node" step, so it
-    # receives this node's own already-allocated path.
-    alias ChildrenHook = Proc(Realizer, Node, String, Nil)
-
-    # Runs right after the generic widget-creation call, with the app
-    # rather than the realizer: (app, node, path, parent_path).
-    alias PostCreateHook = Proc(AppContract, Node, String, String, Nil)
-
-    # Builds the AddressingStrategy a Handle on this type dispatches
-    # #path/#configure/#options through.
+    # A widget/node type's own -variable option to bind: to, wrapped so
+    # it can carry a default and stay overridable per-type without
+    # needing a subclass just to change one value. See #addressing below
+    # for the same shape applied to addressing strategy.
     alias AddressingHook = Proc(Node, AddressingStrategy)
 
-    # @api private
+    # A single widget/node type's own metadata AND behavior - public and
+    # subclassable, so a widget declared outside this library is a
+    # first-class ui.<type> citizen (see CUSTOM_WIDGETS.md at the repo
+    # root for the full guide). WidgetDSL (the builder) and Realizer each
+    # treat a registered type as the sole source of truth for it,
+    # dispatched by node type via WidgetTypes.
     #
-    # A single widget/node type's own metadata: what it draws, how it's
-    # built and arranged - self-contained enough that WidgetDSL (the
-    # builder) and Realizer can each treat a registered type as the sole
-    # source of truth for it, dispatched by node type via WidgetTypes.
+    # Deliberately NOT an abstract class, even though the pattern this
+    # replaced (a Proc-per-hook descriptor) made every hook individually
+    # optional: most registered types - button, label, panel, column,
+    # row, checkbox, ... - are pure data with no behavior to override at
+    # all, and have to stay directly instantiable as
+    # WidgetType.new(type: :button, tk_command: "ttk::button", ...).
+    # Subclassing is for the minority that need real behavior (this
+    # library's own built-in examples: WindowType, PaneType, TabType,
+    # GridType, ScrollableType, MenuHostType - none of the ~20 other
+    # built-in types need one). A type registered by a third party gets
+    # the identical choice: WidgetType.new(...) for something that just
+    # wraps an existing Tk command, a subclass for something with its own
+    # creation/arrangement/addressing logic.
     #
-    # Leaf defaults cover the common case, so a real widget is a one-line
-    # descriptor: WidgetType.new(type: :divider, tk_command:
-    # "ttk::separator") is a complete, working leaf widget.
+    # #arrange/#custom_children/#post_create are real overridable
+    # instance methods with working default bodies, not paired with a
+    # separate predicate the way the old Proc fields needed - a
+    # subclass overrides exactly the hook it needs and nothing else.
+    # #custom_create is the one exception, kept as an explicit opt-in
+    # predicate (#custom_create?) alongside its method: unlike the other
+    # three, "not overridden" here can't be expressed as a default method
+    # body without reimplementing Realizer's entire two-pass create/link
+    # walk inside WidgetType - see #custom_create?'s own doc comment.
     #
-    # One field ruby-tryst's version carries isn't ported here: dsl (the
-    # ->(mod) { define_method(...) } hook driving runtime codegen) doesn't
-    # exist at all - this port uses hand-written ui.<type> DSL methods
-    # instead, so there's nothing for a descriptor to drive.
-    # WidgetTypes.on_register (whose only purpose was replaying
-    # registrations for that codegen) is dropped for the same reason.
-    # Every other hook IS ported: post_create (:window's own wm setup
-    # needed it), custom_create (menu_bar/context_menu's own bespoke
-    # Realizer#create_menu_tree traversal needed it) and addressing along
-    # with it (a menu entry has no Tk path of its own - see
-    # MenuEntryAddressing), and custom_children (:scrollable's own
-    # canvas+viewport, which its children are created inside rather than
-    # directly under its path - see Realizer#create_scrollable).
+    # #addressing and #validator stay exactly what they were before this
+    # became subclassable: plain constructor fields carrying a value
+    # (a Proc, for addressing; a lambda-shaped block, for validator), not
+    # override points. Both are genuinely just DATA even for a type that
+    # needs something other than the default - the three menu-entry
+    # types (menu_item/menu_checkbox/menu_radio) all share one
+    # already-built strategy (MenuEntryAddressing::SHARED) rather than
+    # each computing their own, and a validator is a pure function of
+    # (node, parent, document, errors) with no state of its own to carry.
+    # Making either an override point would force those types into a
+    # subclass for zero gain over passing the existing value.
     class WidgetType
       getter type : Symbol
       getter tk_command : String
@@ -117,18 +119,9 @@ module Tryst
         @hosts_menu_bar : Bool = false,
         @bind_option : Symbol? = nil,
         @flow : FlowConfig? = nil,
-        arrange : ArrangeHook? = nil,
         @validator : ValidatorProc? = nil,
-        custom_create : CreateHook? = nil,
-        custom_children : ChildrenHook? = nil,
-        post_create : PostCreateHook? = nil,
         @addressing : AddressingHook = AddressingHook.new { |node| WidgetAddressing.new(node) },
       )
-        flow = @flow
-        @arrange = arrange || (flow ? ArrangeHook.new { |realizer, node, children| realizer.arrange_flow(node, children, flow) } : nil)
-        @custom_create = custom_create
-        @custom_children = custom_children
-        @post_create = post_create
       end
 
       def container? : Bool
@@ -144,55 +137,59 @@ module Tryst
         end
       end
 
-      # Whether this type replaces the generic pack arrangement.
-      def arrange? : Bool
-        !@arrange.nil?
-      end
-
-      # Runs this type's custom arrangement strategy.
+      # Replaces the generic pack arrangement for a container's children.
+      # Default: flow-packs via #flow if one was given at construction
+      # (see WidgetDSL#column/#row), otherwise a plain top-to-bottom
+      # pack - override for anything else (:grid's own arrange, say).
       def arrange(realizer : Realizer, node : Node, children : Array(Node)) : Nil
-        @arrange.try(&.call(realizer, node, children))
+        if flow = @flow
+          realizer.arrange_flow(node, children, flow)
+        else
+          realizer.pack_plain(children)
+        end
       end
 
-      # Whether this type replaces the realizer's ENTIRE per-node create/
-      # link handling (no generic widget-creation call, no #arrange/
-      # custom_children, no normal link processing - events/close-
-      # handler/child recursion - either).
-      def custom_create? : Bool
-        !@custom_create.nil?
-      end
-
-      # Runs this type's entire create/link replacement.
-      def custom_create(realizer : Realizer, node : Node, parent_path : String) : Nil
-        @custom_create.try(&.call(realizer, node, parent_path))
-      end
-
-      # Whether this type takes over creating its own children, replacing
-      # ONLY the realizer's generic "create every child under this node's
-      # path" step - everything else (the widget-creation call,
-      # post_create, the whole normal #link pass) still happens as usual.
-      # Much narrower than custom_create above, which replaces all of it.
-      def custom_children? : Bool
-        !@custom_children.nil?
-      end
-
-      # Runs this type's own child creation, in place of the generic loop.
+      # Replaces only the "create every child under this node" step -
+      # everything else (the widget-creation call, post_create, the
+      # whole normal #link pass) still happens as usual. Default: the
+      # same generic per-child create every ordinary type gets. Override
+      # for a type whose children don't belong directly under its own
+      # path (:scrollable's embedded viewport, say).
       def custom_children(realizer : Realizer, node : Node, path : String) : Nil
-        @custom_children.try(&.call(realizer, node, path))
+        realizer.create_children(node, path)
       end
 
       # Per-node setup that runs immediately after the generic widget
       # creation call, while the realizer is still walking the tree -
-      # unlike custom_create, it ADDS to the normal handling instead of
-      # replacing it. Takes the app rather than the realizer, since what
-      # it does is drive Tk directly (:window's wm title/geometry/
-      # transient setup), not steer the walk.
-      def post_create? : Bool
-        !@post_create.nil?
+      # ADDS to the normal handling instead of replacing it. Takes the
+      # app rather than the realizer, since what it does is drive Tk
+      # directly (:window's wm title/geometry/transient setup, a :pane's
+      # own add to its panedwindow), not steer the walk. Default: nothing.
+      def post_create(app : AppContract, node : Node, path : String, parent_path : String) : Nil
       end
 
-      def post_create(app : AppContract, node : Node, path : String, parent_path : String) : Nil
-        @post_create.try(&.call(app, node, path, parent_path))
+      # Whether this type replaces the realizer's ENTIRE per-node create/
+      # link handling (no generic widget-creation call, no #arrange/
+      # #custom_children, no normal link processing - events/close-
+      # handler/child recursion - either). Default: false.
+      #
+      # Kept as an explicit predicate rather than collapsed into
+      # #custom_create's own default body the way #arrange/
+      # #custom_children/#post_create were: "not overridden" here means
+      # Realizer's whole two-pass create/link walk runs instead (path
+      # allocation, the widget-creation command, post_create, children,
+      # AND the entire separate arrangement/events/close-handler pass
+      # later) - reproducing that as a default method body would
+      # duplicate Realizer's own two-pass machinery inside WidgetType for
+      # no benefit, since only a menu subtree (no Tk path or
+      # geometry-managed arrangement of its own) needs this at all.
+      def custom_create? : Bool
+        false
+      end
+
+      # Runs this type's entire create/link replacement. Only called when
+      # #custom_create? is true - the default body is never reached.
+      def custom_create(realizer : Realizer, node : Node, parent_path : String) : Nil
       end
     end
   end

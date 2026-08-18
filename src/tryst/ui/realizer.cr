@@ -28,18 +28,17 @@ module Tryst
     # real Tk interpreter involved, which is what makes this class
     # headless-testable at all.
     #
-    # The generic create/link passes, plain top-to-bottom pack, column/
-    # row flow layout (#arrange_flow), grid layout (#arrange_grid), ui.
-    # canvas overlay placement (#place_overlay), and menu_bar/context_menu's
-    # own bespoke traversal (#create_menu_tree, driven by WidgetType's
-    # custom_create: hook) are ported here, as is post_create: (:window's
-    # own wm setup). Both scrolling cases are covered too: the
+    # The generic create/link passes, plain top-to-bottom pack, and the
     # auto-scrollbar a natively_scrollable type gets for free
-    # (#create_native_scrollable), and ui.scrollable itself - the
-    # arbitrary-content case, which has no Tk protocol to hook a
-    # scrollbar into and so builds an embedded canvas/viewport plus its
-    # own wheel handling (#create_scrollable, driven by WidgetType's
-    # custom_children: hook).
+    # (#create_native_scrollable) are what this class owns directly.
+    # Everything type-specific - column/row flow layout, grid layout,
+    # ui.scrollable's own embedded-viewport case, menu_bar/context_menu's
+    # bespoke traversal, :window/:pane/:tab's own post_create setup -
+    # lives on the owning type's own WidgetType subclass instead (see
+    # widget_type.cr's own doc comment), reaching back into this class
+    # only through the small public service surface those bodies actually
+    # need: #app, #pack_plain, #create_children, #allocate_path,
+    # #filtered_opts, #wire_scrollbars, #add_bindtag, #arrange_flow.
     class Realizer
       # Opts keys that are read on this side rather than handed to Tk, so
       # they never reach a widget-creation call as a bogus -option. Every
@@ -67,6 +66,13 @@ module Tryst
       # For App#command's Hash overload, where the call has no options of
       # its own - the same shape CanvasItem keeps for the same reason.
       private EMPTY_KWARGS = {} of String => TclArgValue
+
+      # The live app this realizer drives Tk through - the one thing
+      # every relocated WidgetType hook body needs and none of their
+      # signatures pass directly (only #post_create's does). Public so a
+      # subclass's #arrange/#custom_children/#custom_create/#post_create
+      # override can reach it via the realizer parameter each is handed.
+      getter app : AppContract
 
       def initialize(@app : AppContract, @document : Document, @default_scroll : Bool? = nil)
       end
@@ -152,14 +158,27 @@ module Tryst
           registered.post_create(@app, node, path, parent_path) if registered
         end
 
-        # A type with bespoke child handling (:scrollable, whose children
-        # belong in an embedded viewport rather than under its own path)
-        # replaces just this step - see WidgetType#custom_children.
-        if registered && registered.custom_children?
+        # A registered type's own #custom_children decides how its
+        # children are created - the default body (WidgetType#
+        # custom_children) is just #create_children below, so an
+        # unregistered node (:root, :raw_op - see StructuralTypes) and an
+        # ordinary registered type both end up running the identical
+        # generic loop either way.
+        if registered
           registered.custom_children(self, node, path)
         else
-          node.children.each { |child| create(child, path) unless child.lazy? }
+          create_children(node, path)
         end
+      end
+
+      # The generic "create every child under this node's own path" step
+      # - also WidgetType#custom_children's own default body, so a type
+      # with nothing custom to do here gets this for free. Public for the
+      # same reason #pack_plain is: a WidgetType subclass whose override
+      # only wants to run this unconditionally (rather than override
+      # #custom_children at all) can call it directly.
+      def create_children(node : Node, path : String) : Nil
+        node.children.each { |child| create(child, path) unless child.lazy? }
       end
 
       # Whether this node is a type that scrolls on its own AND scrolling
@@ -197,6 +216,12 @@ module Tryst
       # unchanged. Only arrange_path is the wrapper - that's the widget's
       # actual Tk parent now, and what the surrounding layout has to
       # place in the widget's stead. See RealizedNode.
+      #
+      # Generic infra for ANY natively_scrollable: true type (list/tree/
+      # table/text_area/canvas, ...), not specific to ui.scrollable -
+      # stays here rather than moving to any one type's own file. See
+      # widget_types/scrollable.cr for the different, arbitrary-content
+      # case this doesn't cover.
       private def create_native_scrollable(node : Node, path : String) : Nil
         widget_path = "#{path}.widget"
 
@@ -216,87 +241,14 @@ module Tryst
         value.is_a?(Bool) ? value : default
       end
 
-      # A :scrollable's own widget (created just before this runs, by the
-      # generic step in #create) is a plain ttk::frame at path - this
-      # fills it in, taking over child creation instead of that generic
-      # node.children.each loop. There's no Tk protocol to hook a
-      # scrollbar into arbitrary widgets (unlike the native-scrollable
-      # case above, which is why this is the ONLY thing left for
-      # ui.scrollable to do - see #auto_scrollable?), so children are
-      # created inside an embedded frame instead - <path>.canvas.viewport,
-      # held in a canvas the scrollbar drives. The viewport's own size
-      # changes (as its content changes) keep the canvas's -scrollregion
-      # in sync; unless horizontal scrolling is on, the canvas's own size
-      # changes keep the viewport's width matched to it too, so content
-      # isn't left narrower than the visible area.
-      #
-      # Public for the same reason #arrange_flow/#create_menu_tree are
-      # (see either's own comment): a WidgetType's hook - custom_children:
-      # here - reaches this from outside the class.
-      def create_scrollable(node : Node, path : String) : Nil
-        x = scroll_axis?(node, :x, false)
-        y = scroll_axis?(node, :y, true)
-
-        canvas_path = "#{path}.canvas"
-        viewport_path = "#{canvas_path}.viewport"
-        @app.command("canvas", [canvas_path] of TclArgValue,
-          {"highlightthickness" => 0} of String => TclArgValue)
-        @app.command("ttk::frame", ([viewport_path] of TclArgValue), EMPTY_KWARGS)
-        window_id = @app.command(canvas_path, [:create, :window, 0, 0] of TclArgValue,
-          {"window" => viewport_path, "anchor" => "nw"} of String => TclArgValue)
-
-        node.children.each { |child| create(child, viewport_path) unless child.lazy? }
-
-        # The scrollable region is whatever the content currently adds up
-        # to, re-measured every time the viewport resizes.
-        @app.bind(viewport_path, "<Configure>") do |_values, _signal|
-          region = @app.command(canvas_path, ([:bbox, :all] of TclArgValue), EMPTY_KWARGS)
-          @app.command(canvas_path, [:configure] of TclArgValue,
-            {"scrollregion" => region} of String => TclArgValue)
-          nil
-        end
-
-        # With no horizontal scrolling, content should fill the visible
-        # width rather than hug its natural size - so the embedded window
-        # tracks the canvas's own width. With it on, leaving the width
-        # alone is the whole point: content wider than the canvas is what
-        # there is to scroll to.
-        unless x
-          @app.bind(canvas_path, "<Configure>", :width) do |values, _signal|
-            @app.command(canvas_path, [:itemconfigure, window_id] of TclArgValue,
-              {"width" => values[0]} of String => TclArgValue)
-            nil
-          end
-        end
-
-        wire_scrollbars(path, canvas_path, x: x, y: y)
-        tag = wire_wheel_scroll(canvas_path, viewport_path, node, x: x, y: y)
-
-        # Replaces the provisional RealizedNode #create already set, now
-        # that the two things it couldn't know are settled: where this
-        # node's children actually go, and which bindtag they carry. Left
-        # to the end deliberately - the tag comes from #wire_wheel_scroll,
-        # which can only run once the children it tags exist. Nothing
-        # between here and there reads node.realized.
-        node.realized = RealizedNode.new(app: @app, path: path,
-          content_path: viewport_path, content_bindtag: tag)
-      end
-
-      # :scrollable's own arrangement (registered as its arrange:) -
-      # children live in the embedded viewport frame (see
-      # #create_scrollable), packed fill/expand so content stretches to
-      # the visible width instead of hugging its own natural size. Public
-      # for the same reason #create_scrollable is.
-      def arrange_scrollable_frame(_node : Node, children : Array(Node)) : Nil
-        children.each do |child|
-          next unless realized = child.realized
-
-          @app.command(:pack, [realized.arrange_path] of TclArgValue,
-            {"fill" => "both", "expand" => true} of String => TclArgValue)
-        end
-      end
-
-      private def wire_scrollbars(path : String, target_path : String, x : Bool, y : Bool) : Nil
+      # Builds a vertical and/or horizontal ttk::scrollbar around
+      # target_path, gridded into path (the wrapper frame), and wires
+      # each to auto-hide when its content fits. Shared by
+      # #create_native_scrollable above (generic infra) and
+      # ScrollableType#custom_children (widget_types/scrollable.cr, the
+      # arbitrary-content case) - public for the latter to reach from
+      # outside this class.
+      def wire_scrollbars(path : String, target_path : String, x : Bool, y : Bool) : Nil
         if y
           vertical = "#{path}.vsb"
           @app.command("ttk::scrollbar", [vertical] of TclArgValue,
@@ -335,6 +287,10 @@ module Tryst
       # the eagerly-gridded scrollbar would sit there forever. Querying
       # the real fraction once, after every widget in this build has had
       # its first geometry pass, covers that.
+      #
+      # Private (unlike #wire_scrollbars) - only #wire_scrollbars itself
+      # calls it, from either of its two call sites, so relocating either
+      # of those never needs this one directly.
       private def auto_hide_scrollbar(target_path : String, scrollbar_path : String,
                                       option : String, view_command : String) : Nil
         shown = true
@@ -370,133 +326,15 @@ module Tryst
         end
       end
 
-      # Tk's own Scrollbar class binds <MouseWheel> at this ratio (see
-      # scrlbar.tcl) - matched here so wheeling over a scrollable's
-      # content feels identical to wheeling over its scrollbar.
-      WHEEL_UNITS_PER_NOTCH = 40.0
-
-      # #wire_scrollbars only covers dragging the scrollbar itself - the
-      # canvas has no default wheel handling of its own (a bare canvas
-      # isn't a Scrollbar), and neither do the arbitrary widgets embedded
-      # in its viewport. Binding the wheel on the canvas alone wouldn't
-      # reach those either: Tk delivers pointer events to whichever widget
-      # is actually under the cursor, and a child inside the viewport
-      # intercepts them before the canvas ever sees them.
-      #
-      # The fix is the classic one - give the canvas, the viewport, and
-      # every widget already inside it (walked recursively, since content
-      # nests arbitrarily deep) a shared custom bindtag, and bind the
-      # handler once on that tag rather than on any single widget. Every
-      # widget carrying the tag then responds identically no matter which
-      # one the pointer is over - the same mechanism Tk's own class
-      # bindings (Button, Entry, ...) use, just scoped to this one
-      # scrollable region instead of a widget class.
-      #
-      # Returns the tag, so the caller can record it on the node's own
-      # RealizedNode and content added later can join it too (see
-      # #adopt_content_bindtag) - nil when neither axis scrolls and there
-      # is no wheel handling to share.
-      private def wire_wheel_scroll(canvas_path : String, viewport_path : String, node : Node,
-                                    x : Bool, y : Bool) : String?
-        return unless x || y
-
-        tag = "TrystScrollRegion#{canvas_path.tr(".", "_")}"
-        add_bindtag(canvas_path, tag)
-        add_bindtag(viewport_path, tag)
-        node.children.each do |child|
-          child.each { |descendant| descendant.realized.try { |realized| add_bindtag(realized.path, tag) } }
-        end
-
-        event_strs = [] of String
-        event_strs.concat(wire_wheel_axis(canvas_path, tag, "yview", "")) if y
-        # Shift+wheel is the conventional "scroll sideways" gesture, and
-        # the only wheel most mice have.
-        event_strs.concat(wire_wheel_axis(canvas_path, tag, "xview", "Shift-")) if x
-        release_wheel_bindings_on_destroy(canvas_path, tag, event_strs)
-        tag
-      end
-
-      # One axis's three wheel bindings: the real wheel event everywhere,
-      # plus X11's own pair - Tk on X11 reports a wheel as button 4/5
-      # presses and never sends <MouseWheel> at all, so a binding on that
-      # alone would leave Linux unable to wheel-scroll entirely.
-      #
-      # owner: is what keeps these from leaking. They're bound to a
-      # bindtag, which never fires <Destroy>, so without naming a real
-      # widget to hang their lifetime on they'd outlive the scrollable
-      # and every other one the app ever builds. The canvas is the honest
-      # owner: the tag is derived from its path and means nothing without
-      # it. See App#bind.
-      # Returns the event strings it bound, so #wire_wheel_scroll can hand
-      # the full set (both axes) to #release_wheel_bindings_on_destroy in
-      # one pass.
-      private def wire_wheel_axis(canvas_path : String, tag : String,
-                                  view_command : String, modifier : String) : Array(String)
-        mouse_wheel = "<#{modifier}MouseWheel>"
-        button_4 = "<#{modifier}Button-4>"
-        button_5 = "<#{modifier}Button-5>"
-
-        @app.bind(tag, mouse_wheel, :mouse_wheel, owner: canvas_path) do |values, _signal|
-          scroll_wheel(canvas_path, view_command, wheel_units(values[0]))
-        end
-        @app.bind(tag, button_4, owner: canvas_path) do |_values, _signal|
-          scroll_wheel(canvas_path, view_command, -1)
-        end
-        @app.bind(tag, button_5, owner: canvas_path) do |_values, _signal|
-          scroll_wheel(canvas_path, view_command, 1)
-        end
-
-        [mouse_wheel, button_4, button_5]
-      end
-
-      # owner: on the binds above releases their Crystal-side callback ids
-      # once canvas_path is destroyed, but the Tcl-side `bind <tag> <event>
-      # <script>` entries themselves are a different piece of state - they
-      # live on `tag`, a synthetic bindtag with no window of its own, so
-      # they never fire a <Destroy> of their own and Tk never garbage-
-      # collects an orphaned tag's bindings on its own. Left alone, that
-      # table grows by 3-6 entries (both axes' worth) every time a
-      # scrollable is created and destroyed, forever.
-      #
-      # Hooking canvas_path's own real <Destroy> is what actually clears
-      # them - `bind <tag> <event> {}` for each event wired, mirroring
-      # #unbind. This bind's own callback id is released the ordinary way
-      # (owner: canvas_path, same ordinary case as any other widget-owned
-      # binding), so nothing here leaks in turn.
-      private def release_wheel_bindings_on_destroy(canvas_path : String, tag : String,
-                                                    event_strs : Array(String)) : Nil
-        @app.bind(canvas_path, "<Destroy>", owner: canvas_path) do |_values, _signal|
-          event_strs.each { |event_str| @app.command(:bind, ([tag, event_str, ""] of TclArgValue), EMPTY_KWARGS) }
-          nil
-        end
-      end
-
-      private def scroll_wheel(canvas_path : String, view_command : String, units : Int32) : Nil
-        @app.command(canvas_path, ([view_command, :scroll, units, :units] of TclArgValue), EMPTY_KWARGS)
-        nil
-      end
-
-      # Tk 9's own `scroll <number> units` accepts (and documents rounding
-      # for) a fractional number; Tcl 8.6's stricter integer parsing
-      # rejects "3.0" outright ("expected integer but got ..."), raised
-      # deep inside the widget's own command implementation from within
-      # this very callback. Rounding to a real Int32 here keeps the string
-      # Tcl sees free of a decimal point on every version.
-      #
-      # ties_away, not Crystal's default ties_even: it matches both Ruby's
-      # own Float#round (what ruby-tryst does) and Tk 9's documented
-      # away-from-zero rounding - and more to the point, ties_even would
-      # turn a half-notch delta into zero units, i.e. a wheel event that
-      # visibly does nothing.
-      private def wheel_units(delta : String) : Int32
-        (delta.to_f / -WHEEL_UNITS_PER_NOTCH).round(mode: :ties_away).to_i
-      end
-
       # Appends tag to path's bindtags, keeping the ones Tk already gave
       # it (its own path, its widget class, its toplevel, "all") - a bare
       # `bindtags <path> <tag>` would REPLACE them, silently costing the
       # widget every class binding that makes it behave like itself.
-      private def add_bindtag(path : String, tag : String) : Nil
+      # Shared by #adopt_content_bindtag above (generic infra) and
+      # ScrollableType's own wheel-binding setup (widget_types/
+      # scrollable.cr) - public for the latter to reach from outside this
+      # class.
+      def add_bindtag(path : String, tag : String) : Nil
         tags = Array(TclArgValue).new
         @app.split_list(@app.command(:bindtags, ([path] of TclArgValue), EMPTY_KWARGS))
           .each { |existing| tags << existing }
@@ -508,8 +346,11 @@ module Tryst
 
       # node.opts, keyed by String (App#command's Hash overload) with
       # every RESERVED_OPTIONS key stripped - none of those are real Tk
-      # options.
-      private def filtered_opts(node : Node) : Hash(String, TclArgValue)
+      # options. Public - MenuHostType's own relocated create/link
+      # replacement (widget_types/menu_host_type.cr) needs this from
+      # outside this class; #create_native_scrollable and #create still
+      # use it directly since they're both defined here.
+      def filtered_opts(node : Node) : Hash(String, TclArgValue)
         kwargs = Hash(String, TclArgValue).new
         node.opts.each do |key, value|
           kwargs[key.to_s] = value unless RESERVED_OPTIONS.includes?(key)
@@ -558,14 +399,16 @@ module Tryst
         registered ? !registered.arranged? : false
       end
 
-      # Dispatches to this node's own WidgetType#arrange strategy (flow/
-      # grid layout) if it has one; otherwise plain top-to-bottom pack.
-      # An overlay-tagged child (WidgetDSL#overlay, any container, not
-      # just :canvas - #place_overlay's own doc comment explains why) is
-      # split off first and placed separately below, regardless of
-      # which geometry manager handles the rest of its siblings - Tk's
-      # `place` coexists with `pack`/`grid` on the same master as long
-      # as it targets a different slave.
+      # Dispatches to this node's own WidgetType#arrange - flow/grid/
+      # ui.scrollable layout, or the WidgetType base class's own default
+      # (flow-pack via #flow if this type has one, otherwise plain
+      # top-to-bottom pack - see widget_type.cr). An overlay-tagged child
+      # (WidgetDSL#overlay, any container, not just :canvas - #place_overlay's
+      # own doc comment explains why) is split off first and placed
+      # separately below, regardless of which geometry manager handles
+      # the rest of its siblings - Tk's `place` coexists with `pack`/
+      # `grid` on the same master as long as it targets a different
+      # slave.
       private def arrange_children(node : Node) : Nil
         arrangeable = [] of Node
         overlaid = [] of Node
@@ -580,16 +423,25 @@ module Tryst
         end
 
         registered = WidgetTypes.for_type(node.type)
-        if registered && registered.arrange?
+        if registered
           registered.arrange(self, node, arrangeable)
         else
-          arrangeable.each do |child|
-            next unless realized = child.realized
-            @app.command(:pack, [realized.arrange_path] of TclArgValue, {} of String => TclArgValue)
-          end
+          pack_plain(arrangeable)
         end
 
         overlaid.each { |child| place_overlay(node, child) }
+      end
+
+      # Plain top-to-bottom pack, with none of a flow container's own
+      # gap:/align:/pad: options - the fallback every unregistered node
+      # (:root) gets, and also WidgetType#arrange's own default body for
+      # a type with no #flow and nothing else overridden. Public for the
+      # same reason #create_children is.
+      def pack_plain(children : Array(Node)) : Nil
+        children.each do |child|
+          next unless realized = child.realized
+          @app.command(:pack, [realized.arrange_path] of TclArgValue, {} of String => TclArgValue)
+        end
       end
 
       # `place`s an overlay-tagged child (see WidgetDSL#overlay) at its
@@ -620,9 +472,11 @@ module Tryst
       # container's main axis. Public (not private, unlike ruby's own
       # version, which reaches it via realizer.send(:arrange_flow, ...)
       # from a WidgetType's computed arrange: hook - Crystal has no
-      # private-bypass equivalent to send), since WidgetType#initialize
-      # builds exactly that same kind of hook for any type registered
-      # with flow: (see widget_type.cr).
+      # private-bypass equivalent to send) - generic layout STRATEGY any
+      # type can opt into via the flow: constructor field (WidgetType#
+      # arrange's own default body dispatches here automatically), not
+      # any one type's own bespoke logic, so it stays here rather than
+      # moving into column.cr/row.cr specifically.
       def arrange_flow(node : Node, children : Array(Node), flow : FlowConfig) : Nil
         last_index = children.size - 1
 
@@ -656,110 +510,6 @@ module Tryst
         opts
       end
 
-      # Runs a grid's real Tk grid placement, from each child's own
-      # #cell_position (set by WidgetDSL#cell), plus stretch_columns/
-      # stretch_rows (WidgetDSL#stretch). Public for the same reason
-      # #arrange_flow is (see its own comment) - a :grid WidgetType's
-      # arrange: hook reaches this from outside the class.
-      def arrange_grid(node : Node, children : Array(Node)) : Nil
-        gap = node.gap
-
-        children.each do |child|
-          cell = child.cell_position
-          unless cell
-            # GridValidator#check_missing_cell is the primary, pre-realize
-            # detection for this, on both paths that build a grid - the
-            # initial Validator.validate!, and Session#add's own
-            # Validator.validate_subtree!. This stays as a
-            # belt-and-suspenders backstop for a caller that reaches
-            # #realize_subtree with no validation at all.
-            raise ArgumentError.new("#{describe(child)} is a direct child of a grid but was never placed with " \
-                                    "g.cell(row:, col:) { ... }")
-          end
-
-          # The grid's own defaults, overridable per cell - a cell that
-          # says nothing gets exactly what it always got.
-          opts = Hash(String, TclArgValue).new
-          opts["row"] = cell.row
-          opts["column"] = cell.col
-          opts["sticky"] = cell.sticky || "ew"
-          opts["padx"] = cell.padx || gap
-          opts["pady"] = cell.pady || gap
-          opts["columnspan"] = cell.colspan if cell.colspan > 1
-          opts["rowspan"] = cell.rowspan if cell.rowspan > 1
-          # Internal padding has no grid-level default to fall back to -
-          # it's per cell or not at all.
-          if ipadx = cell.ipadx
-            opts["ipadx"] = ipadx
-          end
-          if ipady = cell.ipady
-            opts["ipady"] = ipady
-          end
-
-          next unless realized = child.realized
-
-          @app.command(:grid, [realized.arrange_path] of TclArgValue, opts)
-        end
-
-        realized_node = node.realized
-        return unless realized_node
-
-        node.stretch_columns.try &.each do |col|
-          @app.command(:grid, [:columnconfigure, realized_node.path, col] of TclArgValue, {"weight" => 1} of String => TclArgValue)
-        end
-        node.stretch_rows.try &.each do |row|
-          @app.command(:grid, [:rowconfigure, realized_node.path, row] of TclArgValue, {"weight" => 1} of String => TclArgValue)
-        end
-      end
-
-      # Builds a whole menu subtree (a menu_bar, a standalone context_menu,
-      # or a nested cascade under either) plus every entry it holds,
-      # recursing into nested cascades depth-first so a cascade's own
-      # menu exists before the `add cascade` entry that references it is
-      # added to its parent. A menu_bar additionally attaches itself to
-      # parent_path's own -menu option once its whole subtree is built.
-      # Registered as :menu_bar/:context_menu's own custom_create: (see
-      # #create) - public for the same reason #arrange_flow/#arrange_grid
-      # are (see either's own comment): a WidgetType's computed hook
-      # reaches this from outside the class. Takes parent_path, not an
-      # already-allocated path, since it replaces #create's entire
-      # per-node handling for this node, allocation included.
-      def create_menu_tree(node : Node, parent_path : String) : Nil
-        path = allocate_path(node, parent_path)
-        @app.command("menu", [path] of TclArgValue, {"tearoff" => 0} of String => TclArgValue)
-        node.realized = RealizedNode.new(app: @app, path: path)
-
-        node.children.each do |child|
-          case child.type
-          when :menu
-            create_menu_tree(child, path)
-            cascade_opts = filtered_opts(child)
-            if child_realized = child.realized
-              cascade_opts["menu"] = child_realized.path
-            end
-            @app.command(path, [:add, :cascade] of TclArgValue, cascade_opts)
-          when :menu_item
-            @app.command(path, [:add, :command] of TclArgValue, filtered_opts(child))
-          when :menu_separator
-            @app.command(path, [:add, :separator] of TclArgValue, {} of String => TclArgValue)
-          when :menu_checkbox
-            @app.command(path, [:add, :checkbutton] of TclArgValue, filtered_opts(child))
-          when :menu_radio
-            @app.command(path, [:add, :radiobutton] of TclArgValue, filtered_opts(child))
-          else
-            raise ArgumentError.new("#{describe(child)} isn't valid inside a menu")
-          end
-        end
-
-        if node.type == :menu_bar
-          @app.command(parent_path, [:configure] of TclArgValue, {"menu" => path} of String => TclArgValue)
-        end
-      end
-
-      private def describe(node : Node) : String
-        node.name ? "##{node.type}(:#{node.name})" : "an unnamed ##{node.type}"
-      end
-
       private def wire_event(node : Node, binding : EventBinding) : Nil
         target_node =
           if target = binding.target
@@ -769,12 +519,18 @@ module Tryst
           end
 
         target_realized = target_node.realized
-        raise ArgumentError.new("#{describe(target_node)} has no realized path to bind an event on") unless target_realized
+        raise ArgumentError.new("#{WidgetValidators.describe(target_node)} has no realized path to bind an event on") unless target_realized
 
         @app.bind(target_realized.path, binding.event, binding.subs) { |args, signal| binding.handler.call(args, signal) }
       end
 
-      private def allocate_path(node : Node, parent_path : String) : String
+      # Claims this node's own hierarchical/meaningful Tk path segment
+      # under parent_path and records it, so a later rebuild of the same
+      # subtree gets the same segment back (Handle#destroy!'s own
+      # unlink!). Public - MenuHostType's own relocated create/link
+      # replacement (widget_types/menu_host_type.cr) needs this from
+      # outside this class; #create still uses it directly.
+      def allocate_path(node : Node, parent_path : String) : String
         # node.key is unique for the whole Document, persisted at node
         # creation (Document#create). Disambiguation against a same-
         # parent repeat (a reusable component mounted more than once)

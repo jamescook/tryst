@@ -3,16 +3,14 @@ require "../../platform"
 
 module Tryst
   module UI
-    # @api private
-    #
     # A freshly created :window's post-creation setup: title/geometry/
     # resizable, transient-to-parent, the macOS shared-menubar quirk, and
     # withdrawn by default - a declared window stays hidden until
     # Handle#show reveals it, so a build can declare every window it will
     # ever need up front without them all flashing onto the screen at
-    # realize. Registered as :window's own post_create: below.
-    module WindowRealize
-      def self.post_create(app : AppContract, node : Node, path : String, parent_path : String) : Nil
+    # realize.
+    class WindowType < WidgetType
+      def post_create(app : AppContract, node : Node, path : String, parent_path : String) : Nil
         opts = node.opts
         window = app.window(path)
 
@@ -20,11 +18,11 @@ module Tryst
         window.geometry = opts[:geometry].to_s if opts[:geometry]?
 
         if opts.has_key?(:resizable)
-          width, height = resizable_pair(opts[:resizable])
+          width, height = WindowType.resizable_pair(opts[:resizable])
           window.set_resizable(width, height)
         end
 
-        share_macos_menu(app, path, parent_path) if Tryst.platform.darwin?
+        WindowType.share_macos_menu(app, path, parent_path) if Tryst.platform.darwin?
 
         # Transient is applied by Handle#show, not here. On Aqua a
         # transient window is mapped whenever its master is, so setting
@@ -35,7 +33,11 @@ module Tryst
       end
 
       # resizable: true/false for both axes, or resizable: [width, height]
-      # to set them separately.
+      # to set them separately. A plain class method, not an instance
+      # one, like #share_macos_menu below - neither touches any per-type
+      # state, and keeping them callable without a WidgetType instance is
+      # what lets window_spec.cr exercise #share_macos_menu directly (see
+      # its own comment on why that matters).
       def self.resizable_pair(value : TclArgValue) : Tuple(Bool, Bool)
         if value.is_a?(Array)
           unless value.size == 2
@@ -79,11 +81,7 @@ module Tryst
     # A toplevel: placed by the window manager, never pack/gridded into
     # its nominal parent - hence arranged: false.
     WidgetTypes.register(
-      WidgetType.new(
-        type: :window, tk_command: "toplevel", leaf: false, arranged: false,
-        hosts_menu_bar: true,
-        post_create: PostCreateHook.new { |app, node, path, parent_path| WindowRealize.post_create(app, node, path, parent_path) }
-      )
+      WindowType.new(type: :window, tk_command: "toplevel", leaf: false, arranged: false, hosts_menu_bar: true)
     )
   end
 end

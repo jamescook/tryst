@@ -234,7 +234,7 @@ describe "the :window widget type" do
     app = FakeApp.new
     app.command_result = ".app_menu"
 
-    Tryst::UI::WindowRealize.share_macos_menu(app, ".tools", ".")
+    Tryst::UI::WindowType.share_macos_menu(app, ".tools", ".")
 
     read, write = app.calls
     read.cmd.should eq(".")
@@ -252,7 +252,7 @@ describe "the :window widget type" do
     app = FakeApp.new
     app.command_result = ""
 
-    Tryst::UI::WindowRealize.share_macos_menu(app, ".tools", ".")
+    Tryst::UI::WindowType.share_macos_menu(app, ".tools", ".")
 
     app.calls.size.should eq(1)
     app.calls.first.args.should eq([:cget, "-menu"] of Tryst::TclArgValue)
@@ -265,7 +265,7 @@ describe "the :window widget type" do
   it "share_macos_menu survives a parent with no -menu option at all" do
     app = MenulessParentFakeApp.new
 
-    Tryst::UI::WindowRealize.share_macos_menu(app, ".panel.tools", ".panel")
+    Tryst::UI::WindowType.share_macos_menu(app, ".panel.tools", ".panel")
 
     app.calls.should be_empty
   end
