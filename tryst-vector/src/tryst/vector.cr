@@ -1,0 +1,39 @@
+require "tryst"
+
+require "./vector/bindings/core"
+
+module Tryst
+  # CPU vector rasterization (ThorVG) for tryst. A separate shard so that
+  # tryst itself never grows a ThorVG dependency: nothing here is
+  # reachable from a plain `require "tryst"`. See ctk-yxa's bd notes for
+  # the ThorVG-vs-Blend2D bake-off this shard's backend choice is based
+  # on.
+  module Vector
+    # Any ThorVG call that reports failure. ThorVG's own convention is a
+    # Tvg_Result error code per call, with no message to go with it - so
+    # unlike Tryst::SDL::Error, there's nothing from the library itself
+    # to fold in beyond the code and which call produced it.
+    class Error < Exception
+    end
+
+    # Brings up the ThorVG engine, raising rather than returning a result
+    # code - there is nothing a caller can do with a failed init except
+    # stop. threads: 0 lets ThorVG pick its own default.
+    #
+    # Safe to call repeatedly: ThorVG reference-counts the engine the
+    # same way SDL reference-counts subsystems (see tvg_engine_term's own
+    # doc comment on that), so a redundant #init is not an error.
+    def self.init(threads : Int32 = 0) : Nil
+      result = LibThorVG.engine_init(threads.to_u32)
+      return if result == LibThorVG::RESULT_SUCCESS
+
+      raise Error.new("tvg_engine_init failed (result=#{result})")
+    end
+
+    # Shuts down the engine - decrements ThorVG's own init reference
+    # count; only the final matching #quit actually tears it down.
+    def self.quit : Nil
+      LibThorVG.engine_term
+    end
+  end
+end

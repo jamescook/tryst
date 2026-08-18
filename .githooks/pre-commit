@@ -6,12 +6,14 @@ set -eu
 # Runs over the whole tree rather than just staged files - simplest
 # option at this project's size, and it means a lint issue introduced by
 # an uncommitted change elsewhere can't slip through unnoticed either.
-# tryst-sdl/ is listed explicitly: it is a separate shard with its own
-# shard.yml, but it lives in this repo and shares its lint rules. Its
-# lib/ is deliberately not passed - those are vendored dependencies.
+# tryst-sdl/ and tryst-vector/ are listed explicitly: each is a separate
+# shard with its own shard.yml, but lives in this repo and shares its
+# lint rules. Their lib/ dirs are deliberately not passed - those are
+# vendored dependencies. tryst-vector/examples/ doesn't exist yet (no
+# Surface API to write one against), so it's left off until it does.
 ameba_bin="lib/ameba/bin/ameba"
 if [ -x "$ameba_bin" ]; then
-  if ! "$ameba_bin" src/ spec/ examples/ tryst-sdl/src/ tryst-sdl/spec/ tryst-sdl/examples/; then
+  if ! "$ameba_bin" src/ spec/ examples/ tryst-sdl/src/ tryst-sdl/spec/ tryst-sdl/examples/ tryst-vector/src/ tryst-vector/spec/; then
     echo "pre-commit: ameba found issues (see above) - fix or run 'crystal tool format' first." >&2
     exit 1
   fi
@@ -50,10 +52,14 @@ fi
 # require like `require "tryst/ui"` resolves against the lib/ of whatever
 # directory crystal runs in, and tryst-sdl has its own - checking its
 # examples from the repo root would look in the root's lib/ and fail to
-# find tryst at all.
+# find tryst at all. A shard with no examples/ directory at all (like
+# tryst-vector, until it has a Surface API worth writing one against) is
+# skipped rather than treated as a failure - `find` on a missing dir
+# would otherwise abort the whole hook.
 example_failures=""
 check_examples() {
   dir=$1
+  [ -d "$dir/examples" ] || return 0
   if [ ! -d "$dir/lib" ]; then
     echo "pre-commit: $dir/lib is missing - run 'shards install' in $dir." >&2
     exit 1
@@ -69,6 +75,7 @@ $out"
 
 check_examples .
 check_examples tryst-sdl
+check_examples tryst-vector
 
 if [ -n "$example_failures" ]; then
   echo "pre-commit: example(s) failed to compile:" >&2
