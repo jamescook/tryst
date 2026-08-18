@@ -62,14 +62,29 @@ lib LibThorVG
   fun shape_append_rect = tvg_shape_append_rect(paint : Paint, x : Float32, y : Float32,
                                                 w : Float32, h : Float32, rx : Float32,
                                                 ry : Float32, cw : Bool) : Result
+  fun shape_append_circle = tvg_shape_append_circle(paint : Paint, cx : Float32, cy : Float32,
+                                                    rx : Float32, ry : Float32, cw : Bool) : Result
+  fun shape_set_fill_color = tvg_shape_set_fill_color(paint : Paint, r : UInt8, g : UInt8,
+                                                      b : UInt8, a : UInt8) : Result
   fun shape_set_stroke_width = tvg_shape_set_stroke_width(paint : Paint, width : Float32) : Result
   fun shape_set_stroke_color = tvg_shape_set_stroke_color(paint : Paint, r : UInt8, g : UInt8,
                                                           b : UInt8, a : UInt8) : Result
   fun shape_set_gradient = tvg_shape_set_gradient(paint : Paint, grad : Gradient) : Result
+  fun shape_set_stroke_gradient = tvg_shape_set_stroke_gradient(paint : Paint, grad : Gradient) : Result
+
+  # Uniform scale around the paint's own origin - Surface applies this to
+  # every shape it creates so a #draw block always works in logical
+  # (not device) pixels; see Surface's own doc comment for the HiDPI
+  # story this makes possible.
+  fun paint_scale = tvg_paint_scale(paint : Paint, factor : Float32) : Result
 
   fun linear_gradient_new = tvg_linear_gradient_new : Gradient
   fun linear_gradient_set = tvg_linear_gradient_set(grad : Gradient, x1 : Float32, y1 : Float32,
                                                     x2 : Float32, y2 : Float32) : Result
+  fun radial_gradient_new = tvg_radial_gradient_new : Gradient
+  fun radial_gradient_set = tvg_radial_gradient_set(grad : Gradient, cx : Float32, cy : Float32,
+                                                    r : Float32, fx : Float32, fy : Float32,
+                                                    fr : Float32) : Result
   fun gradient_set_color_stops = tvg_gradient_set_color_stops(grad : Gradient,
                                                               stops : ColorStop*, cnt : UInt32) : Result
 end

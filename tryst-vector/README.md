@@ -15,13 +15,50 @@ ThorVG dependency: nothing here is reachable from a plain
 lives in this repo, next to the shard it depends on, and points at it
 with a `path` dependency — the same shape as [tryst-sdl](../tryst-sdl/).
 
-**Status:** the raw ThorVG bindings (`LibThorVG`, in
-`src/tryst/vector/bindings/core.cr`) are in and proven to link and render
-correctly on both macOS and Linux (see Tests below). The idiomatic
-`Tryst::Vector::Surface` wrapper — `#draw { |ctx| ... }`, HiDPI handling,
-and `#blit_to(photo)` for the seam `CanvasWidget` (ctk-0au) consumes — is
-not built yet. Until then this shard is only usable at the raw
-`LibThorVG` FFI level.
+```crystal
+require "tryst"
+require "tryst-vector"
+
+Tryst::Vector.init
+
+app = Tryst::App.new
+canvas = app.create_widget("canvas", width: 200, height: 120)
+canvas.pack(fill: "both", expand: true)
+
+surface = Tryst::Vector::Surface.new(width: 160, height: 80)
+surface.draw do |ctx|
+  gradient = Tryst::Vector::Gradient.linear(0, 0, 160, 80, [
+    {0.0, 60_u8, 120_u8, 240_u8, 255_u8},
+    {1.0, 200_u8, 60_u8, 220_u8, 255_u8},
+  ])
+  ctx.rounded_rect(4, 4, 152, 72, 18).fill(gradient)
+end
+
+photo = Tryst::Photo.new(app, width: surface.pixel_width, height: surface.pixel_height)
+surface.blit_to(photo)
+canvas.command(:create, :image, 20, 20, image: photo.name, anchor: :nw)
+
+app.show
+app.mainloop
+```
+
+See `examples/rounded_rect_gradient.cr` for the runnable version of the
+above (and Examples below for how to run it).
+
+`Tryst::Vector::Surface` is the seam `CanvasWidget` (ctk-0au) is meant to
+consume: `#draw` yields a `Context` with `#rect`/`#rounded_rect`/`#circle`,
+each returning a `Shape` you call `#fill`/`#stroke` on (a flat color or a
+`Tryst::Vector::Gradient`); `#blit_to(photo)` writes the whole rendered
+buffer into a real Tk Photo with no pixel conversion (ThorVG's
+straight-alpha output is byte-for-byte `Tryst::PixelFormat::ARGB`,
+confirmed directly against a live Photo, not assumed). `scale:` on
+`Surface.new` renders at a HiDPI multiple while `#draw`'s own coordinates
+stay in logical pixels throughout — see `Surface`'s own doc comment for
+the full story.
+
+Text and paths aren't exposed yet (ThorVG's C API supports both; the
+wrapper just doesn't reach them yet) — revisit once something actually
+needs one.
 
 ## Requirements
 
@@ -46,6 +83,21 @@ That's why the Docker test image (see Tests below) is based on Debian
 forky rather than trixie or the parent project's own Ubuntu-based image —
 same reasoning tryst-sdl's Dockerfile documents for `libsdl3-mixer-dev`
 lagging the same way.
+
+## Examples
+
+Run this **from this directory**, not the repo root — same reason as
+tryst-sdl's own examples (`require "tryst"` resolves against the `lib/`
+of wherever crystal runs).
+
+```
+cd tryst-vector
+crystal run examples/rounded_rect_gradient.cr
+```
+
+Opens a small window with an antialiased rounded rect and a gradient
+fill — the whole seam (`Surface` → straight-alpha buffer → `Photo` →
+canvas image item) exercised end to end, not just in a headless spec.
 
 ## Tests
 

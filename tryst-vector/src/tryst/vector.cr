@@ -1,6 +1,10 @@
 require "tryst"
 
 require "./vector/bindings/core"
+require "./vector/gradient"
+require "./vector/shape"
+require "./vector/context"
+require "./vector/surface"
 
 module Tryst
   # CPU vector rasterization (ThorVG) for tryst. A separate shard so that
