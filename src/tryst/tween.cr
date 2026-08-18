@@ -21,16 +21,16 @@ module Tryst
   end
 
   # A small animation helper on top of App#every - the "duration, easing,
-  # cancel-on-destroy" piece CanvasWidget's own doc comment calls for.
+  # cancel-on-destroy" piece OwnerDrawnWidget's own doc comment calls for.
   # App#every itself is just a flat, unbounded repeating interval with no
   # concept of a start/end or a progress value; Tween adds exactly that
   # on top, ticking at a fixed ~60fps until `duration_ms` has elapsed,
   # calling `block` with the EASED 0.0-1.0 progress each tick (1.0 on the
   # final tick, guaranteed even if the last interval overshoots).
   #
-  # Cancel a running Tween with #cancel - CanvasWidget wires this to
+  # Cancel a running Tween with #cancel - OwnerDrawnWidget wires this to
   # App#on_widget_destroyed so an in-flight animation on a destroyed
-  # widget can't fire into freed state (see CanvasWidget's own doc
+  # widget can't fire into freed state (see OwnerDrawnWidget's own doc
   # comment on why that hook, not just its own #destroy, is what a timer
   # needs to be cancelled from).
   #

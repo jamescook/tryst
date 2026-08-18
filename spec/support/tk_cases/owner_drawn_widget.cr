@@ -1,12 +1,12 @@
 require "../tk_test_registry"
-require "../../../src/tryst/canvas_widget"
+require "../../../src/tryst/owner_drawn_widget"
 
-# A trivial concrete subclass - CanvasWidget itself is abstract, and
+# A trivial concrete subclass - OwnerDrawnWidget itself is abstract, and
 # nothing about #redraw's own drawing matters to these cases, only that
 # it's called when expected. Counts calls and records the last state
 # tuple, mirroring how a real widget would use #redraw to know what to
 # paint.
-class TestCanvasWidget < Tryst::CanvasWidget
+class TestOwnerDrawnWidget < Tryst::OwnerDrawnWidget
   getter redraw_count = 0
   getter last_state : {Bool, Bool, Bool, Bool}?
 
@@ -16,8 +16,8 @@ class TestCanvasWidget < Tryst::CanvasWidget
   end
 end
 
-tk_test "CanvasWidget tracks hover/pressed/focused from real Tk events" do |app|
-  widget = TestCanvasWidget.new(app, width: 80, height: 40)
+tk_test "OwnerDrawnWidget tracks hover/pressed/focused from real Tk events" do |app|
+  widget = TestOwnerDrawnWidget.new(app, width: 80, height: 40)
   widget.canvas.pack
   app.tcl_eval("update")
 
@@ -45,8 +45,8 @@ tk_test "CanvasWidget tracks hover/pressed/focused from real Tk events" do |app|
   widget.destroy
 end
 
-tk_test "CanvasWidget#disabled= suppresses hover/pressed tracking and drops Tab order" do |app|
-  widget = TestCanvasWidget.new(app, width: 80, height: 40)
+tk_test "OwnerDrawnWidget#disabled= suppresses hover/pressed tracking and drops Tab order" do |app|
+  widget = TestOwnerDrawnWidget.new(app, width: 80, height: 40)
   widget.canvas.pack
   app.tcl_eval("update")
 
@@ -62,8 +62,8 @@ tk_test "CanvasWidget#disabled= suppresses hover/pressed tracking and drops Tab 
   widget.destroy
 end
 
-tk_test "CanvasWidget calls #redraw on <Configure> and on every state change" do |app|
-  widget = TestCanvasWidget.new(app, width: 80, height: 40)
+tk_test "OwnerDrawnWidget calls #redraw on <Configure> and on every state change" do |app|
+  widget = TestOwnerDrawnWidget.new(app, width: 80, height: 40)
   widget.canvas.pack
   # The root window starts withdrawn (see .claude/rules/testing.md's own
   # trap warning), and <Configure> doesn't fire for a child packed into
@@ -82,8 +82,8 @@ tk_test "CanvasWidget calls #redraw on <Configure> and on every state change" do
   widget.destroy
 end
 
-tk_test "CanvasWidget#blit creates a Photo and a canvas image item hosting it" do |app|
-  widget = TestCanvasWidget.new(app, width: 20, height: 20)
+tk_test "OwnerDrawnWidget#blit creates a Photo and a canvas image item hosting it" do |app|
+  widget = TestOwnerDrawnWidget.new(app, width: 20, height: 20)
   raise "expected no photo before the first #blit" unless widget.photo.nil?
 
   pixels = Bytes.new(20 * 20 * 4) { |i| i % 4 == 3 ? 255_u8 : 0_u8 } # opaque black
@@ -100,8 +100,8 @@ tk_test "CanvasWidget#blit creates a Photo and a canvas image item hosting it" d
   widget.destroy
 end
 
-tk_test "CanvasWidget#animate ticks toward 1.0 and stops firing once cancelled" do |app|
-  widget = TestCanvasWidget.new(app, width: 20, height: 20)
+tk_test "OwnerDrawnWidget#animate ticks toward 1.0 and stops firing once cancelled" do |app|
+  widget = TestOwnerDrawnWidget.new(app, width: 20, height: 20)
 
   progress = [] of Float64
   tween = widget.animate(60) { |value| progress << value }
@@ -117,15 +117,15 @@ tk_test "CanvasWidget#animate ticks toward 1.0 and stops firing once cancelled" 
   widget.destroy
 end
 
-tk_test "CanvasWidget#animate stops calling back once the canvas is gone, even without #destroy" do |app|
-  widget = TestCanvasWidget.new(app, width: 20, height: 20)
+tk_test "OwnerDrawnWidget#animate stops calling back once the canvas is gone, even without #destroy" do |app|
+  widget = TestOwnerDrawnWidget.new(app, width: 20, height: 20)
 
   ticks = 0
   widget.animate(500) { ticks += 1 }
   app.interp.wait_until { ticks > 0 }
 
   # Destroys the underlying Tk widget directly, bypassing
-  # CanvasWidget#destroy entirely - the scenario an implicit parent
+  # OwnerDrawnWidget#destroy entirely - the scenario an implicit parent
   # destroy would also produce.
   app.tcl_invoke("destroy", widget.canvas.path)
   app.tcl_eval("update")
@@ -136,10 +136,10 @@ tk_test "CanvasWidget#animate stops calling back once the canvas is gone, even w
   raise "a tween should stop firing once its canvas no longer exists" unless ticks == count_after_destroy
 end
 
-tk_test "CanvasWidget#destroy leaves no lingering bind callbacks for its canvas path" do |app|
+tk_test "OwnerDrawnWidget#destroy leaves no lingering bind callbacks for its canvas path" do |app|
   baseline = app.interp.callback_ids.size
 
-  widget = TestCanvasWidget.new(app, width: 20, height: 20)
+  widget = TestOwnerDrawnWidget.new(app, width: 20, height: 20)
   widget.canvas.pack
   app.tcl_eval("update")
   raise "expected #initialize to register at least one callback" unless app.interp.callback_ids.size > baseline
@@ -150,11 +150,11 @@ tk_test "CanvasWidget#destroy leaves no lingering bind callbacks for its canvas 
     unless app.interp.callback_ids.size == baseline
 end
 
-tk_test "CanvasWidget's App#debug_info stays bounded across a create/destroy loop" do |app|
+tk_test "OwnerDrawnWidget's App#debug_info stays bounded across a create/destroy loop" do |app|
   baseline = app.debug_info[:widget_types]? || 0
 
   20.times do
-    widget = TestCanvasWidget.new(app, width: 20, height: 20)
+    widget = TestOwnerDrawnWidget.new(app, width: 20, height: 20)
     widget.blit(Bytes.new(20 * 20 * 4), 20, 20) # exercises the Photo it also owns
     widget.animate(20) { }
     widget.destroy

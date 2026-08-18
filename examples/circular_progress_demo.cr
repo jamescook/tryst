@@ -1,23 +1,23 @@
 # Interactive example - run with `crystal run examples/circular_progress_demo.cr`.
 #
 # The reference widget ctk-0au's own acceptance criteria calls for: a
-# trivial owner-drawn widget built on Tryst::CanvasWidget, proving the
+# trivial owner-drawn widget built on Tryst::OwnerDrawnWidget, proving the
 # kit actually saves the plumbing it promises to (resize, hover/pressed/
 # focus tracking, theme-correct colors, a tween-driven animation) for
 # ~30 lines of drawing logic below, not ~400 lines of infrastructure.
 #
-# Item-based drawing only (two arc items) - CanvasWidget's surface-
+# Item-based drawing only (two arc items) - OwnerDrawnWidget's surface-
 # backed mode (#blit, for antialiased ThorVG-rendered content) is
-# already proven directly in spec/support/tk_cases/canvas_widget.cr;
+# already proven directly in spec/support/tk_cases/owner_drawn_widget.cr;
 # this example deliberately stays a tryst-only artifact with no
 # tryst-vector dependency, matching ctk-0au's own scope.
 #
-# Keyboard-operable: Tab to it (CanvasWidget's own -takefocus), then
+# Keyboard-operable: Tab to it (OwnerDrawnWidget's own -takefocus), then
 # Up/Right raises the value, Down/Left lowers it - each change animates
-# rather than jumping, via CanvasWidget#animate.
+# rather than jumping, via OwnerDrawnWidget#animate.
 require "../src/tryst"
 
-class CircularProgress < Tryst::CanvasWidget
+class CircularProgress < Tryst::OwnerDrawnWidget
   getter value : Int32
 
   def initialize(app : Tryst::App, value : Int32 = 0, parent = nil)
@@ -81,7 +81,7 @@ class CircularProgress < Tryst::CanvasWidget
   end
 end
 
-app = Tryst::App.new(title: "CanvasWidget: circular progress")
+app = Tryst::App.new(title: "OwnerDrawnWidget: circular progress")
 app.set_window_geometry("160x160")
 
 progress = CircularProgress.new(app, value: 30)
@@ -92,4 +92,4 @@ puts "Try switching themes to confirm it stays theme-correct: ttk::style theme u
 puts "Close the window when done."
 app.show
 app.mainloop
-puts "OK: circular progress ring driven by CanvasWidget's state/theme/tween machinery."
+puts "OK: circular progress ring driven by OwnerDrawnWidget's state/theme/tween machinery."

@@ -45,7 +45,7 @@ app.mainloop
 See `examples/rounded_rect_gradient.cr` for the runnable version of the
 above (and Examples below for how to run it).
 
-`Tryst::Vector::Surface` is the seam `CanvasWidget` (ctk-0au) is meant to
+`Tryst::Vector::Surface` is the seam `OwnerDrawnWidget` (ctk-0au) is meant to
 consume: `#draw` yields a `Context` with `#rect`/`#rounded_rect`/`#circle`,
 each returning a `Shape` you call `#fill`/`#stroke` on (a flat color or a
 `Tryst::Vector::Gradient`); `#blit_to(photo)` writes the whole rendered

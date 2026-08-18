@@ -4,7 +4,7 @@ module Tryst
   # Reads the ACTIVE ttk theme's colors, so an owner-drawn widget doesn't
   # hardcode colors that clash with aqua/clam/dark - the piece every
   # ad-hoc canvas widget skips and then looks wrong on one platform (see
-  # CanvasWidget's own doc comment). Nothing else in this codebase reads
+  # OwnerDrawnWidget's own doc comment). Nothing else in this codebase reads
   # a ttk style color before this - every existing `ttk::style` call
   # elsewhere is a `configure` (write), never a `lookup` (read).
   #

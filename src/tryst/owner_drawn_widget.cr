@@ -27,7 +27,7 @@ module Tryst
   #
   # Surface-backed: #blit a filled pixel buffer (from anywhere - most
   # naturally tryst-vector's `Surface#blit_to`) into a canvas image item
-  # this class manages. CanvasWidget itself never references tryst-vector
+  # this class manages. OwnerDrawnWidget itself never references tryst-vector
   # or any specific rasterizer - it only ever deals in "a buffer someone
   # already filled," which is what keeps core dependency-free (see
   # ctk-0au's own notes on this boundary). tryst-vector's own Shape
@@ -64,7 +64,7 @@ module Tryst
   # instead, the window closed) - guarded per-tick rather than wired
   # through App#on_widget_destroyed, which has no per-instance unregister
   # and would leak one permanent closure per widget ever created.
-  abstract class CanvasWidget
+  abstract class OwnerDrawnWidget
     getter app : App
     getter canvas : Widget
     getter theme : Theme
