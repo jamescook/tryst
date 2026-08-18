@@ -35,8 +35,13 @@ module Tryst
     # Only the generic leaf/container append machinery and the widget
     # types built up across the tryst-ui epic's phases are ported here -
     # see widget_type.cr's own doc comment for what's deferred and why.
-    # Every hand-written ui.<type> method below returns a Handle, matching
-    # ruby's own DSL exactly.
+    # Every ui.<type> method below returns a Handle, matching ruby's own
+    # DSL exactly - most are one-line leaf_widget/container_widget macro
+    # calls (see those macros' own doc comments), left hand-written only
+    # where a type's real signature doesn't fit that plain shape (table's
+    # show: default, window's on_close:, tab/pane's positional label/
+    # weight params, split's orientation:, spacer/cell/stretch/overlay's
+    # own bespoke shapes).
     module WidgetDSL
       @document : Document
       @stack = [] of Node
@@ -45,41 +50,58 @@ module Tryst
 
       abstract def build_open? : Bool
 
-      def button(name : Symbol? = nil, bind : Var? = nil, **opts) : Handle
-        append_leaf(:button, name, to_opts_hash(opts), bind)
+      # Stamps a leaf ui.<type> method with the same name:/bind:/**opts
+      # shape every built-in leaf method below has - the macro version of
+      # what #widget's own doc comment describes doing by hand. See
+      # CUSTOM_WIDGETS.md at the repo root for the full guide; in short:
+      #
+      #     module Tryst::UI::WidgetDSL
+      #       leaf_widget gauge
+      #     end
+      #     ui.gauge(:cpu, maximum: 100)
+      #
+      # reads exactly like a built-in #progress/#label/etc call, once
+      # type: :gauge is registered (see WidgetType's own doc comment for
+      # how). Defined before every method below so they can use it too -
+      # Crystal requires a macro to be defined before its call site.
+      macro leaf_widget(type)
+        def {{ type.id }}(name : Symbol? = nil, bind : Var? = nil, **opts) : Handle
+          append_leaf(:{{ type.id }}, name, to_opts_hash(opts), bind)
+        end
       end
 
-      def label(name : Symbol? = nil, bind : Var? = nil, **opts) : Handle
-        append_leaf(:label, name, to_opts_hash(opts), bind)
+      # ditto, for a container - both the with-block and without-block
+      # overloads every built-in container method below has.
+      #
+      #     module Tryst::UI::WidgetDSL
+      #       container_widget panel_deck
+      #     end
+      #     ui.panel_deck(:cards) { |dsl| dsl.button(:ok, text: "OK") }
+      macro container_widget(type)
+        def {{ type.id }}(name : Symbol? = nil, **opts, & : self -> Nil) : Handle
+          append_container(:{{ type.id }}, name, to_opts_hash(opts)) { |dsl| yield dsl }
+        end
+
+        def {{ type.id }}(name : Symbol? = nil, **opts) : Handle
+          append_container(:{{ type.id }}, name, to_opts_hash(opts))
+        end
       end
 
-      def checkbox(name : Symbol? = nil, bind : Var? = nil, **opts) : Handle
-        append_leaf(:checkbox, name, to_opts_hash(opts), bind)
-      end
-
-      def radio(name : Symbol? = nil, bind : Var? = nil, **opts) : Handle
-        append_leaf(:radio, name, to_opts_hash(opts), bind)
-      end
-
-      def text_box(name : Symbol? = nil, bind : Var? = nil, **opts) : Handle
-        append_leaf(:text_box, name, to_opts_hash(opts), bind)
-      end
+      leaf_widget button
+      leaf_widget label
+      leaf_widget checkbox
+      leaf_widget radio
+      leaf_widget text_box
 
       # A multi-line text widget. Scrolls itself unless scroll: false -
       # see #scrollable, which is for the widgets that can't.
-      def text_area(name : Symbol? = nil, bind : Var? = nil, **opts) : Handle
-        append_leaf(:text_area, name, to_opts_hash(opts), bind)
-      end
+      leaf_widget text_area
 
-      def list(name : Symbol? = nil, bind : Var? = nil, **opts) : Handle
-        append_leaf(:list, name, to_opts_hash(opts), bind)
-      end
+      leaf_widget list
 
       # A hierarchical treeview, showing the tree column Tk displays by
       # default. Scrolls itself unless scroll: false.
-      def tree(name : Symbol? = nil, bind : Var? = nil, **opts) : Handle
-        append_leaf(:tree, name, to_opts_hash(opts), bind)
-      end
+      leaf_widget tree
 
       # The same widget as #tree, for rows of fields rather than a
       # hierarchy: name the fields with columns:. Scrolls itself unless
@@ -103,51 +125,29 @@ module Tryst
         hash
       end
 
-      def slider(name : Symbol? = nil, bind : Var? = nil, **opts) : Handle
-        append_leaf(:slider, name, to_opts_hash(opts), bind)
-      end
+      leaf_widget slider
 
       # A rule between sections. orient: turns it vertical.
-      def divider(name : Symbol? = nil, bind : Var? = nil, **opts) : Handle
-        append_leaf(:divider, name, to_opts_hash(opts), bind)
-      end
+      leaf_widget divider
 
       # A progress bar: mode: (determinate/indeterminate), maximum: and
       # value:, or bind: a Var to drive the position from code.
-      def progress(name : Symbol? = nil, bind : Var? = nil, **opts) : Handle
-        append_leaf(:progress, name, to_opts_hash(opts), bind)
-      end
+      leaf_widget progress
 
       # A one-of-many chooser. values: lists the choices; bind: a Var to
       # read or set the chosen one.
-      def dropdown(name : Symbol? = nil, bind : Var? = nil, **opts) : Handle
-        append_leaf(:dropdown, name, to_opts_hash(opts), bind)
-      end
+      leaf_widget dropdown
 
       # A numeric stepper: from:/to: bound the range, increment: sets the
       # step, and bind: a Var to read or set the value.
-      def number_box(name : Symbol? = nil, bind : Var? = nil, **opts) : Handle
-        append_leaf(:number_box, name, to_opts_hash(opts), bind)
-      end
+      leaf_widget number_box
 
-      def panel(name : Symbol? = nil, **opts, & : self -> Nil) : Handle
-        append_container(:panel, name, to_opts_hash(opts)) { |dsl| yield dsl }
-      end
-
-      def panel(name : Symbol? = nil, **opts) : Handle
-        append_container(:panel, name, to_opts_hash(opts))
-      end
+      container_widget panel
 
       # A titled container: a panel with a caption drawn into its border,
       # passed as text:. Stacks its children like #panel does - put a
       # column/row/grid inside to arrange them.
-      def group(name : Symbol? = nil, **opts, & : self -> Nil) : Handle
-        append_container(:group, name, to_opts_hash(opts)) { |dsl| yield dsl }
-      end
-
-      def group(name : Symbol? = nil, **opts) : Handle
-        append_container(:group, name, to_opts_hash(opts))
-      end
+      container_widget group
 
       # A separate toplevel window. Configure it with title:, geometry:
       # ("WxH+X+Y", or just "+X+Y"), resizable: (one Bool for both axes,
@@ -173,13 +173,7 @@ module Tryst
       end
 
       # A tabbed notebook. Declare its pages with #tab inside the block.
-      def tabs(name : Symbol? = nil, **opts, & : self -> Nil) : Handle
-        append_container(:tabs, name, to_opts_hash(opts)) { |dsl| yield dsl }
-      end
-
-      def tabs(name : Symbol? = nil, **opts) : Handle
-        append_container(:tabs, name, to_opts_hash(opts))
-      end
+      container_widget tabs
 
       # One page of a #tabs notebook. label is positional and required -
       # it's the text on the tab itself, and a page with none is
@@ -273,29 +267,9 @@ module Tryst
       #
       # With x: false, content is held at the visible width rather than
       # its natural one, so it never ends up narrower than the region.
-      def scrollable(name : Symbol? = nil, **opts, & : self -> Nil) : Handle
-        append_container(:scrollable, name, to_opts_hash(opts)) { |dsl| yield dsl }
-      end
-
-      def scrollable(name : Symbol? = nil, **opts) : Handle
-        append_container(:scrollable, name, to_opts_hash(opts))
-      end
-
-      def column(name : Symbol? = nil, **opts, & : self -> Nil) : Handle
-        append_container(:column, name, to_opts_hash(opts)) { |dsl| yield dsl }
-      end
-
-      def column(name : Symbol? = nil, **opts) : Handle
-        append_container(:column, name, to_opts_hash(opts))
-      end
-
-      def row(name : Symbol? = nil, **opts, & : self -> Nil) : Handle
-        append_container(:row, name, to_opts_hash(opts)) { |dsl| yield dsl }
-      end
-
-      def row(name : Symbol? = nil, **opts) : Handle
-        append_container(:row, name, to_opts_hash(opts))
-      end
+      container_widget scrollable
+      container_widget column
+      container_widget row
 
       # A flexible gap - the named replacement for the "invisible spring
       # row" trick (an empty row/column given all the leftover weight).
@@ -303,13 +277,7 @@ module Tryst
         append_leaf(:spacer, nil, {:grow => true} of Symbol => TclArgValue)
       end
 
-      def grid(name : Symbol? = nil, **opts, & : self -> Nil) : Handle
-        append_container(:grid, name, to_opts_hash(opts)) { |dsl| yield dsl }
-      end
-
-      def grid(name : Symbol? = nil, **opts) : Handle
-        append_container(:grid, name, to_opts_hash(opts))
-      end
+      container_widget grid
 
       # Position the single widget declared in the block at (row, col) in
       # the enclosing ui.grid. Only valid directly inside a grid's block.
@@ -342,13 +310,7 @@ module Tryst
         grid_node.stretch_rows = rows unless rows.empty?
       end
 
-      def canvas(name : Symbol? = nil, **opts, & : self -> Nil) : Handle
-        append_container(:canvas, name, to_opts_hash(opts)) { |dsl| yield dsl }
-      end
-
-      def canvas(name : Symbol? = nil, **opts) : Handle
-        append_container(:canvas, name, to_opts_hash(opts))
-      end
+      container_widget canvas
 
       # Floats the single widget declared in the block on top of the
       # enclosing ui.canvas, positioned at a fixed corner/edge/center
@@ -549,43 +511,6 @@ module Tryst
         WidgetTypes.for_type(type) ||
           raise ArgumentError.new("no widget type :#{type} is registered - register one with " \
                                   "WidgetTypes.register before declaring it")
-      end
-
-      # Stamps a leaf ui.<type> method with the same name:/bind:/**opts
-      # shape every built-in leaf method above has - the macro version of
-      # what #widget's own doc comment describes doing by hand. See
-      # CUSTOM_WIDGETS.md at the repo root for the full guide; in short:
-      #
-      #     module Tryst::UI::WidgetDSL
-      #       leaf_widget gauge
-      #     end
-      #     ui.gauge(:cpu, maximum: 100)
-      #
-      # reads exactly like a built-in #progress/#label/etc call, once
-      # type: :gauge is registered (see WidgetType's own doc comment for
-      # how). Not used to define the built-ins themselves above - see
-      # this macro's own follow-up task for that retrofit.
-      macro leaf_widget(type)
-        def {{ type.id }}(name : Symbol? = nil, bind : Var? = nil, **opts) : Handle
-          append_leaf(:{{ type.id }}, name, to_opts_hash(opts), bind)
-        end
-      end
-
-      # ditto, for a container - both the with-block and without-block
-      # overloads every built-in container method above has.
-      #
-      #     module Tryst::UI::WidgetDSL
-      #       container_widget panel_deck
-      #     end
-      #     ui.panel_deck(:cards) { |dsl| dsl.button(:ok, text: "OK") }
-      macro container_widget(type)
-        def {{ type.id }}(name : Symbol? = nil, **opts, & : self -> Nil) : Handle
-          append_container(:{{ type.id }}, name, to_opts_hash(opts)) { |dsl| yield dsl }
-        end
-
-        def {{ type.id }}(name : Symbol? = nil, **opts) : Handle
-          append_container(:{{ type.id }}, name, to_opts_hash(opts))
-        end
       end
 
       # The current build-parent ancestry, as a readable breadcrumb (e.g.
