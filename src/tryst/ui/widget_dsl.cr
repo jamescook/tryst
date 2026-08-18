@@ -551,6 +551,43 @@ module Tryst
                                   "WidgetTypes.register before declaring it")
       end
 
+      # Stamps a leaf ui.<type> method with the same name:/bind:/**opts
+      # shape every built-in leaf method above has - the macro version of
+      # what #widget's own doc comment describes doing by hand. See
+      # CUSTOM_WIDGETS.md at the repo root for the full guide; in short:
+      #
+      #     module Tryst::UI::WidgetDSL
+      #       leaf_widget gauge
+      #     end
+      #     ui.gauge(:cpu, maximum: 100)
+      #
+      # reads exactly like a built-in #progress/#label/etc call, once
+      # type: :gauge is registered (see WidgetType's own doc comment for
+      # how). Not used to define the built-ins themselves above - see
+      # this macro's own follow-up task for that retrofit.
+      macro leaf_widget(type)
+        def {{ type.id }}(name : Symbol? = nil, bind : Var? = nil, **opts) : Handle
+          append_leaf(:{{ type.id }}, name, to_opts_hash(opts), bind)
+        end
+      end
+
+      # ditto, for a container - both the with-block and without-block
+      # overloads every built-in container method above has.
+      #
+      #     module Tryst::UI::WidgetDSL
+      #       container_widget panel_deck
+      #     end
+      #     ui.panel_deck(:cards) { |dsl| dsl.button(:ok, text: "OK") }
+      macro container_widget(type)
+        def {{ type.id }}(name : Symbol? = nil, **opts, & : self -> Nil) : Handle
+          append_container(:{{ type.id }}, name, to_opts_hash(opts)) { |dsl| yield dsl }
+        end
+
+        def {{ type.id }}(name : Symbol? = nil, **opts) : Handle
+          append_container(:{{ type.id }}, name, to_opts_hash(opts))
+        end
+      end
+
       # The current build-parent ancestry, as a readable breadcrumb (e.g.
       # "column > row") - derived from @stack, the one thing only the
       # builder (not the Document) knows: which containers are currently

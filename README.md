@@ -161,6 +161,12 @@ window management), and below that `Tryst::Interp` is the raw
 interpreter bridge. `builder.raw { |app| ... }` runs against the live
 app during window creation for one-off setup like ttk style tweaks.
 
+## Custom widgets
+
+Widget types aren't a closed set — registering one from your own code
+makes it a first-class `ui.<type>` citizen, the same as any built-in
+type. See [CUSTOM_WIDGETS.md](CUSTOM_WIDGETS.md) for the guide.
+
 ## Examples
 
 ```
@@ -168,6 +174,7 @@ crystal run examples/button_label_demo.cr    # hello world, no DSL
 crystal run examples/calculator.cr           # calculator against the App layer
 crystal run examples/calculator_ui/app.cr    # same calculator on the UI DSL
 crystal run examples/paint/paint_demo.cr     # layers, canvas, pixel buffers
+crystal run examples/custom_widget_demo.cr   # a widget type registered outside Tryst::UI
 ```
 
 ## tryst-sdl
