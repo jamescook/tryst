@@ -81,21 +81,27 @@ tk_test "add_package_path appends the given path to ::auto_path" do |app|
   raise "expected #{path.inspect} in ::auto_path, got #{auto_path.inspect}" unless auto_path.includes?(path)
 end
 
-# opt0.4/http1.0 ship bundled with Tcl itself (pure-Tcl scripts, part of
-# Tcl's own standard distribution - no compiled extension, nothing this
-# suite installs or vendors) - a real, unmodified package already on
-# ::auto_path, not a fixture written above. Pinned to version 1.0: Tcl
-# also ships a newer namespaced http 2.x (as a Tcl Module, discovered the
-# same way), which #require_package with no version constraint would
-# pick instead, and the proc this test calls only exists under 1.0's API.
+# opt0.4 ships bundled with Tcl itself (a pure-Tcl script, part of Tcl's
+# own standard distribution - no compiled extension, nothing this suite
+# installs or vendors) - a real, unmodified package already on
+# ::auto_path, not a fixture written above. Used to be http1.0 here, but
+# that package is gone under Tcl 9 (verified directly against both
+# Homebrew's tcl-tk 9.0.3 and Debian's tcl9.0.1 packaging - upstream Tcl 9
+# dropped the legacy pre-namespace http package entirely, not just this
+# port's Linux lane). opt0.4 is still present and pkgIndex.tcl-based on
+# both 8.6 and 9.x, but its exact patch version drifts per platform
+# (0.4.9 on 8.6, 0.4.9-0.4.10 across 9.x builds seen so far) - unlike
+# http1.0's frozen "1.0", so this only pins the major.minor requested,
+# not the exact returned/listed version string.
 tk_test "require_package/package_present?/package_versions work against a real bundled Tcl package" do |app|
-  version = app.require_package("http", "1.0")
-  raise "expected version '1.0', got #{version.inspect}" unless version == "1.0"
-  raise "expected http to be present after requiring" unless app.package_present?("http")
-  raise "expected '1.0' in package_versions" unless app.package_versions("http").includes?("1.0")
+  version = app.require_package("opt", "0.4")
+  raise "expected a 0.4.x version, got #{version.inspect}" unless version.starts_with?("0.4")
+  raise "expected opt to be present after requiring" unless app.package_present?("opt")
+  raise "expected a 0.4.x entry in package_versions, got #{app.package_versions("opt").inspect}" \
+    unless app.package_versions("opt").any?(&.starts_with?("0.4"))
 
-  # http_formatQuery is real code from the package, not anything this
-  # suite wrote - if it returns the right answer, the package actually
-  # loaded and ran, not just registered a version string.
-  raise "expected the package's own code to run" unless app.tcl_eval("http_formatQuery greeting hello") == "greeting=hello"
+  # ::tcl::Lempty is real code from the package, not anything this suite
+  # wrote - if it returns the right answer, the package actually loaded
+  # and ran, not just registered a version string.
+  raise "expected the package's own code to run" unless app.tcl_eval("::tcl::Lempty {}") == "1"
 end

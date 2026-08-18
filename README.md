@@ -189,8 +189,11 @@ needs it.
 
 ```
 shards install
-crystal spec                  # host
-scripts/docker-test.sh        # Debian + Xvfb, same suite headless
+crystal spec                  # host, Tcl/Tk 8.6
+scripts/docker-test.sh        # Ubuntu + Xvfb, same suite headless, 8.6
+
+TCL_VERSION=9 crystal spec       # host, Tcl/Tk 9.x
+scripts/docker-test-tcl9.sh      # Debian trixie + Xvfb, same suite headless, 9.x
 ```
 
 Developed and tested on macOS (Aqua) and Linux (X11).

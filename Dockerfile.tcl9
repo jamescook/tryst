@@ -1,0 +1,61 @@
+# Dev/test image for the TCL_VERSION=9 lane (ctk-s34.45) - runs the same
+# suite as the root Dockerfile, but against a real Tcl/Tk 9.x instead of
+# 8.6, to give the 9.x @[Link]/Tcl_Size-shaped branches in interp.cr (see
+# that file's own comments) automated coverage instead of only ever
+# having been checked by hand on a macOS host.
+#
+# Debian trixie rather than the crystallang/crystal image the root
+# Dockerfile uses: that image is Ubuntu 24.04 (Noble), which has no
+# tcl9.0-dev/tk9.0-dev package at all. Ubuntu only gained one in 25.04
+# (plucky, universe) - trixie (Debian's current stable) already carries
+# tcl9.0-dev 9.0.1/tk9.0-dev 9.0.1, so there's no need to reach for
+# testing/sid the way tryst-sdl's Dockerfile does for SDL3.
+#
+# Crystal is not in Debian apt, hence the official release tarball below
+# - same approach tryst-sdl/Dockerfile already uses for the same reason.
+#
+# Must be run as `docker run --rm --init <image>` - same requirement as
+# the root Dockerfile and tryst-sdl's. Without --init, xvfb-run hangs
+# forever as PID 1 (its Xvfb-readiness SIGUSR1 trap doesn't fire there).
+FROM debian:trixie
+
+ARG CRYSTAL_VERSION=1.21.0
+ARG CRYSTAL_RELEASE=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tcl9.0-dev tk9.0-dev libtommath-dev \
+    xvfb xauth \
+    ca-certificates curl gcc pkg-config \
+    libpcre2-dev libgc-dev libevent-dev libssl-dev zlib1g-dev libyaml-dev libxml2-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Debian's tk9.0.pc declares `Requires: tcl >= 8.6` instead of `tcl9.0`
+# (verified: an upstream Debian packaging bug, not anything specific to
+# this project), so `pkg-config --exists tcl9.0 tk9.0` fails outright -
+# and interp.cr's plain `tcl`/`tk` fallback fails too, since Debian
+# registers no unversioned tcl.pc at all. Symlinking one in satisfies
+# tk9.0's Requires line without touching tcl9.0.pc's own contents.
+RUN set -eux; \
+    pcfile="$(find / -name 'tcl9.0.pc' 2>/dev/null | head -1)"; \
+    ln -s "$pcfile" "$(dirname "$pcfile")/tcl.pc"
+
+# uname -m already spells the architectures the way the release assets do
+# (aarch64 / x86_64), so no translation table is needed.
+RUN set -eux; \
+    arch="$(uname -m)"; \
+    curl -fsSL -o /tmp/crystal.tar.gz \
+      "https://github.com/crystal-lang/crystal/releases/download/${CRYSTAL_VERSION}/crystal-${CRYSTAL_VERSION}-${CRYSTAL_RELEASE}-linux-${arch}.tar.gz"; \
+    mkdir -p /opt/crystal; \
+    tar -xzf /tmp/crystal.tar.gz -C /opt/crystal --strip-components=1; \
+    rm /tmp/crystal.tar.gz; \
+    ln -s /opt/crystal/bin/crystal /usr/local/bin/crystal; \
+    ln -s /opt/crystal/bin/shards /usr/local/bin/shards; \
+    crystal --version
+
+WORKDIR /app
+COPY shard.yml ./
+COPY src/ src/
+COPY spec/ spec/
+
+ENV TCL_VERSION=9
+CMD ["xvfb-run", "-a", "crystal", "spec"]
