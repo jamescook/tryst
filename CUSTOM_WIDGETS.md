@@ -28,7 +28,7 @@ class GaugeType < Tryst::UI::WidgetType
     # A custom-named ttk style needs its layout copied from the base
     # style before it can be used - see examples/custom_widget_demo.cr's
     # own comment for the cross-platform reason why.
-    app.command("ttk::style", "layout", "Gauge.TProgressbar", app.command("ttk::style", "layout", "TProgressbar"))
+    app.command("ttk::style", "layout", "Horizontal.Gauge.TProgressbar", app.command("ttk::style", "layout", "Horizontal.TProgressbar"))
     app.command("ttk::style", "configure", "Gauge.TProgressbar", troughcolor: "#eeeeee")
     app.command(path, :configure, style: "Gauge.TProgressbar")
   end

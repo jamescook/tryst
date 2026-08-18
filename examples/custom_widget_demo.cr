@@ -18,7 +18,9 @@ class GaugeType < Tryst::UI::WidgetType
     # given - copying the base style's is the standard way to derive a
     # themed variant (needed on Linux's default theme; aqua tolerates
     # skipping it, but doing so there is theme-specific luck, not a fix).
-    app.command("ttk::style", "layout", "Gauge.TProgressbar", app.command("ttk::style", "layout", "TProgressbar"))
+    # Both source and target names need the "Horizontal." orientation
+    # prefix ttk actually looks up for a horizontal progressbar.
+    app.command("ttk::style", "layout", "Horizontal.Gauge.TProgressbar", app.command("ttk::style", "layout", "Horizontal.TProgressbar"))
     app.command("ttk::style", "configure", "Gauge.TProgressbar", troughcolor: "#eeeeee", background: "#4a90d9")
     app.command(path, :configure, style: "Gauge.TProgressbar")
   end

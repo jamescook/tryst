@@ -23,7 +23,12 @@ class GaugeType < Tryst::UI::WidgetType
     # suffix on its own) but raises "Layout Gauge.TProgressbar not
     # found" under Linux's default theme - a real cross-platform
     # difference, not a mistake to "fix" by dropping the layout line.
-    app.command("ttk::style", "layout", "Gauge.TProgressbar", app.command("ttk::style", "layout", "TProgressbar"))
+    # Both source and target names need the "Horizontal." orientation
+    # prefix ttk actually looks up for a horizontal progressbar - a bare
+    # "TProgressbar"/"Gauge.TProgressbar" pair raises "Layout
+    # TProgressbar not found" on Linux's default theme, since neither
+    # name (with or without the custom prefix) exists unprefixed there.
+    app.command("ttk::style", "layout", "Horizontal.Gauge.TProgressbar", app.command("ttk::style", "layout", "Horizontal.TProgressbar"))
     app.command("ttk::style", "configure", "Gauge.TProgressbar", troughcolor: "#eeeeee")
     app.command(path, :configure, style: "Gauge.TProgressbar")
   end
