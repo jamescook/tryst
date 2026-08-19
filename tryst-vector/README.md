@@ -68,10 +68,21 @@ itself. `scale:` on `Surface.new` renders at a HiDPI multiple while
 `#draw`'s own coordinates stay in logical pixels throughout — see
 `Surface`'s own doc comment for the full story.
 
+`#arc(cx, cy, r, start_deg, sweep_deg)` is `Context`'s one stroke-only
+primitive (no fill concept — a partial ring drawn filled would be a pie
+slice; `#polygon` already covers that shape directly if something wants
+it) — 0 degrees is 12 o'clock, positive `sweep_deg` sweeps clockwise
+(screen coordinates), matching how a progress ring or spinner is
+actually thought about rather than math's usual 0=east/counterclockwise.
+Built as cubic Bezier segments since ThorVG has no native arc path
+command. `#stroke` takes an optional `cap:` (`Tryst::Vector::StrokeCap`
+— `:butt` (ThorVG's own default), `:round`, `:square`) — `:round` is
+what makes a swept arc read as a smooth stroke rather than a wedge with
+hard-cut ends; only meaningful on an open path like `#arc`'s, harmless
+to pass on a closed shape.
+
 Text isn't exposed yet (ThorVG's C API supports it; the wrapper just
-doesn't reach it) — revisit once something actually needs it. Curved
-paths (`tvg_shape_cubic_to`) are similarly unbound; `#polygon` only
-covers straight edges so far.
+doesn't reach it) — revisit once something actually needs it.
 
 ## Requirements
 

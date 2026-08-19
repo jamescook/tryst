@@ -37,6 +37,12 @@ lib LibThorVG
     ALIASED      = 4
   end
 
+  enum StrokeCap
+    BUTT   = 0
+    ROUND  = 1
+    SQUARE = 2
+  end
+
   struct ColorStop
     offset : Float32
     r : UInt8
@@ -69,17 +75,21 @@ lib LibThorVG
   fun shape_set_stroke_width = tvg_shape_set_stroke_width(paint : Paint, width : Float32) : Result
   fun shape_set_stroke_color = tvg_shape_set_stroke_color(paint : Paint, r : UInt8, g : UInt8,
                                                           b : UInt8, a : UInt8) : Result
+  fun shape_set_stroke_cap = tvg_shape_set_stroke_cap(paint : Paint, cap : StrokeCap) : Result
   fun shape_set_gradient = tvg_shape_set_gradient(paint : Paint, grad : Gradient) : Result
   fun shape_set_stroke_gradient = tvg_shape_set_stroke_gradient(paint : Paint, grad : Gradient) : Result
 
   # Path primitives - a shape built point-by-point rather than one of the
-  # append_rect/append_circle whole-shape helpers above. Added for
-  # Context#polygon (arbitrary closed straight-edged shapes, e.g. a
-  # tooltip's pointer arrow) - ThorVG's own path vocabulary goes further
-  # (tvg_shape_cubic_to for curves, tvg_shape_append_path for a whole
-  # path in one call), left unbound until something needs it.
+  # append_rect/append_circle whole-shape helpers above. move_to/line_to
+  # back Context#polygon (arbitrary closed straight-edged shapes, e.g. a
+  # tooltip's pointer arrow); cubic_to backs Context#arc (a stroked
+  # circular arc, approximated as cubic Bezier segments - ThorVG has no
+  # native append_arc). tvg_shape_append_path (a whole path in one call)
+  # goes further still, left unbound until something needs it.
   fun shape_move_to = tvg_shape_move_to(paint : Paint, x : Float32, y : Float32) : Result
   fun shape_line_to = tvg_shape_line_to(paint : Paint, x : Float32, y : Float32) : Result
+  fun shape_cubic_to = tvg_shape_cubic_to(paint : Paint, cx1 : Float32, cy1 : Float32,
+                                          cx2 : Float32, cy2 : Float32, x : Float32, y : Float32) : Result
   fun shape_close = tvg_shape_close(paint : Paint) : Result
 
   # Uniform scale around the paint's own origin - Surface applies this to

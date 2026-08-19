@@ -1,0 +1,36 @@
+name: tryst-spinner
+version: 0.1.0
+
+authors:
+  - James Cook
+
+crystal: ">= 1.21.0"
+
+license: MIT
+
+description: |
+  An indeterminate activity ring and determinate progress ring for
+  tryst, one shard - an antialiased sweep with round stroke caps, the
+  thing Tk's own indeterminate ttk::progressbar has neither. Built on
+  Tryst::OwnerDrawnWidget and rendered through tryst-vector.
+
+# Lives at the REPO ROOT, same depth as tryst-vector/tryst-value-slider,
+# for the same reason tryst-value-slider's own shard.yml documents in
+# detail: shards resolves a transitive path: dependency using the SAME
+# literal relative-path string the declaring shard itself used, not one
+# re-anchored to whoever is installing it. tryst-vector's own shard.yml
+# depends on tryst via `path: ../`; this shard needs that same literal
+# "../" to reach the same real tryst directory, which only lines up at
+# this depth. See RELEASING.md for how a widget shard eventually leaves
+# this monorepo instead of living here forever.
+dependencies:
+  tryst:
+    path: ../
+  tryst-vector:
+    path: ../tryst-vector
+
+# Informational (shards does not install these) - see tryst-vector's own
+# shard.yml for the per-platform package names; this shard needs exactly
+# what tryst-vector needs, since it renders through the same Surface.
+libraries:
+  libthorvg: ">= 1.0.0"

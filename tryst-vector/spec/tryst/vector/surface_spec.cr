@@ -114,6 +114,52 @@ describe Tryst::Vector::Surface do
     surface.destroy
   end
 
+  it "strokes a partial arc without filling behind it or drawing the un-swept portion" do
+    surface = Tryst::Vector::Surface.new(width: 44, height: 44)
+    # 0deg-90deg: top (12 o'clock) sweeping clockwise to 3 o'clock only.
+    surface.draw(&.arc(22, 22, 15, 0.0, 90.0).stroke(4, 10, 130, 220))
+
+    photo = Tryst::Photo.new(TK_APP, width: surface.pixel_width, height: surface.pixel_height)
+    surface.blit_to(photo)
+
+    # On the stroke, at the arc's start (top).
+    photo.get_pixel(22, 7)[:a].should eq 255
+    # Well inside the circle - proves this is an outline, not a pie
+    # slice (Context#arc always sets a transparent fill under the hood;
+    # see its own doc comment on why an opaque default would break this).
+    photo.get_pixel(22, 22)[:a].should eq 0
+    # On the OPPOSITE side of the circle (9 o'clock, angle 270 - outside
+    # the requested 0..90 sweep) - proves only the requested portion of
+    # the ring drew, not a full circle.
+    photo.get_pixel(7, 22)[:a].should eq 0
+
+    surface.destroy
+  end
+
+  it "extends the stroke past the endpoint under a round cap but not a butt cap" do
+    # Same arc (0deg start, 90deg sweep, radius 15 from (22,22) -> ends
+    # at (37,22) travelling in the +y direction there - see #arc's own
+    # doc comment on its 0=top/clockwise angle convention) with an 8px
+    # stroke (4px cap radius) under each cap style. 2px past the exact
+    # endpoint, still along the direction of travel, sits inside a round
+    # cap's own half-circle but outside a butt cap's flat edge entirely.
+    round_surface = Tryst::Vector::Surface.new(width: 44, height: 44)
+    round_surface.draw(&.arc(22, 22, 15, 0.0, 90.0).stroke(8, 10, 130, 220, cap: :round))
+    round_photo = Tryst::Photo.new(TK_APP, width: round_surface.pixel_width, height: round_surface.pixel_height)
+    round_surface.blit_to(round_photo)
+
+    butt_surface = Tryst::Vector::Surface.new(width: 44, height: 44)
+    butt_surface.draw(&.arc(22, 22, 15, 0.0, 90.0).stroke(8, 10, 130, 220, cap: :butt))
+    butt_photo = Tryst::Photo.new(TK_APP, width: butt_surface.pixel_width, height: butt_surface.pixel_height)
+    butt_surface.blit_to(butt_photo)
+
+    round_photo.get_pixel(37, 24)[:a].should be > 100
+    butt_photo.get_pixel(37, 24)[:a].should be < 10
+
+    round_surface.destroy
+    butt_surface.destroy
+  end
+
   it "raises after #destroy rather than touching a freed canvas" do
     surface = Tryst::Vector::Surface.new(width: 10, height: 10)
     surface.destroy
