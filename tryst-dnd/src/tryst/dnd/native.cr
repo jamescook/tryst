@@ -77,7 +77,7 @@ module Tryst
       result = LibTrystDndNative.register_drop_target(interp_ptr, tkwin, widget_path)
       return if result == 0 # TCL_OK
 
-      raise Error.new("failed to register #{widget_path} as a drop target: #{app.tcl_eval("set errorInfo")}")
+      raise Error.new("failed to register #{widget_path} as a drop target: #{app.get_variable("errorInfo")}")
     end
   end
 

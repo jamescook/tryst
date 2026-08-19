@@ -163,11 +163,11 @@ module Tryst
       # whichever renders wider.
       @label_bubble.command(:configure, text: @format.call(min))
       app.update_idletasks
-      min_w = app.tcl_invoke("winfo", "reqwidth", @label_bubble.path).to_i
+      min_w = app.winfo.reqwidth(@label_bubble.path)
       @label_bubble.command(:configure, text: @format.call(max))
       app.update_idletasks
-      max_w = app.tcl_invoke("winfo", "reqwidth", @label_bubble.path).to_i
-      label_h = app.tcl_invoke("winfo", "reqheight", @label_bubble.path).to_i
+      max_w = app.winfo.reqwidth(@label_bubble.path)
+      label_h = app.winfo.reqheight(@label_bubble.path)
 
       @bubble_fixed_width = bubble_width || [min_w, max_w].max
       @bubble_chrome_reserve = label_h + 2 * BUBBLE_MARGIN
