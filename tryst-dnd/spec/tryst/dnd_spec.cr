@@ -30,13 +30,13 @@ describe "Tryst::App#register_drop_target (real native registration)" do
 
   it "works on a child widget, not just the root window" do
     TK_APP.show
-    TK_APP.tcl_eval("frame .f_dnd_spec -width 50 -height 50")
-    TK_APP.tcl_eval("pack .f_dnd_spec")
+    frame = TK_APP.create_widget("frame", width: 50, height: 50)
+    frame.pack
     TK_APP.update
 
-    TK_APP.register_drop_target(".f_dnd_spec")
+    TK_APP.register_drop_target(frame.path)
   ensure
-    TK_APP.tcl_eval("destroy .f_dnd_spec")
+    frame.try(&.destroy)
   end
 
   it "leaves the existing <<DropFile>> event contract working after a real registration" do
