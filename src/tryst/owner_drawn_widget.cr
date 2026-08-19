@@ -27,10 +27,10 @@ module Tryst
   #
   # Surface-backed: #blit a filled pixel buffer (from anywhere - most
   # naturally tryst-vector's `Surface#blit_to`) into a canvas image item
-  # this class manages. OwnerDrawnWidget itself never references tryst-vector
-  # or any specific rasterizer - it only ever deals in "a buffer someone
-  # already filled," which is what keeps core dependency-free (see
-  # ctk-0au's own notes on this boundary). tryst-vector's own Shape
+  # this class manages. OwnerDrawnWidget itself never references
+  # tryst-vector or any specific rasterizer - it only ever deals in "a
+  # buffer someone already filled," which is what keeps core
+  # dependency-free. tryst-vector's own Shape
   # carries real hit-testing (`tvg_paint_intersects`) for anyone who
   # wants per-shape interaction on top of a blitted surface without
   # resorting to invisible overlay items.

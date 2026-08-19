@@ -1,8 +1,9 @@
 require "../../spec_helper"
 require "../../support/tk_subprocess"
 
-# The full-lifecycle proof ctk-eyp's own acceptance bar asks for - a
-# widget type declared outside this library, subclassing WidgetType for
+# The full-lifecycle proof the public widget extension API's own
+# acceptance bar asks for - a widget type declared outside this library,
+# subclassing WidgetType for
 # real behavior, needs a real Tk interpreter for its own realize/destroy/
 # leak-sweep checks, so it lives in spec/standalone (Session#realize
 # always constructs a fresh Tryst::App) rather than here. See

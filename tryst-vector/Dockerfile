@@ -7,7 +7,8 @@
 # project uses (Ubuntu 24.04, no ThorVG package at all), and rather than
 # trixie (Debian's current stable, which also has none yet) - forky is
 # the first Debian release to carry libthorvg-dev (1.0.6, satisfying this
-# shard's >= 1.0 pin - see ctk-yxa's bd notes for why that pin matters).
+# shard's >= 1.0 pin - ThorVG had intentional API/ABI breaks at the 1.0
+# transition, so anything older isn't safe to link against).
 # Already this repo's own precedent: tryst-sdl/Dockerfile uses the same
 # base for the same "not in Ubuntu/trixie yet" reason.
 #

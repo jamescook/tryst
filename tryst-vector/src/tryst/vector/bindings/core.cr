@@ -1,8 +1,8 @@
 # ThorVG C API bindings (thorvg_capi.h), and the one place this shard's
-# link flags are declared. `lib LibThorVG` covers the whole shard - the
-# bake-off (see ctk-yxa's bd notes) only needed a single-digit handful of
-# functions to prove the seam works, and nothing here has grown a second
-# file yet the way tryst-sdl's bindings/ did per-subsystem.
+# link flags are declared. `lib LibThorVG` covers the whole shard - only
+# a single-digit handful of functions was needed to prove the seam
+# works and build Surface/Shape/Gradient on top, and nothing here has
+# grown a second file yet the way tryst-sdl's bindings/ did per-subsystem.
 #
 # LINKING. pkg-config knows the library as `thorvg-1` (matching its .pc
 # filename and the -lthorvg-1 it emits) on every platform that ships a

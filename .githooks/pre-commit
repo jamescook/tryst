@@ -111,20 +111,31 @@ $f: $desc"
   fi
 fi
 
-# --- 4. Refuse bead/tracker ids in code -------------------------------
-# Beads is internal to the workflow; a bead id in a code comment means
-# nothing to a reader of the source and leaks the internal process into
-# permanent history. Checks the STAGED content (git grep --cached), not
-# the working tree, so this can't be fooled by fixing a file without
-# re-staging it. Scoped to the same paths ameba covers, so a doc file
-# describing the rule itself stays free to name the pattern as an
-# example. The [a-z][0-9]+ shape matches this tracker's real ids without
-# matching an unrelated literal string that merely starts with the same
-# prefix (e.g. a test fixture's own "ctk-test-*" labels).
+# --- 4. Refuse bead/tracker ids anywhere in the tree -------------------
+# Beads is internal to the workflow; a bead id in a comment or doc means
+# nothing to a reader and leaks the internal process into permanent
+# history. Checks the STAGED content (git grep --cached), not the
+# working tree, so this can't be fooled by fixing a file without
+# re-staging it.
+#
+# Scans the WHOLE repo (pathspec excludes only .githooks/.claude/.beads,
+# which legitimately need to talk about the pattern itself or hold the
+# tracker's own real data) rather than a fixed list of source dirs - a
+# per-directory allowlist is exactly how this went unnoticed in
+# tryst-vector/ (a whole shard added after the list was written) and in
+# every README.md/Dockerfile in the repo, none of which "src/* spec/*
+# examples/* tryst-sdl/*" was ever going to match.
+#
+# The pattern itself was ALSO wrong until now: ctk-[a-z][0-9]+ assumes
+# one letter then digits, but this tracker's real ids are three mixed
+# alphanumeric characters in any order (ctk-yxa, ctk-0au, ctk-3x6) - the
+# old pattern couldn't match ANY of them, so this check has been passing
+# vacuously since it was written. Verified the fix against every real id
+# from this session's own bd history before relying on it.
 if [ -n "$staged" ]; then
-  hits=$(git grep -n --cached -E 'ctk-[a-z][0-9]+(\.[0-9]+)*' -- 'src/*' 'spec/*' 'examples/*' 'tryst-sdl/*' 2>/dev/null || true)
+  hits=$(git grep -n --cached -E 'ctk-[a-z0-9]{3}(\.[0-9]+)*' -- . ':!.githooks' ':!.claude' ':!.beads' 2>/dev/null || true)
   if [ -n "$hits" ]; then
-    echo "pre-commit: refusing to commit bead/tracker id(s) in code:" >&2
+    echo "pre-commit: refusing to commit bead/tracker id(s):" >&2
     printf '%s\n' "$hits" >&2
     echo "Describe the change/rationale itself instead of pointing at the bead." >&2
     exit 1

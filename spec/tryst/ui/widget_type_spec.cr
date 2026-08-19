@@ -87,8 +87,9 @@ describe Tryst::UI::WidgetType do
 end
 
 # Headless, FakeApp-driven proof that #arrange/#custom_children/
-# #post_create/#custom_create? all work exactly like ctk-eyp's own extension
-# point promises: a subclass declared right here (outside src/tryst, same
+# #post_create/#custom_create? all work exactly like the public widget
+# extension API's own extension point promises: a subclass declared
+# right here (outside src/tryst, same
 # as a third-party shard would) overrides exactly the hook it needs, gets
 # the base class's default for everything else, and both paths are
 # reachable through the ordinary ui.widget(:type, ...) build/realize

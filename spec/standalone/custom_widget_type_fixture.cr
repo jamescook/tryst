@@ -1,8 +1,9 @@
 require "../../src/tryst/ui"
 
-# Proves ctk-eyp's own acceptance bar end to end: a widget type declared
-# OUTSIDE this library subclasses WidgetType for real behavior (not just
-# WidgetType.new(...)'s existing data-only path), gets its own ui.<type>
+# Proves the public widget extension API's own acceptance bar end to
+# end: a widget type declared OUTSIDE this library subclasses WidgetType
+# for real behavior (not just WidgetType.new(...)'s existing data-only
+# path), gets its own ui.<type>
 # sugar via the leaf_widget macro (reopening WidgetDSL, exactly as
 # CUSTOM_WIDGETS.md documents), and goes through the full lifecycle a
 # built-in type gets: build-phase declaration, name lookup, validation,

@@ -1,8 +1,8 @@
 # Interactive example - run with `crystal run examples/custom_widget_demo.cr`.
 #
 # A widget type declared right here, outside src/tryst, built into a
-# small real app - the runnable half of ctk-eyp's own proof (see
-# spec/standalone/custom_widget_type_fixture.cr for the automated,
+# small real app - the runnable half of the public widget extension API's
+# own proof (see spec/standalone/custom_widget_type_fixture.cr for the automated,
 # subprocess-driven full-lifecycle version, and CUSTOM_WIDGETS.md at the
 # repo root for the guide this follows). :gauge wraps ttk::progressbar,
 # subclassing WidgetType for real behavior (a #post_create override

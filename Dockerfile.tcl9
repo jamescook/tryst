@@ -1,4 +1,4 @@
-# Dev/test image for the TCL_VERSION=9 lane (ctk-s34.45) - runs the same
+# Dev/test image for the TCL_VERSION=9 lane - runs the same
 # suite as the root Dockerfile, but against a real Tcl/Tk 9.x instead of
 # 8.6, to give the 9.x @[Link]/Tcl_Size-shaped branches in interp.cr (see
 # that file's own comments) automated coverage instead of only ever
