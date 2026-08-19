@@ -373,7 +373,15 @@ module Tryst
     # Create a photo image. width/height give it a fixed size; omit both
     # and it sizes itself to whatever gets written into it (which is what
     # #expand needs - see there). file: loads from a path, data: from
-    # base64, format: names the image format (e.g. "png").
+    # base64, format: names the image format (e.g. "png") - and, for
+    # formats that take their own sub-options (Tk 9.x's "svg" is the one
+    # this codebase cares about), the WHOLE compound string including
+    # them (e.g. `format: "svg -scaletowidth 40"` - confirmed directly:
+    # those sub-options are not separate top-level `image create`
+    # options at all, Tk rejects `-scaletowidth` as "unknown option" if
+    # given that way; they only work fused into the -format string
+    # itself). Photo.from_svg builds that string for the svg case so a
+    # caller doesn't have to know this.
     def initialize(@app : App, name : String? = nil, width : Int32? = nil, height : Int32? = nil,
                    file : String? = nil, data : String? = nil, format : String? = nil,
                    palette : String? = nil, gamma : Float64? = nil)
@@ -395,6 +403,81 @@ module Tryst
 
       # Built once, here, rather than in #finalize - see .delete_task.
       @finalize_task = Photo.delete_task(@name, @app)
+    end
+
+    # Loads an SVG file/string via Tk's native `-format svg` photo image
+    # (Tk 9.x; 8.6 has none). No compile-time gate: `-format svg` is a
+    # plain Tcl-level image option, not a raw C symbol this binding
+    # links against, so whether it works is entirely a property of the
+    # Tk LIBRARY actually loaded at runtime - not what TCL_VERSION this
+    # binary happened to be compiled with (that only chooses which
+    # library gets linked in the first place). Confirmed directly, not
+    # assumed: against a real Tk 8.6.17 this raises a genuine Tcl error
+    # (`image file format "svg" is not supported`) the instant it's
+    # asked for; against a real Tk 9.0.3 it loads correctly. This method
+    # doesn't intercept or reword that error - Tcl's own message already
+    # names the problem plainly, and inventing a wrapper on top risks
+    # mislabeling an unrelated failure (a genuinely malformed SVG file
+    # fails through this exact same path with a different message). To
+    # check availability up front instead of catching that error,
+    # `app.tcl_major_version` (or the full `app.tcl_patch_level`) reads
+    # the ACTUALLY loaded library's own reported version - not
+    # `Tryst::TCL_MAJOR_VERSION`, which only reflects what this binary
+    # was compiled to target and can disagree with what really loaded
+    # (see that constant's own doc comment).
+    #
+    # Genuinely useful for a widget's STATIC vector icon asset (an app
+    # logo, a fixed decorative glyph) without pulling in tryst-vector at
+    # all when the asset never changes at runtime - real path/rect/
+    # circle/ellipse/line/polyline/polygon and linearGradient/
+    # radialGradient support (confirmed via Tk 9.0.3's own photo.ntk
+    # manpage), not a toy subset.
+    #
+    # Give exactly one of path:/data: (a file path, or inline SVG - the
+    # RAW XML TEXT, confirmed directly: unlike Photo.new's own data:
+    # for binary formats like PNG, which is base64, SVG's data: is not
+    # base64-encoded at all - handing it base64 fails with a generic
+    # "couldn't recognize image data", not a helpful one). dpi:/scale:/
+    # scaletowidth:/scaletoheight: control how the vector content
+    # rasterizes (dpi: defaults to 96 if omitted); scale:, scaletowidth:,
+    # and scaletoheight: are mutually exclusive and each independently
+    # aspect-preserving - pick exactly one of the three to control size,
+    # never combine two (confirmed directly: Tk rejects any pair of them
+    # together, including scaletowidth: with scaletoheight:, with the
+    # same generic "couldn't recognize" error rather than naming the
+    # conflict - checked here instead, so passing more than one raises a
+    # clear ArgumentError up front).
+    #
+    # Caveat worth knowing before reaching for this: Tk's SVG renderer
+    # silently ignores `<text>` elements rather than erroring - an asset
+    # with text labels loses them with no warning either from Tk or from
+    # this method.
+    def self.from_svg(app : App, path : String? = nil, data : String? = nil, name : String? = nil,
+                      dpi : Int32? = nil, scale : Float64? = nil,
+                      scaletowidth : Int32? = nil, scaletoheight : Int32? = nil) : Photo
+      if path.nil? == data.nil?
+        raise ArgumentError.new("Photo.from_svg needs exactly one of path: or data:")
+      end
+      if [scale, scaletowidth, scaletoheight].count { |opt| !opt.nil? } > 1
+        raise ArgumentError.new("scale:, scaletowidth:, and scaletoheight: are mutually exclusive")
+      end
+
+      # dpi:/scale:/scaletowidth:/scaletoheight: are NOT separate
+      # top-level `image create` options - confirmed directly: Tk
+      # rejects `-scaletowidth` given that way as "unknown option". They
+      # only work fused into the -format string itself (Tk's own
+      # convention for format-specific sub-options), e.g.
+      # `-format "svg -scaletowidth 40"` - see Photo#initialize's own
+      # doc comment on format:.
+      format = String.build do |str|
+        str << "svg"
+        str << " -dpi " << dpi if dpi
+        str << " -scale " << scale if scale
+        str << " -scaletowidth " << scaletowidth if scaletowidth
+        str << " -scaletoheight " << scaletoheight if scaletoheight
+      end
+
+      Photo.new(app, name: name, file: path, data: data, format: format)
     end
 
     # Run a photo subcommand this class has no dedicated method for -

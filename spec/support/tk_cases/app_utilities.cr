@@ -82,3 +82,22 @@ tk_test "App#add_debug_console accepts a custom keybinding" do |app|
   result = app.add_debug_console("<F11>")
   raise "expected a Bool, got #{result.inspect}" unless result.is_a?(Bool)
 end
+
+# -- App#tcl_patch_level / #tcl_major_version --
+
+tk_test "App#tcl_patch_level matches the interpreter's own tcl_patchLevel global" do |app|
+  expected = app.tcl_eval("set tcl_patchLevel")
+  raise "expected #{expected.inspect}, got #{app.tcl_patch_level.inspect}" unless app.tcl_patch_level == expected
+end
+
+tk_test "App#tcl_major_version is the first dot-component of #tcl_patch_level, matching the compile-time TCL_MAJOR_VERSION this build targets" do |app|
+  expected = app.tcl_patch_level.split('.').first.to_i
+  unless app.tcl_major_version == expected
+    raise "expected #{expected}, got #{app.tcl_major_version}"
+  end
+  unless app.tcl_major_version == Tryst::TCL_MAJOR_VERSION
+    raise "runtime-detected major version #{app.tcl_major_version} disagrees with the " \
+          "compile-time TCL_MAJOR_VERSION #{Tryst::TCL_MAJOR_VERSION} this build targets - " \
+          "Interp#check_tcl_major_version should have already raised before this ever ran"
+  end
+end

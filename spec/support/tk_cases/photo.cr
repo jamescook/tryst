@@ -11,6 +11,12 @@ private def assert_pixel(photo, x : Int32, y : Int32, expected : Tuple(Int32, In
   raise "#{label}: expected #{expected} at (#{x},#{y}), got #{got}" unless got == expected
 end
 
+private def expect_argument_error(label : String, & : ->) : Nil
+  yield
+  raise "expected an ArgumentError for #{label}"
+rescue ArgumentError
+end
+
 tk_test "Photo auto-generates unique names" do |app|
   first = Tryst::Photo.new(app, width: 1, height: 1)
   second = Tryst::Photo.new(app, width: 1, height: 1)
@@ -554,4 +560,94 @@ ensure
   loaded.try(&.delete)
   small.try(&.delete)
   File.delete?(path) if path
+end
+
+# -- Photo.from_svg --
+#
+# No compile-time TCL_VERSION branch here on purpose - #from_svg itself
+# has none (see its own doc comment on why: -format svg is a plain
+# Tcl-level command, not a raw C symbol, so its behavior is a property
+# of whatever Tk is ACTUALLY loaded at runtime). These cases run on
+# both the 8.6 and 9.x suites and assert accordingly, branching on
+# app.tcl_major_version - the real runtime-detected version, not
+# Tryst::TCL_MAJOR_VERSION - the same distinction the method's own doc
+# comment draws.
+private def tiny_svg
+  %(<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="red"/></svg>)
+end
+
+tk_test "Photo.from_svg loads real content on Tk 9.x, and raises a real Tcl error naming the problem on 8.6" do |app|
+  path = File.tempname("tryst_photo_svg_spec", ".svg")
+  File.write(path, tiny_svg)
+
+  if app.tcl_major_version >= 9
+    photo = Tryst::Photo.from_svg(app, path: path)
+    raise "expected 10x10, got #{photo.get_size}" unless photo.get_size == {width: 10, height: 10}
+    photo.delete
+  else
+    begin
+      Tryst::Photo.from_svg(app, path: path)
+      raise "expected a TclError under Tk #{app.tcl_patch_level}"
+    rescue ex : Tryst::TclError
+      raise "expected the error to name the format, got #{ex.message.inspect}" unless ex.message.try(&.includes?("svg"))
+    end
+  end
+ensure
+  File.delete?(path) if path
+end
+
+tk_test "Photo.from_svg needs exactly one of path: or data:" do |app|
+  path = File.tempname("tryst_photo_svg_spec", ".svg")
+  File.write(path, tiny_svg)
+
+  expect_argument_error("neither path: nor data:") { Tryst::Photo.from_svg(app) }
+  expect_argument_error("both path: and data:") { Tryst::Photo.from_svg(app, path: path, data: tiny_svg) }
+ensure
+  File.delete?(path) if path
+end
+
+tk_test "Photo.from_svg rejects combining any two of scale:/scaletowidth:/scaletoheight:" do |app|
+  path = File.tempname("tryst_photo_svg_spec", ".svg")
+  File.write(path, tiny_svg)
+
+  expect_argument_error("scale: + scaletowidth:") { Tryst::Photo.from_svg(app, path: path, scale: 2.0, scaletowidth: 40) }
+  expect_argument_error("scaletowidth: + scaletoheight:") do
+    Tryst::Photo.from_svg(app, path: path, scaletowidth: 40, scaletoheight: 40)
+  end
+ensure
+  File.delete?(path) if path
+end
+
+tk_test "Photo.from_svg's dpi:/scale:/scaletowidth:/scaletoheight: actually take effect (Tk 9.x only)" do |app|
+  next unless app.tcl_major_version >= 9
+
+  path = File.tempname("tryst_photo_svg_spec", ".svg")
+  File.write(path, tiny_svg)
+
+  by_scale = Tryst::Photo.from_svg(app, path: path, scale: 3.0)
+  raise "expected 30x30 at scale: 3.0, got #{by_scale.get_size}" unless by_scale.get_size == {width: 30, height: 30}
+
+  by_width = Tryst::Photo.from_svg(app, path: path, scaletowidth: 40)
+  raise "expected 40x40 (aspect-preserving) at scaletowidth: 40, got #{by_width.get_size}" unless by_width.get_size == {width: 40, height: 40}
+
+  # dpi: alone doesn't change reported size for an SVG using unitless
+  # dimensions (this fixture's own width/height attrs) - it only affects
+  # physical-unit (mm/pt/in) content, which this fixture has none of.
+  # Combines cleanly with scaletowidth: though, unlike the scale trio.
+  combined = Tryst::Photo.from_svg(app, path: path, dpi: 192, scaletowidth: 40)
+  raise "expected 40x40, got #{combined.get_size}" unless combined.get_size == {width: 40, height: 40}
+
+  by_scale.delete
+  by_width.delete
+  combined.delete
+ensure
+  File.delete?(path) if path
+end
+
+tk_test "Photo.from_svg's data: is raw SVG text, not base64 (Tk 9.x only)" do |app|
+  next unless app.tcl_major_version >= 9
+
+  photo = Tryst::Photo.from_svg(app, data: tiny_svg)
+  raise "expected 10x10, got #{photo.get_size}" unless photo.get_size == {width: 10, height: 10}
+  photo.delete
 end

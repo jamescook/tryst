@@ -165,6 +165,19 @@ module Tryst
       @interp.tcl_invoke(args)
     end
 
+    # The Tcl/Tk version actually loaded at runtime (e.g. "9.0.3") - see
+    # Interp#tcl_patch_level's own doc comment for why this, not the
+    # compile-time TCL_MAJOR_VERSION constant, is what a runtime
+    # feature-availability check should read.
+    def tcl_patch_level : String
+      @interp.tcl_patch_level
+    end
+
+    # :ditto:, just the major version number.
+    def tcl_major_version : Int32
+      @interp.tcl_major_version
+    end
+
     # Add a directory to Tcl's package search path (::auto_path). Goes
     # through #tcl_invoke, not the string-interpolated `lappend
     # ::auto_path {#{path}}` ruby-tryst builds - path is exactly the kind

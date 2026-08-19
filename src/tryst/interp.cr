@@ -1090,6 +1090,31 @@ module Tryst
     # Tcl_Size parameter, the macOS window-handle symbol, ...) is wrong for
     # what actually got linked, which is worse silently than loudly, so
     # this runs before anything else touches the interpreter.
+    # The Tcl/Tk version this interpreter is ACTUALLY running - read
+    # straight off the loaded library's own `tcl_patchLevel` global
+    # (e.g. "9.0.3", "8.6.17"). The runtime counterpart to the
+    # compile-time TCL_MAJOR_VERSION constant: use THIS for any runtime
+    # decision about what a specific version supports (whether a Tk
+    # feature/photo format exists, say), since it reflects the library
+    # that's actually loaded rather than what the build was compiled to
+    # target - those two can disagree (see TCL_MAJOR_VERSION's own doc
+    # comment on the heuristic library lookup, and #check_tcl_major_version
+    # below, which is what catches that disagreement at startup). Reserve
+    # TCL_MAJOR_VERSION itself for what genuinely has to be resolved at
+    # COMPILE time - a raw C symbol/struct layout that differs by version
+    # - not as a stand-in for "what version is running" anywhere else.
+    def tcl_patch_level : String
+      patch_level = LibTcl.get_var(@ptr, "tcl_patchLevel", nil, LibTcl::TCL_GLOBAL_ONLY)
+      raise TclError.new("tcl_patchLevel is unexpectedly unset") if patch_level.null?
+      String.new(patch_level)
+    end
+
+    # Just the major version number, parsed from #tcl_patch_level (9 for
+    # "9.0.3", 8 for "8.6.17").
+    def tcl_major_version : Int32
+      tcl_patch_level.split('.').first.to_i
+    end
+
     private def check_tcl_major_version : Nil
       patch_level = LibTcl.get_var(@ptr, "tcl_patchLevel", nil, LibTcl::TCL_GLOBAL_ONLY)
       return if patch_level.null?
