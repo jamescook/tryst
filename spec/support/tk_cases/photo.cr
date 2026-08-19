@@ -564,19 +564,21 @@ end
 
 # -- Photo.from_svg --
 #
-# No compile-time TCL_VERSION branch here on purpose - #from_svg itself
+# No COMPILE-TIME TCL_VERSION branch here on purpose - #from_svg itself
 # has none (see its own doc comment on why: -format svg is a plain
 # Tcl-level command, not a raw C symbol, so its behavior is a property
-# of whatever Tk is ACTUALLY loaded at runtime). These cases run on
-# both the 8.6 and 9.x suites and assert accordingly, branching on
-# app.tcl_major_version - the real runtime-detected version, not
-# Tryst::TCL_MAJOR_VERSION - the same distinction the method's own doc
-# comment draws.
+# of whatever Tk is ACTUALLY loaded at runtime). It DOES have a real
+# RUNTIME gate though - app.tcl_major_version, checked proactively
+# before ever touching Tcl, not inferred from whatever error Tcl itself
+# would raise. These cases run on both the 8.6 and 9.x suites and
+# assert accordingly, branching on that same real runtime-detected
+# version (never Tryst::TCL_MAJOR_VERSION, which is compile-time only)
+# - the distinction the method's own doc comment draws.
 private def tiny_svg
   %(<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="red"/></svg>)
 end
 
-tk_test "Photo.from_svg loads real content on Tk 9.x, and raises a real Tcl error naming the problem on 8.6" do |app|
+tk_test "Photo.from_svg loads real content on Tk 9.x, and raises a clear version error on 8.6 - checked proactively via app.tcl_major_version, not inferred from Tcl's own error" do |app|
   path = File.tempname("tryst_photo_svg_spec", ".svg")
   File.write(path, tiny_svg)
 
@@ -589,7 +591,9 @@ tk_test "Photo.from_svg loads real content on Tk 9.x, and raises a real Tcl erro
       Tryst::Photo.from_svg(app, path: path)
       raise "expected a TclError under Tk #{app.tcl_patch_level}"
     rescue ex : Tryst::TclError
-      raise "expected the error to name the format, got #{ex.message.inspect}" unless ex.message.try(&.includes?("svg"))
+      unless ex.message.try(&.includes?("9.x"))
+        raise "expected the error to name the version requirement, got #{ex.message.inspect}"
+      end
     end
   end
 ensure
