@@ -655,6 +655,32 @@ module Tryst
       tcl_to_bool(tcl_invoke("tk::unsupported::MacWindowStyle", "isdark", window.to_s))
     end
 
+    # Register widget as a native OS file-drop target. Once a real drag
+    # actually lands on it, a `<<DropFile>>` virtual event fires with the
+    # dropped path(s) as a Tcl list in its -data field:
+    #
+    # ```
+    # app.register_drop_target(".")
+    # app.bind(".", "<<DropFile>>", :data) do |values, _signal|
+    #   paths = app.split_list(values[0])
+    #   puts "Dropped #{paths.size} file(s): #{paths.inspect}"
+    # end
+    # ```
+    #
+    # Currently a documented no-op: the native platform layer that
+    # detects a real OS-level drag and fires the event (X11/XDND on
+    # Linux, NSDraggingDestination on macOS, WM_DROPFILES on Windows) -
+    # a genuine per-platform native-code undertaking, not something FFI
+    # against an already-built system library covers - hasn't shipped
+    # yet. Calling this today does nothing harmful and nothing useful;
+    # `<<DropFile>>` can still be exercised directly for testing via
+    # `event generate widget <<DropFile>> -data {...}` (see this
+    # method's own spec cases), and any caller written against this API
+    # today starts working for real the moment the native layer lands,
+    # with no code change needed here.
+    def register_drop_target(widget) : Nil
+    end
+
     # Register a handler for the window manager's close button. Defaults
     # to the root window ("."). window accepts a Widget or a path String.
     # Prefer app.window(window).on_close { } for new code - this flat
