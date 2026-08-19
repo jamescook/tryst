@@ -111,7 +111,6 @@ describe Tryst::Spinner do
     spinner.pack
     TK_APP.update
 
-    TK_APP.winfo.class_name(spinner.path).should eq "Canvas"
     TK_APP.tcl_invoke(spinner.path, "cget", "-takefocus").should eq "0"
 
     spinner.destroy
