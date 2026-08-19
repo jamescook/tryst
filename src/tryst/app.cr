@@ -178,6 +178,13 @@ module Tryst
       @interp.tcl_major_version
     end
 
+    # See Interp#unsafe_ptr's own doc comment - the one deliberate
+    # escape hatch for a satellite shard's FFI that needs the real
+    # Tcl_Interp* (erased to Void*).
+    def unsafe_interp_ptr : Void*
+      @interp.unsafe_ptr
+    end
+
     # Add a directory to Tcl's package search path (::auto_path). Goes
     # through #tcl_invoke, not the string-interpolated `lappend
     # ::auto_path {#{path}}` ruby-tryst builds - path is exactly the kind

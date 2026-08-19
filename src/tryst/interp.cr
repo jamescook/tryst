@@ -919,6 +919,25 @@ module Tryst
       @ptr
     end
 
+    # The raw Tcl_Interp* itself, erased to Void* - the ONE deliberate
+    # escape hatch past #ptr's own privacy, for a satellite shard's FFI
+    # that has to call directly into Tcl/Tk's C API with the real
+    # interpreter pointer (tryst-dnd, most notably: registering native
+    # OS drag-and-drop needs a real Tcl_Interp*/Tk_Window, which no
+    # Tcl-level command can hand back the way #native_window_handle's
+    # own `winfo id` escape hatch covers a platform window handle).
+    # Erased to Void* rather than LibTcl::Interp* so a caller outside
+    # this file never needs to reference this file's own LibTcl lib
+    # block at all - it's fully opaque either way (Tcl_Interp is never
+    # dereferenced, only ever handed to another Tcl/Tk C function), so
+    # nothing is lost by widening the type at this boundary. Goes
+    # through #ptr rather than @ptr directly, so this raises the same
+    # clear TclError after #delete that every other FFI call here does,
+    # instead of handing back a pointer to freed memory.
+    def unsafe_ptr : Void*
+      ptr.as(Void*)
+    end
+
     # Safe to call more than once. Tcl_DeleteInterp releases the
     # Tcl_Interp struct outright - every method below guards against that
     # via #ptr instead of touching @ptr directly.

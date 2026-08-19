@@ -1,0 +1,12 @@
+# The root .gitignore anchors its Crystal entries to the repo root
+# (/lib/, /.shards/, /shard.lock), so this shard needs its own copies.
+/lib/
+/.shards/
+/shard.lock
+/docs/
+/bin/
+*.dwarf
+
+# Makefile build products - never committed, always rebuilt locally.
+/native/*.o
+/libtryst_dnd_native.a

@@ -1,0 +1,32 @@
+name: tryst-dnd
+version: 0.1.0
+
+authors:
+  - James Cook
+
+crystal: ">= 1.21.0"
+
+license: MIT
+
+description: |
+  Native OS file drag-and-drop for tryst (macOS + Linux/X11 today,
+  Windows tracked separately) - makes a real drag onto a widget fire
+  the <<DropFile>> event core tryst's own App#register_drop_target
+  already documents. Requires `make` to be run in this directory
+  before `shards install`/`crystal build` - see README.md.
+
+# Same depth as tryst-vector/tryst-sdl/the widget shards, for the same
+# `shards install` reason documented in tryst-value-slider's own
+# shard.yml (a transitive path: dependency has to match the literal
+# relative-path string its declaring shard used).
+dependencies:
+  tryst:
+    path: ../
+
+# Informational (shards does not install these). See README.md for the
+# real per-platform prerequisites (a C toolchain either way; libx11-dev
+# on Linux; Xcode Command Line Tools on macOS) - this shard needs `make`
+# run in this directory BEFORE `shards install`, which nothing here
+# automates yet.
+libraries:
+  x11: ">= 1.0.0" # Linux only
