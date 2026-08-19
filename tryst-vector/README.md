@@ -53,19 +53,25 @@ See `examples/rounded_rect_gradient.cr` for the runnable version of the
 above (and Examples below for how to run it).
 
 `Tryst::Vector::Surface` is the seam `OwnerDrawnWidget` is meant to
-consume: `#draw` yields a `Context` with `#rect`/`#rounded_rect`/`#circle`,
-each returning a `Shape` you call `#fill`/`#stroke` on (a flat color or a
-`Tryst::Vector::Gradient`); `#blit_to(photo)` writes the whole rendered
-buffer into a real Tk Photo with no pixel conversion (ThorVG's
-straight-alpha output is byte-for-byte `Tryst::PixelFormat::ARGB`,
-confirmed directly against a live Photo, not assumed). `scale:` on
-`Surface.new` renders at a HiDPI multiple while `#draw`'s own coordinates
-stay in logical pixels throughout — see `Surface`'s own doc comment for
-the full story.
+consume: `#draw` yields a `Context` with `#rect`/`#rounded_rect`/`#circle`/
+`#polygon` (an arbitrary closed straight-edged shape from its own
+vertices — a tooltip's pointer arrow, say), each returning a `Shape` you
+call `#fill`/`#stroke` on (a flat color or a `Tryst::Vector::Gradient`).
+`#blit_to(photo)` writes the whole rendered buffer into a Photo you
+already have with no pixel conversion (ThorVG's straight-alpha output is
+byte-for-byte `Tryst::PixelFormat::ARGB`, confirmed directly against a
+live Photo, not assumed); `#to_slice` hands back those same bytes
+directly for a caller that manages its own Photo already —
+`OwnerDrawnWidget#blit`, most naturally, which needs exactly this to
+feed its own lazily-created Photo rather than one the caller sets up
+itself. `scale:` on `Surface.new` renders at a HiDPI multiple while
+`#draw`'s own coordinates stay in logical pixels throughout — see
+`Surface`'s own doc comment for the full story.
 
-Text and paths aren't exposed yet (ThorVG's C API supports both; the
-wrapper just doesn't reach them yet) — revisit once something actually
-needs one.
+Text isn't exposed yet (ThorVG's C API supports it; the wrapper just
+doesn't reach it) — revisit once something actually needs it. Curved
+paths (`tvg_shape_cubic_to`) are similarly unbound; `#polygon` only
+covers straight edges so far.
 
 ## Requirements
 

@@ -20,10 +20,10 @@ module Tryst
   #
   # ### Two drawing modes
   #
-  # Item-based: use #canvas directly (CanvasItem already covers per-item
-  # creation/hit-testing/tag-binds) - the right tool for many small
-  # interactive shapes, at the cost of Tk 8.6's own canvas primitives not
-  # being antialiased.
+  # Item-based: use #canvas directly, from within a subclass (CanvasItem
+  # already covers per-item creation/hit-testing/tag-binds) - the right
+  # tool for many small interactive shapes, at the cost of Tk 8.6's own
+  # canvas primitives not being antialiased.
   #
   # Surface-backed: #blit a filled pixel buffer (from anywhere - most
   # naturally tryst-vector's `Surface#blit_to`) into a canvas image item
@@ -37,6 +37,18 @@ module Tryst
   #
   # Mix both freely: item-based interaction regions layered over blitted
   # chrome, or vice versa.
+  #
+  # ### Placing a finished widget
+  #
+  # #canvas is protected - it's the drawing surface a subclass's own
+  # #redraw/keybinding code reaches for (see CircularProgress), not
+  # something the widget's own caller should ever need. Placing a
+  # finished widget in a layout goes through this class's own
+  # #pack/#grid/#path/#width/#height instead - the same names Widget
+  # itself uses, forwarded straight to the underlying canvas - so
+  # `slider.pack(...)` reads the same as packing any other widget, and
+  # nothing about this being canvas-backed leaks past the subclass that
+  # built it.
   #
   # ### State
   #
@@ -66,7 +78,7 @@ module Tryst
   # and would leak one permanent closure per widget ever created.
   abstract class OwnerDrawnWidget
     getter app : App
-    getter canvas : Widget
+    protected getter canvas : Widget
     getter theme : Theme
 
     getter? hover : Bool = false
@@ -91,6 +103,35 @@ module Tryst
       @canvas.bind("Configure", :width, :height) do |_values, _signal|
         redraw
       end
+    end
+
+    # Pack this widget. See Widget#pack.
+    def pack(**kwargs) : self
+      @canvas.pack(**kwargs)
+      self
+    end
+
+    # Grid this widget. See Widget#grid.
+    def grid(**kwargs) : self
+      @canvas.grid(**kwargs)
+      self
+    end
+
+    # This widget's own Tk path - for the rare case a caller needs to
+    # hand it to raw Tcl (grid/pack config on a parent, window manager
+    # calls) rather than going through this class's own API.
+    def path : String
+      @canvas.path
+    end
+
+    # Current width in pixels. See Widget#width.
+    def width : Int32
+      @canvas.width
+    end
+
+    # Current height in pixels. See Widget#height.
+    def height : Int32
+      @canvas.height
     end
 
     # The pixel buffer this widget draws into, if it's using surface-
@@ -185,7 +226,7 @@ module Tryst
     private def wire_state_bindings : Nil
       @canvas.bind("Enter") { |_, _| set_hover(true) unless @disabled }
       @canvas.bind("Leave") { |_, _| set_hover(false) unless @disabled }
-      @canvas.bind("ButtonPress-1") do |_, _|
+      @canvas.bind("ButtonPress-1", :x, :y) do |values, signal|
         next if @disabled
         # Plain Tk widgets, unlike ttk ones, don't focus themselves on
         # click just because -takefocus is set (that only decides Tab
@@ -193,10 +234,32 @@ module Tryst
         # never :focused, which is not what clicking a real widget does.
         @app.tcl_invoke("focus", @canvas.path)
         set_pressed(true)
+        on_press(values, signal)
       end
-      @canvas.bind("ButtonRelease-1") { |_, _| set_pressed(false) unless @disabled }
+      @canvas.bind("ButtonRelease-1") do |values, signal|
+        next if @disabled
+        set_pressed(false)
+        on_release(values, signal)
+      end
       @canvas.bind("FocusIn") { |_, _| set_focused(true) }
       @canvas.bind("FocusOut") { |_, _| set_focused(false) }
+    end
+
+    # @api protected - a subclass that needs to react to the press itself
+    # (not just the resulting #pressed? state #redraw already sees), e.g.
+    # to start a drag at the clicked point, overrides this. values holds
+    # whatever ButtonPress-1's own subs are ([x, y] in window
+    # coordinates); no-op by default so a subclass that doesn't need this
+    # (CircularProgress, say) sees no behavior change. Never called while
+    # #disabled? (the bind above already guards that).
+    protected def on_press(values : Array(String), signal : CallbackSignal) : Nil
+    end
+
+    # @api protected - the #on_press counterpart, fired on ButtonRelease-1
+    # after #pressed? has already gone false. No subs requested (nothing
+    # needs the release point yet); add some the same way #on_press's own
+    # :x, :y were added if a future subclass needs it.
+    protected def on_release(values : Array(String), signal : CallbackSignal) : Nil
     end
 
     private def set_hover(value : Bool) : Nil

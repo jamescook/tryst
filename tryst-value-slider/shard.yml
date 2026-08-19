@@ -1,0 +1,40 @@
+name: tryst-value-slider
+version: 0.1.0
+
+authors:
+  - James Cook
+
+crystal: ">= 1.21.0"
+
+license: MIT
+
+description: |
+  A single-thumb value slider for tryst - rounded track, antialiased
+  thumb, optional tick marks, and a value bubble that tracks the thumb
+  while dragging. Built on Tryst::OwnerDrawnWidget and rendered through
+  tryst-vector.
+
+# Lives at the REPO ROOT, same depth as tryst-vector/tryst-sdl, even
+# though it's a widget rather than a rendering/platform shard -
+# `shards install` resolves a transitive path: dependency using the
+# SAME literal relative-path string the declaring shard itself used,
+# not a path re-anchored to whoever is installing it. tryst-vector's own
+# shard.yml depends on tryst via `path: ../` (relative to tryst-vector/
+# itself); at any OTHER depth, this shard's own `tryst: path:` would
+# need a different literal string to reach the same real directory
+# (e.g. `../../` one level deeper), and shards refuses that as
+# "ambiguous sources" even though both resolve to one real tryst.
+# Confirmed directly by trying a nested widgets/tryst-value-slider/
+# layout first and hitting exactly that error. Same depth, same
+# literal "../" both places, is what actually resolves.
+dependencies:
+  tryst:
+    path: ../
+  tryst-vector:
+    path: ../tryst-vector
+
+# Informational (shards does not install these) - see tryst-vector's own
+# shard.yml for the per-platform package names; this shard needs exactly
+# what tryst-vector needs, since it renders through the same Surface.
+libraries:
+  libthorvg: ">= 1.0.0"

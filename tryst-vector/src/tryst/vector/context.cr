@@ -33,6 +33,21 @@ module Tryst
         Shape.new(handle, @canvas)
       end
 
+      # An arbitrary closed straight-edged shape from its own vertices -
+      # e.g. a tooltip's pointer arrow, which none of #rect/#rounded_rect/
+      # #circle can produce. Needs at least 3 points; raises otherwise
+      # rather than handing ThorVG a degenerate path.
+      def polygon(points : Array({Float64, Float64})) : Shape
+        raise ArgumentError.new("a polygon needs at least 3 points, got #{points.size}") if points.size < 3
+
+        handle = new_shape
+        first_x, first_y = points.first
+        LibThorVG.shape_move_to(handle, first_x.to_f32, first_y.to_f32)
+        points[1..].each { |(x, y)| LibThorVG.shape_line_to(handle, x.to_f32, y.to_f32) }
+        LibThorVG.shape_close(handle)
+        Shape.new(handle, @canvas)
+      end
+
       private def new_shape : LibThorVG::Paint
         handle = LibThorVG.shape_new
         LibThorVG.paint_scale(handle, @scale.to_f32) unless @scale == 1.0

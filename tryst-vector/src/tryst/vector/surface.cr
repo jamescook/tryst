@@ -82,10 +82,21 @@ module Tryst
       # here.
       def blit_to(photo : Photo, x : Int32 = 0, y : Int32 = 0,
                   composite : PhotoComposite = :set) : Nil
-        raise_if_destroyed!
-        bytes = Bytes.new(Pointer(UInt8).new(@buffer.address), @pixel_width * @pixel_height * 4)
-        photo.put_block(bytes, @pixel_width, @pixel_height, x: x, y: y,
+        photo.put_block(to_slice, @pixel_width, @pixel_height, x: x, y: y,
           format: PixelFormat::ARGB, composite: composite)
+      end
+
+      # The rendered device-pixel buffer as raw bytes, straight-alpha
+      # ARGB (see this class's own doc comment) - for a caller that
+      # wants to feed it somewhere other than #blit_to's own Photo, most
+      # naturally OwnerDrawnWidget#blit, which manages its own Photo's
+      # lifecycle already and just needs the bytes. #blit_to is exactly
+      # this plus a direct photo.put_block, kept as its own method since
+      # "I already have a Photo in hand" is the common case for a
+      # caller using Surface on its own (see this shard's own README).
+      def to_slice : Bytes
+        raise_if_destroyed!
+        Bytes.new(Pointer(UInt8).new(@buffer.address), @pixel_width * @pixel_height * 4)
       end
 
       # Releases the underlying ThorVG canvas now, rather than waiting

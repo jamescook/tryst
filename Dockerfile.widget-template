@@ -1,0 +1,80 @@
+# Template for a widget shard's own Dockerfile - Docker has no
+# #include, so this isn't executed on its own; copy it into a new
+# widget shard and fill in the two placeholders below. See
+# tryst-value-slider/Dockerfile for a filled-in example.
+#
+# Placeholders to replace throughout:
+#   <SHARD_NAME>           e.g. tryst-value-slider
+#   <EXTRA_APT_PACKAGES>   anything beyond tcl-dev/tk-dev/libthorvg-dev/
+#                          xvfb this widget's own bindings need, or
+#                          delete the line entirely if there's nothing
+#                          beyond the shared set
+#
+# A new widget shard belongs at the REPO ROOT, sibling to tryst-vector/
+# and tryst-sdl/ - NOT nested under a widgets/ subdirectory. `shards
+# install` resolves a transitive path: dependency (tryst-vector's own
+# dependency on tryst) using the same literal relative-path string
+# tryst-vector itself declared; one level deeper needs a different
+# string to reach the same real tryst, and shards refuses that as
+# "ambiguous sources" even though both resolve to the same directory.
+# Confirmed directly by trying the nested layout first. Same depth as
+# tryst-vector, same literal "../", is what actually resolves.
+#
+# Built from the REPO ROOT as context, not from <SHARD_NAME>/ - every
+# widget shard depends on both tryst (path: ../) and tryst-vector
+# (path: ../tryst-vector), so both have to be inside the build context.
+#
+# Debian forky rather than the crystallang/crystal image the parent
+# project uses (Ubuntu 24.04) or trixie (Debian's current stable) -
+# forky is the first Debian release carrying libthorvg-dev; every
+# widget shard renders through tryst-vector's Surface, so all of them
+# need it, not just the ones with their own extra native deps.
+#
+# Must be run as `docker run --rm --init <image>` - same requirement as
+# every other Dockerfile in this repo. Without --init, xvfb-run hangs
+# forever as PID 1.
+FROM debian:forky
+
+ARG CRYSTAL_VERSION=1.21.0
+ARG CRYSTAL_RELEASE=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tcl-dev tk-dev \
+    libthorvg-dev \
+    xvfb xauth \
+    <EXTRA_APT_PACKAGES> \
+    ca-certificates curl gcc pkg-config \
+    libpcre2-dev libgc-dev libevent-dev libssl-dev zlib1g-dev libyaml-dev libxml2-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN set -eux; \
+    arch="$(uname -m)"; \
+    curl -fsSL -o /tmp/crystal.tar.gz \
+      "https://github.com/crystal-lang/crystal/releases/download/${CRYSTAL_VERSION}/crystal-${CRYSTAL_VERSION}-${CRYSTAL_RELEASE}-linux-${arch}.tar.gz"; \
+    mkdir -p /opt/crystal; \
+    tar -xzf /tmp/crystal.tar.gz -C /opt/crystal --strip-components=1; \
+    rm /tmp/crystal.tar.gz; \
+    ln -s /opt/crystal/bin/crystal /usr/local/bin/crystal; \
+    ln -s /opt/crystal/bin/shards /usr/local/bin/shards; \
+    crystal --version
+
+# Both path-dependency shards, laid out exactly as they are in the repo
+# so `path:` resolves the same way it does on a developer's machine.
+# Copied file by file rather than as whole directories - same reasoning
+# as every other Dockerfile in this repo's own copy of its parent shard.
+WORKDIR /app
+COPY shard.yml ./
+COPY src/ src/
+
+WORKDIR /app/tryst-vector
+COPY tryst-vector/shard.yml ./
+COPY tryst-vector/src/ src/
+
+WORKDIR /app/<SHARD_NAME>
+COPY <SHARD_NAME>/shard.yml ./
+COPY <SHARD_NAME>/src/ src/
+COPY <SHARD_NAME>/spec/ spec/
+
+RUN shards install
+
+CMD ["xvfb-run", "-a", "crystal", "spec"]

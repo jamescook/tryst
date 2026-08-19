@@ -72,6 +72,16 @@ lib LibThorVG
   fun shape_set_gradient = tvg_shape_set_gradient(paint : Paint, grad : Gradient) : Result
   fun shape_set_stroke_gradient = tvg_shape_set_stroke_gradient(paint : Paint, grad : Gradient) : Result
 
+  # Path primitives - a shape built point-by-point rather than one of the
+  # append_rect/append_circle whole-shape helpers above. Added for
+  # Context#polygon (arbitrary closed straight-edged shapes, e.g. a
+  # tooltip's pointer arrow) - ThorVG's own path vocabulary goes further
+  # (tvg_shape_cubic_to for curves, tvg_shape_append_path for a whole
+  # path in one call), left unbound until something needs it.
+  fun shape_move_to = tvg_shape_move_to(paint : Paint, x : Float32, y : Float32) : Result
+  fun shape_line_to = tvg_shape_line_to(paint : Paint, x : Float32, y : Float32) : Result
+  fun shape_close = tvg_shape_close(paint : Paint) : Result
+
   # Uniform scale around the paint's own origin - Surface applies this to
   # every shape it creates so a #draw block always works in logical
   # (not device) pixels; see Surface's own doc comment for the HiDPI

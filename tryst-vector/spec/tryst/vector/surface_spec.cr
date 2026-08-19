@@ -93,6 +93,27 @@ describe Tryst::Vector::Surface do
     surface.destroy
   end
 
+  it "blits a polygon covering only its own vertices' interior, not its bounding box" do
+    surface = Tryst::Vector::Surface.new(width: 20, height: 20)
+    # A right triangle - (2,2), (18,2), (2,18) - so the bounding box
+    # (roughly the whole surface) is NOT the same region as the triangle
+    # itself; a pixel outside the shape but inside its bounding box
+    # proves #polygon draws the actual closed path, not just a filled
+    # rect sized to the point extents.
+    surface.draw(&.polygon([{2.0, 2.0}, {18.0, 2.0}, {2.0, 18.0}]).fill(90, 200, 90))
+
+    photo = Tryst::Photo.new(TK_APP, width: surface.pixel_width, height: surface.pixel_height)
+    surface.blit_to(photo)
+
+    inside = photo.get_pixel(5, 5)
+    inside.should eq({r: 90, g: 200, b: 90, a: 255})
+
+    outside_but_in_bbox = photo.get_pixel(16, 16)
+    outside_but_in_bbox[:a].should eq 0
+
+    surface.destroy
+  end
+
   it "raises after #destroy rather than touching a freed canvas" do
     surface = Tryst::Vector::Surface.new(width: 10, height: 10)
     surface.destroy

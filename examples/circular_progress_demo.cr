@@ -84,7 +84,7 @@ app = Tryst::App.new(title: "OwnerDrawnWidget: circular progress")
 app.set_window_geometry("160x160")
 
 progress = CircularProgress.new(app, value: 30)
-progress.canvas.pack(expand: true, fill: "both", padx: 10, pady: 10)
+progress.pack(expand: true, fill: "both", padx: 10, pady: 10)
 
 puts "Click the ring to focus it (Tab also works), then Up/Right raises the value, Down/Left lowers it."
 puts "Try switching themes to confirm it stays theme-correct: ttk::style theme use clam"
