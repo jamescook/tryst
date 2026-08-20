@@ -43,9 +43,9 @@ dependencies:
 ## The UI DSL
 
 `Tryst::UI.app` yields a builder. Everything declared in the block is a plain
-tree — no interpreter exists yet — and the window is created and shown in one
-step by `run`. Because building is Tk-free, your UI structure can be
-constructed and inspected in specs without a display.
+tree, and the window is created and shown in one step by `run`. Because
+building the tree never touches Tcl/Tk, your UI structure can be constructed
+and inspected in specs without a display.
 
 Widgets are the ones you'd expect: `button`, `label`, `text_box`,
 `text_area`, `checkbox`, `radio`, `dropdown`, `slider`, `number_box`,
