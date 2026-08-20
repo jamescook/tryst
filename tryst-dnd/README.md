@@ -5,7 +5,10 @@ binding. Makes a real drag from Finder/a file manager onto a widget
 fire the `<<DropFile>>` event core tryst's own `App#register_drop_target`
 already documents — that method exists in core as a no-op; requiring
 this shard is the only thing that has to change for an existing caller
-to start receiving real drops.
+to start receiving real drops. (`<<DropFile>>` can also be synthesized
+directly for testing, without this shard at all, with
+`event generate widget <<DropFile>> -data {...}` — what this shard adds
+is a real OS-level drag actually firing it.)
 
 ```crystal
 require "tryst"
@@ -59,44 +62,12 @@ changes; `shards install`/`crystal build` don't know to do it for you.
   packages: `-framework Cocoa -framework AppKit` are part of the OS.
 - **Linux**: a C toolchain (`gcc`/`clang`, `make`) plus **`libx11-dev`**
   (or your distro's equivalent - `libX11-devel` on Fedora/RHEL) for
-  `X11/Xlib.h`/`X11/Xatom.h`. Nothing else in this project has needed
-  X11 development headers before - every other native dependency links
-  an already-built library, this is the first one that compiles real
-  C/ObjC source of its own.
+  `X11/Xlib.h`/`X11/Xatom.h`.
 - **Windows**: not yet - see Platform status above.
 
 If `TCL_VERSION=9` is set when you build the Crystal side (targeting
 Tcl/Tk 9.x - see core tryst's own README), set it for `make` too:
-`TCL_VERSION=9 make`. The native code and the Crystal binary it links
-into share one runtime `Tcl_Interp*`, so the headers `make` compiles
-against have to track the same target `crystal build` does - `make`'s
-own pkg-config resolution mirrors core tryst's exact fallback chain for
-this reason (see the Makefile's own comments).
-
-## Why native C/ObjC at all
-
-`<<DropFile>>` itself is a plain Tcl virtual event - core tryst's own
-`App#bind`/`#unbind` already handle it with zero native code, and you
-can synthesize it directly for testing with
-`event generate widget <<DropFile>> -data {...}` (see core tryst's own
-spec suite). What can't be done from Tcl/Crystal alone is *detecting a
-real OS-level drag* in the first place: XDND (Linux), Cocoa's
-`NSDraggingDestination` protocol (macOS), and OLE's `IDropTarget`
-(Windows) are each a real native API with no Tcl-level equivalent.
-`native/tkdrop_x11.c` and `native/tkdrop_macos.m` implement exactly
-that - plain C/Objective-C against Tcl/Tk's public C API plus
-Xlib/Cocoa, based on [tkdnd](https://github.com/petasis/tkdnd) as
-protocol reference. Their own last step, once a real drop lands, is
-just calling `event generate ... <<DropFile>> -data {...}` - the exact
-same Tcl command the rest of this project already relies on, so
-nothing about how a caller *receives* a drop differs between a real
-drag and a synthesized one.
-
-The macOS Objective-C is entirely internal to `tkdrop_macos.m` -
-`clang` compiles `.m` files natively, so Crystal FFI never touches the
-ObjC runtime at all. It only ever sees one plain C function,
-`teek_register_drop_target(Tcl_Interp*, Tk_Window, const char*)`,
-identical across all three platform source files.
+`TCL_VERSION=9 make`.
 
 ## Examples
 
@@ -131,10 +102,3 @@ is the manual verification step for that.
 directory (the `path: ../` dependency on tryst has to be inside the
 build context) and runs `make` for you inside the image; it takes the
 same arguments `crystal spec` does, so a focused run works there too.
-
-## Windows
-
-Deliberately not attempted here - see the project's own issue tracker.
-`native/tkdrop_win.c` (OLE `IDropTarget`/`CF_HDROP`) is staged as
-reference but not wired into the Makefile yet; picking it up needs real
-Windows access to build and verify against, not a blind port.

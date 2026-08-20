@@ -3,12 +3,6 @@
 SDL3 rendering, audio and gamepad input for [tryst](../), Crystal's Tcl/Tk
 binding.
 
-A separate shard rather than part of tryst itself, so that tryst gains no
-SDL dependency: nothing here is reachable from a plain `require "tryst"`,
-and a project that only wants Tk never pays for SDL. It lives in this
-repo, next to the shard it depends on, and points at it with a `path`
-dependency.
-
 ## Rendering
 
 `Tryst::SDL::Viewport` puts an SDL3 rendering surface inside a Tk window —
@@ -93,14 +87,11 @@ brew install sdl3 sdl3_mixer sdl3_image sdl3_ttf
 
 On Linux, note that `libsdl3-mixer-dev` is the one that lags: as of
 writing it is in Debian forky and sid, but not in trixie, Ubuntu 26.04 or
-Alpine edge, which carry core/image/ttf only. That is why the test image
-is based on Debian forky.
+Alpine edge, which carry core/image/ttf only.
 
-Note the pkg-config names are lowercase and hyphenated — `sdl3-mixer`,
-not the CMake-style `SDL3_mixer`. Asking for the latter fails in a way
-that is easy to misread: pkg-config contributes nothing to the link line
-and the build dies later in a pile of undefined `_MIX_*` references
-rather than saying the package is missing.
+If installing manually rather than through a package manager, pkg-config
+needs the lowercase, hyphenated names (`sdl3-mixer`), not the CMake-style
+`SDL3_mixer`.
 
 ## Examples
 
@@ -120,15 +111,9 @@ crystal run examples/theremin.cr        # Tk sliders driving generated audio
 crystal run examples/yam/yam.cr         # minesweeper, with sound effects
 ```
 
-The audio examples make sound — which is the point of them, since the
-specs run on a device-less mixer and never do. Every one but `yam.cr`
-generates the audio it needs at runtime, so there is nothing to download
-and no binary asset in the repo for those. `yam.cr` is the exception: its
-four sound effects and its tile artwork are real committed files (see
-`examples/yam/assets/`), the same way `examples/paint/`'s brush icons are
-in the main tryst shard - some examples are inherently asset-heavy rather
-than proceduralizable. `geometry.cr`, `theremin.cr` and `yam.cr` open a
-window and need a display; the rest are console only.
+The audio examples make sound — turn your volume up. `geometry.cr`,
+`theremin.cr` and `yam.cr` open a window and need a display; the rest
+are console only.
 
 ## Tests
 

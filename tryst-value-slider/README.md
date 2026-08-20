@@ -43,39 +43,9 @@ whatever system UI face each platform uses) and applies to all three
 labels (min, max, bubble) — pass any real Tk font spec (another named
 font, or a literal `"family size"` string) to override it.
 
-`design/mock.html` is the Phase 0 reference this shard was built
-against — a standalone HTML/CSS/JS mock of the same drag/bubble/ticks/
-disabled behavior, approved before any Crystal was written.
-
-## Fonts and color
-
-The bubble's text is a real Tk `label` (`font: "TkTextFont"`) floated
-over the canvas with `place`, not drawn — so it gets whatever system UI
-font Tk itself resolves per platform (San Francisco, Segoe UI, the
-desktop's configured sans on Linux) for free, with no font stack to
-maintain here. The default accent color comes from `Tryst::Theme#accent`
-(the active ttk theme's own `-selectbackground`), so it already matches
-aqua/clam/vista rather than a hardcoded color; `accent:` overrides it
-per-instance with a hex string.
-
-## Why a separate shard
-
-Lives at the repo root, sibling to tryst-vector and tryst-sdl, not
-nested under a widgets/ subdirectory — a real `shards install`
-limitation forces this: a transitive `path:` dependency (tryst-vector's
-own dependency on tryst) resolves using the literal relative-path string
-tryst-vector itself declared, and a shard one level deeper needs a
-different literal string to reach the same real tryst, which `shards`
-refuses as "ambiguous sources" even though both resolve to one
-directory. Same depth as tryst-vector, same literal `../`, is what
-actually resolves —
-see `shard.yml`'s own comment for the full story.
-
-A separate shard rather than part of tryst-vector itself for the same
-reason tryst-vector is separate from tryst: neither tryst nor
-tryst-vector gains a dependency on this widget, and a project that only
-wants the rendering primitives never pays for a specific widget's
-opinions about layout, keyboard handling, or bubble chrome.
+The default accent color comes from `Tryst::Theme#accent` (the active
+ttk theme's own `-selectbackground`), so it already matches
+aqua/clam/vista rather than a hardcoded color.
 
 ## Requirements
 

@@ -1,23 +1,9 @@
 # tryst-vector
 
 CPU vector rasterization ([ThorVG](https://www.thorvg.org)) for
-[tryst](../), Crystal's Tcl/Tk binding — the appearance tier for
-owner-drawn widgets: antialiased curves, gradients and shadows, blitted
-into a Tk Photo. Tk's canvas primitives are never antialiased on X11
-in either 8.6 or 9.0 (an X11-backend limitation; Aqua/Quartz has always
-antialiased canvas shapes on macOS, in both versions), and canvas shapes
-have no native gradient fill in any Tk version. A GPU surface is the
-wrong shape at widget scale too (device setup + readback loses to a CPU
-rasterizer's latency for a small buffer). ThorVG has real packaging (a
-bottled Homebrew formula and MSYS2/Debian forky packages) and emits
-straight (not premultiplied) alpha directly, matching the format Tk's
-Photo already understands.
-
-A separate shard rather than part of tryst itself, so that tryst gains no
-ThorVG dependency: nothing here is reachable from a plain
-`require "tryst"`, and a project that only wants Tk never pays for it. It
-lives in this repo, next to the shard it depends on, and points at it
-with a `path` dependency — the same shape as [tryst-sdl](../tryst-sdl/).
+[tryst](../), Crystal's Tcl/Tk binding — antialiased curves, gradients
+and shadows, blitted into a Tk Photo. Tk's own canvas primitives have no
+native gradient fill and, on X11, no antialiasing either.
 
 ```crystal
 require "tryst"
@@ -70,8 +56,7 @@ slice; `#polygon` already covers that shape directly if something wants
 it) — 0 degrees is 12 o'clock, positive `sweep_deg` sweeps clockwise
 (screen coordinates), matching how a progress ring or spinner is
 actually thought about rather than math's usual 0=east/counterclockwise.
-Built as cubic Bezier segments since ThorVG has no native arc path
-command. `#stroke` takes an optional `cap:` (`Tryst::Vector::StrokeCap`
+`#stroke` takes an optional `cap:` (`Tryst::Vector::StrokeCap`
 — `:butt` (ThorVG's own default), `:round`, `:square`) — `:round` is
 what makes a swept arc read as a smooth stroke rather than a wedge with
 hard-cut ends; only meaningful on an open path like `#arc`'s, harmless
@@ -83,26 +68,17 @@ doesn't reach it) — revisit once something actually needs it.
 ## Requirements
 
 Crystal >= 1.21.0, Tcl/Tk 8.6 (whatever tryst itself needs), and ThorVG
->= 1.0 (the bake-off's own pin — ThorVG had intentional API/ABI breaks at
-the 1.0 transition). The build asks pkg-config for it where a `.pc` file
-exists, falling back to a plain `-lthorvg-1` otherwise — see
-`bindings/core.cr` for why that fallback is load-bearing on Debian, not
-just a "no pkg-config on the box at all" escape hatch.
+>= 1.0.
 
 | platform | package | notes |
 | --- | --- | --- |
 | macOS (Homebrew) | `thorvg` | not keg-only; ships a `thorvg-1.pc` pkg-config file |
-| Debian/Ubuntu (apt) | `libthorvg-dev` | **Debian forky/sid only** as of writing — not yet in trixie or any current Ubuntu release; ships no `.pc` file, hence the fallback above |
+| Debian/Ubuntu (apt) | `libthorvg-dev` | **Debian forky/sid only** as of writing — not yet in trixie or any current Ubuntu release |
 | Windows (MSYS2, UCRT64 shell) | `mingw-w64-ucrt-x86_64-thorvg` | `pacman -S mingw-w64-ucrt-x86_64-thorvg`, alongside the root README's own Crystal/Tcl/Tk packages, from the same UCRT64 shell |
 
 ```
 brew install thorvg
 ```
-
-That's why the Docker test image (see Tests below) is based on Debian
-forky rather than trixie or the parent project's own Ubuntu-based image —
-same reasoning tryst-sdl's Dockerfile documents for `libsdl3-mixer-dev`
-lagging the same way.
 
 ## Examples
 
