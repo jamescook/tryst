@@ -127,11 +127,8 @@ module Tryst
 
       leaf_widget slider
 
-      # A rule between sections. orientation: :horizontal (the default) is
-      # a rule between stacked sections; :vertical is a rule between
-      # side-by-side ones - same param name and same two values as
-      # #split's, translated the same way, so the two don't disagree about
-      # what to call this.
+      # A rule between sections. orientation: mirrors #split's own param
+      # name and values for API consistency.
       def divider(name : Symbol? = nil, orientation : SplitOrientation = :horizontal, bind : Var? = nil, **opts) : Handle
         append_leaf(:divider, name, split_opts(orientation, opts), bind)
       end
