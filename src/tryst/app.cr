@@ -435,27 +435,18 @@ module Tryst
     # whatever exception block raised instead - same contract as calling
     # block synchronously would have, just relocated.
     #
-    # Route File.open (and anything that opens a file internally, like
-    # File.read(path)), DNS resolution, and TLS/OpenSSL calls through
-    # this instead of calling them directly from a fiber sharing Tk's
-    # own OS thread (the main fiber, or any plain `spawn`ed fiber both
-    # do, by default) - on macOS, those specific calls are the ones
-    # Crystal's SYSMON thread can migrate onto a different OS thread
-    # mid-call, and if that continuation goes on to touch Tk, it
-    # silently corrupts Tcl/Tk's internal state (Tcl requires every call
-    # into a given interpreter to come from the one OS thread that
-    # created it, forever). It's a race against a periodic scheduler
-    # sample, not a "the call was slow" threshold, so a call that's fine
-    # 99 times can still corrupt state on the 100th - see
-    # syscall_guard.cr's header comment for the full mechanism.
-    # macOS-specific: Linux has its own integration (Tryst::Notifier)
-    # that sidesteps the need for this pattern entirely.
-    #
-    # Two safety nets exist if this rule gets missed anyway -
-    # syscall_guard.cr (a debug-time warning naming the exact call site)
-    # and Interp#check_thread_affinity! (a hard, clear error instead of
-    # silent corruption) - see each's own comment for what it does and
-    # why neither is a substitute for routing the call through here.
+    # Route File I/O, DNS, and TLS calls through this rather than
+    # calling them directly, because on macOS those are exactly the
+    # calls Crystal's SYSMON thread can migrate onto a different OS
+    # thread mid-call - and if that continuation goes on to touch Tk,
+    # it silently corrupts Tcl/Tk's internal state (Tcl requires every
+    # call into a given interpreter to come from the one OS thread that
+    # created it, forever). A race against a periodic scheduler sample,
+    # not a "the call was slow" threshold, so a call that's fine 99
+    # times can still corrupt state on the 100th - see
+    # syscall_guard.cr's header comment for the full mechanism and its
+    # own debug-time warning, and Interp#check_thread_affinity! for the
+    # hard-error backstop if this rule gets missed anyway.
     #
     # new_thread: false (default) dispatches to Tryst::OffThreadWorker's
     # single persistent, lazily-started thread - shared across every
