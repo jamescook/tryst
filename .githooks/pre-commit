@@ -161,6 +161,13 @@ fi
 # call a human should weigh, not something that should ever block a
 # commit outright.
 #
+# Opt-in via a gitignored sentinel file at the repo root
+# (.enable-claude-comment-review, empty/any content, presence is all
+# that matters) - this repo is headed public, and forcing every future
+# contributor's pre-commit hook to shell out to Claude Code isn't
+# reasonable to assume by default the way ameba/crystal are. Touch that
+# file once locally to opt in.
+#
 # Never fails the commit for its OWN sake either - no `claude` on PATH,
 # no `timeout`/`gtimeout`, a network hiccup, not logged in, whatever -
 # all of that just skips the check silently rather than treating "the
@@ -172,7 +179,7 @@ elif command -v gtimeout >/dev/null 2>&1; then
   comment_review_bin="gtimeout"
 fi
 
-if [ -n "$comment_review_bin" ] && command -v claude >/dev/null 2>&1; then
+if [ -f ".enable-claude-comment-review" ] && [ -n "$comment_review_bin" ] && command -v claude >/dev/null 2>&1; then
   comment_diff=$(git diff --cached -- '*.cr' 2>/dev/null || true)
   if [ -n "$comment_diff" ]; then
     # Cap what gets sent - keeps this fast and cheap even for a large

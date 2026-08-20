@@ -38,3 +38,9 @@ desktop.ini
 # no reliable name/extension pattern to add here. Instead a pre-commit
 # hook should be setup to inspect staged files to test if they look like
 # a built binary
+
+# Sentinel that opts a local clone into the pre-commit hook's Haiku-
+# powered comment-verbosity review (see .githooks/pre-commit) - a repo-
+# local preference, not something to force on every future public
+# contributor who may have no Claude Code/API access at all.
+/.enable-claude-comment-review
