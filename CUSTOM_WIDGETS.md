@@ -110,6 +110,22 @@ driven headlessly against a real Tk interpreter, asserting on the whole
 lifecycle — creation, the `post_create` override actually running, `bind:`
 wiring, and a clean destroy with the bound `Var`'s own Tcl trace released.
 
+## When a `WidgetType` isn't the right fit
+
+Everything above registers a `Tryst::UI::WidgetType` - the right shape
+for a widget that's just a Tk command plus options, meant to feel
+built into the DSL as `ui.<type>`. A widget with its own persistent
+state, drawing, or animation (a `Photo`, `App#every`) doesn't fit that
+shape: a `WidgetType` hook only ever gets the narrow `AppContract` (see
+`app_contract.cr`), which has no `Photo`/`#every` access at all - there's
+nowhere in that seam for a persistent per-widget object to live.
+
+For that case, subclass `Tryst::OwnerDrawnWidget` at the `App` layer
+instead, and use it directly rather than through `ui.<type>` -
+[tryst-spinner](tryst-spinner/) is a real, shipped example: an
+antialiased progress ring with its own animation loop, built this way
+rather than as a registered `WidgetType`.
+
 ## A known limitation
 
 `node.type` and `WidgetType#type` are a bare `Symbol`, not a closed

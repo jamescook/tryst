@@ -51,8 +51,8 @@ module Tryst
     # drag interactions elsewhere in this codebase, nothing about this
     # animation needs to track input latency), and it runs for as long as
     # the spinner is on screen rather than for one bounded interaction -
-    # see the README's own CPU-at-idle-spin measurement for why that
-    # tradeoff matters here specifically.
+    # see the README's own CPU-at-idle-spin cost for why that tradeoff
+    # matters here specifically.
     ANIMATION_TICK_MS = 33
 
     VALUE_TWEEN_MS = 200
