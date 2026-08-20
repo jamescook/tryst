@@ -122,9 +122,10 @@ nowhere in that seam for a persistent per-widget object to live.
 
 For that case, subclass `Tryst::OwnerDrawnWidget` at the `App` layer
 instead, and use it directly rather than through `ui.<type>` -
-[tryst-spinner](tryst-spinner/) is a real, shipped example: an
-antialiased progress ring with its own animation loop, built this way
-rather than as a registered `WidgetType`.
+[tryst-spinner](tryst-spinner/) (an antialiased progress ring with its
+own animation loop) and [tryst-switch](tryst-switch/) (an animated
+on/off toggle) are both real, shipped examples, built this way rather
+than as a registered `WidgetType`.
 
 ## A known limitation
 
