@@ -2,6 +2,7 @@ require "./event_source"
 require "./notifier"
 require "./notifier_macos"
 require "./tcltk_link_windows"
+require "./tcltk_version_probe"
 
 # Deliberately skips Tcl/Tk's stub-library mechanism. Stubs exist to let one
 # compiled artifact run against multiple Tcl/Tk runtime versions, but that
@@ -59,23 +60,7 @@ require "./tcltk_link_windows"
 # path, so it gets the plain flags instead and relies on
 # DYLD_LIBRARY_PATH/LD_LIBRARY_PATH being set in the environment instead.
 {% unless flag?(:windows) %}
-  {% if `
-      case "$TCL_VERSION" in
-        8) echo 8 ;;
-        9) echo 9 ;;
-        *)
-          if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists tcl9.0 tk9.0 2>/dev/null; then
-            echo 9
-          elif command -v pkg-config >/dev/null 2>&1 && pkg-config --exists tcl tk 2>/dev/null && case "$(pkg-config --modversion tcl 2>/dev/null)" in 9.*) true ;; *) false ;; esac; then
-            echo 9
-          elif command -v brew >/dev/null 2>&1 && (brew --prefix tcl-tk@9 >/dev/null 2>&1 || brew --prefix tcl-tk >/dev/null 2>&1); then
-            echo 9
-          else
-            echo 8
-          fi
-          ;;
-      esac
-    `.stringify.chomp == "9" %}
+  {% if `#{Tryst::TCL_VERSION_PROBE.id}`.stringify.chomp == "9" %}
     {% if flag?(:interpreted) %}
       @[Link(ldflags: "`
         if command -v pkg-config >/dev/null && pkg-config --exists tcl9.0 tk9.0 2>/dev/null; then
@@ -123,26 +108,14 @@ lib LibTcl
   # `typedef int Tcl_Size;` on 8.x) - one alias instead of repeating the
   # {% if %} at every fun below that takes one.
   #
-  # Identical probe as the @[Link] block above this lib - see that
-  # comment for what it checks; every copy has to match, since Crystal
-  # macro locals don't persist across separate top-level {% %} blocks.
-  {% if `
-      case "$TCL_VERSION" in
-        8) echo 8 ;;
-        9) echo 9 ;;
-        *)
-          if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists tcl9.0 tk9.0 2>/dev/null; then
-            echo 9
-          elif command -v pkg-config >/dev/null 2>&1 && pkg-config --exists tcl tk 2>/dev/null && case "$(pkg-config --modversion tcl 2>/dev/null)" in 9.*) true ;; *) false ;; esac; then
-            echo 9
-          elif command -v brew >/dev/null 2>&1 && (brew --prefix tcl-tk@9 >/dev/null 2>&1 || brew --prefix tcl-tk >/dev/null 2>&1); then
-            echo 9
-          else
-            echo 8
-          fi
-          ;;
-      esac
-    `.stringify.chomp == "9" %}
+  # Same probe as the @[Link] block above this lib, and event_source.cr's
+  # own copy - see src/tryst/tcltk_version_probe.cr for why this is a
+  # shared constant rather than a hand-copied script (this exact site
+  # used to be one of the hand-copies, and was the one that had gone out
+  # of sync: unlike the @[Link] block above, it had no `flag?(:windows)`
+  # guard at all, so it ran the raw POSIX script through Windows'
+  # non-shell Process.run(shell: true) and crashed outright).
+  {% if `#{Tryst::TCL_VERSION_PROBE.id}`.stringify.chomp == "9" %}
     alias TclSize = LibC::SSizeT
   {% else %}
     alias TclSize = LibC::Int
@@ -255,28 +228,9 @@ lib LibTcl
   # (`long` is 32-bit there) - built against 9.x, a `LibC::Long` sec would
   # misalign usec and corrupt whatever reads this struct.
   struct Time
-    # Identical probe as the @[Link] block above this lib - see that
-    # comment for what it checks; every copy has to match, since Crystal
-    # macro locals don't persist across separate top-level {% %} blocks.
-    # event_source.cr's own copy has to agree with this one exactly, too
-    # - see its own comment.
-    {% if `
-        case "$TCL_VERSION" in
-          8) echo 8 ;;
-          9) echo 9 ;;
-          *)
-            if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists tcl9.0 tk9.0 2>/dev/null; then
-              echo 9
-            elif command -v pkg-config >/dev/null 2>&1 && pkg-config --exists tcl tk 2>/dev/null && case "$(pkg-config --modversion tcl 2>/dev/null)" in 9.*) true ;; *) false ;; esac; then
-              echo 9
-            elif command -v brew >/dev/null 2>&1 && (brew --prefix tcl-tk@9 >/dev/null 2>&1 || brew --prefix tcl-tk >/dev/null 2>&1); then
-              echo 9
-            else
-              echo 8
-            fi
-            ;;
-        esac
-      `.stringify.chomp == "9" %}
+    # Same probe as everywhere else in this file (and event_source.cr) -
+    # see src/tryst/tcltk_version_probe.cr.
+    {% if `#{Tryst::TCL_VERSION_PROBE.id}`.stringify.chomp == "9" %}
       sec : LibC::LongLong
     {% else %}
       sec : LibC::Long
@@ -347,26 +301,9 @@ lib LibTk
   # worse than not linking at all - hence the version branch here rather
   # than one signature reused for both.
   #
-  # Identical probe as the @[Link] block above this lib - see that
-  # comment for what it checks; every copy has to match, since Crystal
-  # macro locals don't persist across separate top-level {% %} blocks.
-  {% if `
-      case "$TCL_VERSION" in
-        8) echo 8 ;;
-        9) echo 9 ;;
-        *)
-          if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists tcl9.0 tk9.0 2>/dev/null; then
-            echo 9
-          elif command -v pkg-config >/dev/null 2>&1 && pkg-config --exists tcl tk 2>/dev/null && case "$(pkg-config --modversion tcl 2>/dev/null)" in 9.*) true ;; *) false ;; esac; then
-            echo 9
-          elif command -v brew >/dev/null 2>&1 && (brew --prefix tcl-tk@9 >/dev/null 2>&1 || brew --prefix tcl-tk >/dev/null 2>&1); then
-            echo 9
-          else
-            echo 8
-          fi
-          ;;
-      esac
-    `.stringify.chomp == "9" %}
+  # Same probe as everywhere else in this file (and event_source.cr) -
+  # see src/tryst/tcltk_version_probe.cr.
+  {% if `#{Tryst::TCL_VERSION_PROBE.id}`.stringify.chomp == "9" %}
     fun text_width = Tk_TextWidth(font : Font, str : LibC::Char*, num_bytes : LibC::SSizeT) : LibC::Int
     fun measure_chars = Tk_MeasureChars(font : Font, source : LibC::Char*, num_bytes : LibC::SSizeT,
                                         max_pixels : LibC::Int, flags : LibC::Int,
@@ -409,26 +346,9 @@ end
   # of this writing - same shape, same header-documented contract, but
   # worth another live check the first time it's actually exercised).
   lib LibTkMacOSX
-    # Identical probe as the @[Link] block above this lib - see that
-    # comment for what it checks; every copy has to match, since Crystal
-    # macro locals don't persist across separate top-level {%  %} blocks.
-    {% if `
-        case "$TCL_VERSION" in
-          8) echo 8 ;;
-          9) echo 9 ;;
-          *)
-            if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists tcl9.0 tk9.0 2>/dev/null; then
-              echo 9
-            elif command -v pkg-config >/dev/null 2>&1 && pkg-config --exists tcl tk 2>/dev/null && case "$(pkg-config --modversion tcl 2>/dev/null)" in 9.*) true ;; *) false ;; esac; then
-              echo 9
-            elif command -v brew >/dev/null 2>&1 && (brew --prefix tcl-tk@9 >/dev/null 2>&1 || brew --prefix tcl-tk >/dev/null 2>&1); then
-              echo 9
-            else
-              echo 8
-            fi
-            ;;
-        esac
-      `.stringify.chomp == "9" %}
+    # Same probe as everywhere else in this file (and event_source.cr) -
+    # see src/tryst/tcltk_version_probe.cr.
+    {% if `#{Tryst::TCL_VERSION_PROBE.id}`.stringify.chomp == "9" %}
       fun ns_window_for_drawable = Tk_MacOSXGetNSWindowForDrawable(drawable : Void*) : Void*
     {% else %}
       fun ns_window_for_drawable = TkMacOSXDrawable(drawable : Void*) : Void*
@@ -453,23 +373,7 @@ module Tryst
   # backstop that turns a silent ABI mismatch into an immediate, readable
   # error instead of undefined behavior the first time a version-sensitive
   # call is made.
-  TCL_MAJOR_VERSION = {{ (`
-      case "$TCL_VERSION" in
-        8) echo 8 ;;
-        9) echo 9 ;;
-        *)
-          if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists tcl9.0 tk9.0 2>/dev/null; then
-            echo 9
-          elif command -v pkg-config >/dev/null 2>&1 && pkg-config --exists tcl tk 2>/dev/null && case "$(pkg-config --modversion tcl 2>/dev/null)" in 9.*) true ;; *) false ;; esac; then
-            echo 9
-          elif command -v brew >/dev/null 2>&1 && (brew --prefix tcl-tk@9 >/dev/null 2>&1 || brew --prefix tcl-tk >/dev/null 2>&1); then
-            echo 9
-          else
-            echo 8
-          fi
-          ;;
-      esac
-    `).stringify.chomp == "9" ? 9 : 8 }}
+  TCL_MAJOR_VERSION = {{ (`#{Tryst::TCL_VERSION_PROBE.id}`).stringify.chomp == "9" ? 9 : 8 }}
 
   # Depth counter around #dispatch_callback, so .in_callback? can detect
   # "is this code running synchronously inside a Tk callback right now"
