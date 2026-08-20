@@ -193,6 +193,7 @@ class ThreadingDemoUI
     @algorithm_var.value = ALGORITHMS.first
     @chunk_var.value = 3
     @allow_pause_var.value = false
+    @session.app.update_idletasks
   end
 
   private def finish_hashing : Nil

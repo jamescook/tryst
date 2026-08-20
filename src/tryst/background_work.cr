@@ -423,6 +423,14 @@ module Tryst
         @callback_progress.try(&.call(lp))
       end
 
+      # A widget `configure`/`insert` a callback just issued only schedules
+      # a redraw on Tk's own idle queue - it doesn't paint. Nothing else
+      # forces that queue to flush between here and the next #poll, so
+      # without this, on_progress/on_done can visibly do nothing at all:
+      # confirmed directly (a real click, real widgets, `cget` reporting
+      # every value correctly while the screen itself never updated).
+      @app.update_idletasks if results_this_poll > 0 || @done
+
       unless @done || @paused
         arm_poll(self.class.poll_ms)
       end
