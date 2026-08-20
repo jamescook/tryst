@@ -174,6 +174,7 @@ class ThreadingDemoUI
     @session.app.set_window_resizable(false, false)
     @metrics = HashMetrics.new(Time.instant, @files.size)
 
+    STDERR.puts "[demo] start_hashing: mode=#{@mode_var.value} files=#{@files.size}"
     blocking_mode? ? run_blocking : start_background_work
   end
 
@@ -221,6 +222,7 @@ class ThreadingDemoUI
   end
 
   private def finish_hashing : Nil
+    STDERR.puts "[demo] finish_hashing: metrics.nil?=#{@metrics.nil?} stop_requested=#{@stop_requested}"
     metrics = @metrics
     return unless metrics
 
@@ -234,6 +236,7 @@ class ThreadingDemoUI
     mode_combo.configure(state: "readonly")
     algo_combo.configure(state: "readonly")
     @session.app.set_window_resizable(true, true)
+    STDERR.puts "[demo] finish_hashing: done"
   end
 
   private def start_background_work : Nil
@@ -276,6 +279,7 @@ class ThreadingDemoUI
   # and control goes back to Tk's own event loop - that gap is the whole
   # point of this mode.
   private def run_blocking : Nil
+    STDERR.puts "[demo] run_blocking: entered"
     job = HashJob.new(
       files: @files.dup,
       algo_name: current_algo,
@@ -289,6 +293,7 @@ class ThreadingDemoUI
       @progress_var.value = @service.progress_percent(msg.index, msg.total)
       status_label.configure(text: @service.status_progress_text(msg.index, msg.total))
     end
+    STDERR.puts "[demo] run_blocking: loop finished"
 
     finish_hashing
   end
