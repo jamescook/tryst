@@ -16,9 +16,15 @@
 # pushes what it reports into the vars the widgets are bound to; the
 # service never sees a widget, a Var, or a BackgroundWork.
 #
-# No control here switches concurrency strategy: ruby-tryst's demo compares
-# four (None/None+update/Thread/Ractor), but this port only ever implemented
-# one BackgroundWork, so that comparison UI was dropped entirely.
+# Mode: switches between the two ways this demo can run the same hash job.
+# Background (the default) drives it through Tryst::BackgroundWork - the
+# window stays responsive throughout. Blocking runs the identical job
+# straight on the UI thread, no BackgroundWork involved - the window stops
+# responding to anything, including its own redraws, until the whole job
+# finishes. ruby-tryst's own demo compares four modes (None/None+update/
+# Thread/Ractor); this port only ever implemented one non-blocking
+# strategy, so Background stands in for Thread/Ractor collectively, but
+# the core contrast is real.
 #
 # Progress goes through a reactive var (bind:) rather than hand-written
 # set_variable calls - the progressbar just tracks it.
@@ -30,10 +36,13 @@
 require "../../src/tryst/ui"
 require "./service"
 
+MODES = ["Background", "Blocking"]
+
 class ThreadingDemoUI
   @files : Array(String)
   @session : Tryst::UI::Session
   @algorithm_var : Tryst::UI::Var
+  @mode_var : Tryst::UI::Var
   @chunk_var : Tryst::UI::Var
   @allow_pause_var : Tryst::UI::Var
   @progress_var : Tryst::UI::Var
@@ -50,7 +59,7 @@ class ThreadingDemoUI
       .try(&.split('=').last.to_i) || ENV["DEMO_MAX_FILES"]?.try(&.to_i)
     @files = @service.collect_files(base, max_files)
 
-    @session, @algorithm_var, @chunk_var, @allow_pause_var, @progress_var = build
+    @session, @algorithm_var, @mode_var, @chunk_var, @allow_pause_var, @progress_var = build
     wire_actions
   end
 
@@ -72,16 +81,17 @@ class ThreadingDemoUI
     @session[:reset_btn].on_action { reset }
   end
 
-  # Returns the not-yet-realized session plus the four reactive vars
+  # Returns the not-yet-realized session plus the five reactive vars
   # other methods here need to read/write. Builds straight off `session`
   # rather than yielding it through a Tryst::UI.app block (unlike
   # examples/calculator_ui/app.cr's own top-level style) - every var and
   # widget declaration below is then a plain, individually-typed local
   # assignment, with no nested block for Crystal to lose track of.
-  private def build : {Tryst::UI::Session, Tryst::UI::Var, Tryst::UI::Var, Tryst::UI::Var, Tryst::UI::Var}
+  private def build : {Tryst::UI::Session, Tryst::UI::Var, Tryst::UI::Var, Tryst::UI::Var, Tryst::UI::Var, Tryst::UI::Var}
     session = Tryst::UI.app(title: "Concurrency Demo - File Hasher")
 
     algorithm_var = session.var(ALGORITHMS.first)
+    mode_var = session.var(MODES.first)
     chunk_var = session.var(3)
     batch_display_var = session.var("3")
     # ttk::scale always stores/formats its own -variable as a float
@@ -93,13 +103,17 @@ class ThreadingDemoUI
     progress_var = session.var(0)
 
     session.column(gap: 8, pad: 8) do |col|
-      col.label(text: "File hasher demo - hashes files in the background while the UI stays responsive.",
+      col.label(text: "File hasher demo - Background keeps the UI responsive while hashing; " \
+                      "Blocking freezes it, on purpose.",
         justify: :left)
 
       col.row(gap: 6) do |row|
         row.button(:start_btn, text: "Start")
         row.button(:pause_btn, text: "Pause", state: :disabled)
         row.button(:reset_btn, text: "Reset")
+
+        row.label(text: "Mode:")
+        row.dropdown(:mode_combo, bind: mode_var, values: MODES, width: 10, state: :readonly)
 
         row.label(text: "Algorithm:")
         row.dropdown(:algo_combo, bind: algorithm_var, values: ALGORITHMS, width: 8, state: :readonly)
@@ -135,7 +149,7 @@ class ThreadingDemoUI
       app.on_close(".") { |_values, _signal| @background_task.try(&.close); app.destroy(".") }
     end
 
-    {session, algorithm_var, chunk_var, allow_pause_var, progress_var}
+    {session, algorithm_var, mode_var, chunk_var, allow_pause_var, progress_var}
   end
 
   def run : Nil
@@ -147,16 +161,24 @@ class ThreadingDemoUI
     @paused = false
 
     start_btn.configure(state: "disabled")
+    mode_combo.configure(state: "disabled")
     algo_combo.configure(state: "disabled")
     log_text.text_content.clear
     @progress_var.value = 0
     status_label.configure(text: "Hashing...")
-    pause_btn.configure(state: @allow_pause_var.value.as(Bool) ? "!disabled" : "disabled")
+    # Pause needs something else running to notice the request while this
+    # one blocks - meaningless (and left disabled) in Blocking mode
+    # regardless of the checkbox.
+    pause_btn.configure(state: blocking_mode? || !@allow_pause_var.value.as(Bool) ? "disabled" : "!disabled")
 
     @session.app.set_window_resizable(false, false)
     @metrics = HashMetrics.new(Time.instant, @files.size)
 
-    start_background_work
+    blocking_mode? ? run_blocking : start_background_work
+  end
+
+  private def blocking_mode? : Bool
+    @mode_var.value.as(String) == "Blocking"
   end
 
   private def toggle_pause : Nil
@@ -183,6 +205,7 @@ class ThreadingDemoUI
     start_btn.configure(state: "!disabled")
     pause_btn.configure(state: "disabled")
     pause_btn.configure(text: "Pause")
+    mode_combo.configure(state: "readonly")
     algo_combo.configure(state: "readonly")
     @session.app.set_window_resizable(true, true)
     log_text.text_content.clear
@@ -191,6 +214,7 @@ class ThreadingDemoUI
     file_label.configure(text: "")
 
     @algorithm_var.value = ALGORITHMS.first
+    @mode_var.value = MODES.first
     @chunk_var.value = 3
     @allow_pause_var.value = false
     @session.app.update_idletasks
@@ -207,6 +231,7 @@ class ThreadingDemoUI
     file_label.configure(text: "")
     start_btn.configure(state: "!disabled")
     pause_btn.configure(state: "disabled")
+    mode_combo.configure(state: "readonly")
     algo_combo.configure(state: "readonly")
     @session.app.set_window_resizable(true, true)
   end
@@ -243,6 +268,31 @@ class ThreadingDemoUI
     end
   end
 
+  # The other half of Mode: - same job, same per-chunk UI updates, run
+  # straight in this method's own call frame instead of on a
+  # Tryst::BackgroundWork thread. Deliberately calls neither #update nor
+  # #update_idletasks anywhere in the loop: every configure/insert below
+  # still queues correctly, but nothing paints until this method returns
+  # and control goes back to Tk's own event loop - that gap is the whole
+  # point of this mode.
+  private def run_blocking : Nil
+    job = HashJob.new(
+      files: @files.dup,
+      algo_name: current_algo,
+      chunk_size: current_chunk,
+      base_dir: Dir.current,
+      allow_pause: false)
+
+    @service.run(job, -> { }) do |msg|
+      log_text.text_content.insert(:end, msg.updates)
+      log_text.text_content.scroll_to(:end)
+      @progress_var.value = @service.progress_percent(msg.index, msg.total)
+      status_label.configure(text: @service.status_progress_text(msg.index, msg.total))
+    end
+
+    finish_hashing
+  end
+
   private def current_algo : String
     @algorithm_var.value.as(String)
   end
@@ -257,6 +307,10 @@ class ThreadingDemoUI
 
   private def pause_btn : Tryst::UI::Handle
     @session[:pause_btn]
+  end
+
+  private def mode_combo : Tryst::UI::Handle
+    @session[:mode_combo]
   end
 
   private def algo_combo : Tryst::UI::Handle
