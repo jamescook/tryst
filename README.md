@@ -27,13 +27,10 @@ end.run
 ## Requirements
 
 - Crystal >= 1.21.0
-- Tcl/Tk 8.6 (preinstalled on macOS; `apt install tcl-dev tk-dev` or
-  equivalent on Linux; on Windows, install both Crystal and Tcl/Tk via
-  [MSYS2](https://www.msys2.org/) - from a **UCRT64** MSYS2 shell:
-  `pacman -S mingw-w64-ucrt-x86_64-crystal mingw-w64-ucrt-x86_64-tcl mingw-w64-ucrt-x86_64-tk mingw-w64-ucrt-x86_64-pkgconf`,
-  then make sure that environment's `bin/` is on `PATH` when running
-  `crystal build`/`crystal run`. MSYS2 currently packages Tcl/Tk 8.6 only,
-  not 9.x.)
+- Tcl/Tk 8.6 minimum (9.x also supported, see Tests below)
+- Windows: Crystal and Tcl/Tk both come from MSYS2, not their usual installers
+
+See [INSTALL.md](INSTALL.md) for per-platform setup.
 
 ## Installation
 
@@ -189,11 +186,12 @@ needs it.
 
 ```
 shards install
-crystal spec                  # host, Tcl/Tk 8.6
-scripts/docker-test.sh        # Ubuntu + Xvfb, same suite headless, 8.6
+crystal spec                  # host, auto-detects installed Tcl/Tk (prefers 9.x)
+scripts/docker-test.sh        # Ubuntu + Xvfb, same suite headless, 8.6 image
 
-TCL_VERSION=9 crystal spec       # host, Tcl/Tk 9.x
-scripts/docker-test-tcl9.sh      # Debian trixie + Xvfb, same suite headless, 9.x
+TCL_VERSION=8 crystal spec       # host, forces 8.6
+TCL_VERSION=9 crystal spec       # host, forces 9.x
+scripts/docker-test-tcl9.sh      # Debian trixie + Xvfb, same suite headless, 9.x image
 ```
 
 Developed and tested on macOS (Aqua) and Linux (X11).

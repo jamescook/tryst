@@ -29,6 +29,12 @@
 # install for Windows, so a silent/cryptic failure here is far more likely
 # than on Linux/macOS.
 #
+# Unlike interp.cr's POSIX branch, this stays a plain env("TCL_VERSION")
+# check rather than auto-detecting - MSYS2 doesn't package Tcl/Tk 9 at
+# all yet (see the error message below), so there is nothing to detect:
+# every real Windows build lands on 8.6 either way. Worth revisiting once
+# MSYS2 ships a 9.x package.
+#
 # Deliberately does not trust whatever `pkg-config` happens to be first on
 # PATH: Windows composes a process's PATH as Machine PATH followed by User
 # PATH, so an unrelated older MSYS/Cygwin install anywhere in Machine PATH

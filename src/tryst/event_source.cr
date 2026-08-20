@@ -115,8 +115,26 @@ module Tryst
       total = span.total_microseconds.to_i64
       usec = LibC::Long.new(total % 1_000_000)
       # sec's argument type has to track LibTcl::Time#sec's own
-      # version-conditional type - see its declaration in interp.cr.
-      {% if env("TCL_VERSION") == "9" %}
+      # version-conditional type - see its declaration in interp.cr, and
+      # its own comment for why this probe is duplicated verbatim rather
+      # than shared, and has to be kept in sync if it's ever edited.
+      {% if `
+          case "$TCL_VERSION" in
+            8) echo 8 ;;
+            9) echo 9 ;;
+            *)
+              if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists tcl9.0 tk9.0 2>/dev/null; then
+                echo 9
+              elif command -v pkg-config >/dev/null 2>&1 && pkg-config --exists tcl tk 2>/dev/null && case "$(pkg-config --modversion tcl 2>/dev/null)" in 9.*) true ;; *) false ;; esac; then
+                echo 9
+              elif command -v brew >/dev/null 2>&1 && (brew --prefix tcl-tk@9 >/dev/null 2>&1 || brew --prefix tcl-tk >/dev/null 2>&1); then
+                echo 9
+              else
+                echo 8
+              fi
+              ;;
+          esac
+        `.stringify.chomp == "9" %}
         LibTcl::Time.new(sec: LibC::LongLong.new(total // 1_000_000), usec: usec)
       {% else %}
         LibTcl::Time.new(sec: LibC::Long.new(total // 1_000_000), usec: usec)
