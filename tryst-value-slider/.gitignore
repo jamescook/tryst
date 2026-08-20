@@ -6,3 +6,8 @@
 /docs/
 /bin/
 *.dwarf
+
+# Phase-0 design mockups (design/mock.html) are a review artifact, not
+# something meant to land in git history - accidentally committed once
+# already before this line existed.
+/design/
