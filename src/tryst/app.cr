@@ -574,6 +574,15 @@ module Tryst
       @interp.native_window_handle(window.to_s)
     end
 
+    # A widget's on-screen content rectangle, formatted for macOS
+    # `screencapture -R`: "x,y,w,h". Chrome-free by construction - a
+    # window manager's title bar/shadow is a separate frame that winfo's
+    # rootx/rooty/width/height never include. See scripts/screenshot.sh.
+    def screenshot_rect(window = ".") : String
+      path = window.to_s
+      "#{winfo.rootx(path)},#{winfo.rooty(path)},#{winfo.width(path)},#{winfo.height(path)}"
+    end
+
     # Show the busy cursor on a window while the block runs, and return
     # whatever the block returned. Defaults to the root window (".").
     # window accepts a Widget or a path String.

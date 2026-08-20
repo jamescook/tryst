@@ -29,6 +29,17 @@ tk_test "winfo.rootx/rooty and x/y return Integers" do |app|
   app.winfo.y(btn)
 end
 
+tk_test "App#screenshot_rect formats winfo's own rootx/rooty/width/height as x,y,w,h" do |app|
+  app.show
+  frame = app.create_widget("ttk::frame", width: 120, height: 80)
+  app.command(:pack, frame)
+  app.update
+
+  expected = "#{app.winfo.rootx(frame)},#{app.winfo.rooty(frame)},120,80"
+  actual = app.screenshot_rect(frame)
+  raise "expected #{expected.inspect}, got #{actual.inspect}" unless actual == expected
+end
+
 tk_test "winfo.pointerx/pointery work without an explicit path" do |app|
   app.winfo.pointerx
   app.winfo.pointery
