@@ -9,7 +9,6 @@ require "tryst"
 require "../src/tryst-value-slider"
 
 app = Tryst::App.new(title: "ValueSlider")
-app.set_window_geometry("280x360")
 
 column = app.create_widget("ttk::frame", parent: nil)
 column.pack(fill: "both", expand: true, padx: 16, pady: 16)
@@ -34,6 +33,16 @@ label.call("Brightness (disabled)")
 brightness = Tryst::ValueSlider.new(app, min: 0.0, max: 100.0, value: 40.0, parent: column)
 brightness.disabled = true
 brightness.pack(fill: "x")
+
+# Sized to the packed content's own actual requested size, not a
+# guessed WxH - a fixed guess like the "280x360" this replaced silently
+# clips whatever's beyond the box the moment a slider's own default
+# height changes or a label wraps differently on another platform's
+# font metrics (confirmed directly: it was already 116px short of the
+# 476px three sliders + three labels actually need, cutting off most of
+# the third slider).
+app.update_idletasks
+app.set_window_geometry("#{app.winfo.reqwidth(".")}x#{app.winfo.reqheight(".")}")
 
 puts "Drag a thumb, click a track, or Tab to one and use arrow/Home/End/PageUp/PageDown."
 puts "The bubble should track the thumb, clamping at either end so it never clips past the widget."

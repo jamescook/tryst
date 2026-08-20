@@ -20,6 +20,10 @@ app.show
 app.mainloop
 ```
 
+![Three ValueSlider widgets: a Volume slider with tick marks at 65/100, a Playback speed slider with a custom "x" format at 1.0x, and a disabled Brightness slider at 40/100.](assets/screenshot.png)
+
+*From `examples/value_slider_demo.cr`.*
+
 It's just a widget: `#pack`/`#grid` place it, `#value`/`#value=` read
 and set it, `#on_change` fires on every user-driven change (drag,
 click-to-position, or keyboard) but never for a programmatic `#value=`
