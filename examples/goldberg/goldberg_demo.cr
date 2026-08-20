@@ -11,11 +11,6 @@
 # tcl_eval except the couple of genuine DSL gaps noted inline (a named
 # bold font, the initial canvas scroll position), matching the two
 # ruby-teek itself calls out.
-#
-# Drops ruby-teek's own demo_support.rb-driven automated recording/test
-# block (TeekDemo) - tooling for ruby-teek's own test/record pipeline
-# with no Crystal-side counterpart, same as every other example in this
-# port.
 require "../../src/tryst/ui"
 require "./goldberg_engine"
 

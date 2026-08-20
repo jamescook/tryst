@@ -1,16 +1,13 @@
 require "../tk_test_registry"
 
 # The <<DropFile>> virtual-event CONTRACT: bind it, and a Tcl list of
-# dropped paths arrives in the event's -data field. 1:1 port of
-# ruby-teek's test/test_drop.rb (6 cases) - none of those cases call
-# register_drop_target either, since Tk's `event generate` synthesizes
-# the virtual event directly, without needing a real OS-level drag or
-# the native platform layer that would eventually produce one (see
-# App#register_drop_target's own doc comment on why that's still a
-# documented no-op). This is deliberately the same split ruby-teek's
-# own test suite drew: the event contract has real, automatable
-# coverage; the ~700 lines of platform-native code that fire a REAL
-# drop event does not, in either codebase.
+# dropped paths arrives in the event's -data field. None of these cases
+# call register_drop_target - Tk's `event generate` synthesizes the
+# virtual event directly, without needing a real OS-level drag or the
+# native platform layer that would eventually produce one (see
+# App#register_drop_target's own doc comment). The event contract has
+# real, automatable coverage here; the native code that fires a REAL
+# drop event does not - see tryst-dnd.
 tk_test "<<DropFile>> fires the bound callback" do |app|
   fired = false
 

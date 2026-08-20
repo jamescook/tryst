@@ -42,13 +42,11 @@ session = Tryst::UI.app(title: "layout fixture") do |builder|
 end
 
 app = session.realize
-# Set BEFORE #show (confirmed directly - ruby's own equivalent test sets
-# this after run_async/show instead, but that ordering measurably fails
-# here): #show deiconifies the window, which maps it and runs a real Tk
-# geometry pass immediately - once that's happened with propagation
-# still on, the frame's natural (content-fit) size is locked in, and
-# disabling propagation afterward doesn't retroactively force a resize
-# on any later #update.
+# Set BEFORE #show: #show deiconifies the window, which maps it and
+# runs a real Tk geometry pass immediately - once that's happened with
+# propagation still on, the frame's natural (content-fit) size is
+# locked in, and disabling propagation afterward doesn't retroactively
+# force a resize on any later #update.
 app.tcl_eval("pack propagate #{handles[:spacer_col].path} 0")
 app.show
 app.update

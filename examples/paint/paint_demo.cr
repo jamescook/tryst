@@ -31,11 +31,6 @@
 #
 # Tool icons in assets/ from Lucide (https://lucide.dev) and Iconoir
 # (https://iconoir.com), both MIT licensed.
-#
-# Drops ruby-tryst's own demo_support.rb-driven auto-paint block
-# (run_auto_demo/TrystDemo) - tooling for ruby-tryst's own test/record
-# pipeline with no Crystal-side counterpart, same as every other example
-# in this repo.
 require "../../src/tryst/ui"
 require "./paint_state"
 

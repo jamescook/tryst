@@ -174,10 +174,10 @@ module Tryst
         # handler ABORTS THE PROCESS: no exception, no stack, just a
         # dead program during an unrelated call.
         #
-        # Pumping here sends it while the window is still alive. Measured
-        # on X11: without this, the second viewport dies on creation
-        # naming the FIRST one's window id; with the pump moved before
-        # the destroy above, it fails identically.
+        # Pumping here sends it while the window is still alive. On X11,
+        # skipping this makes the second viewport die on creation naming
+        # the FIRST one's window id - moving the pump before the destroy
+        # above instead of after fails identically.
         LibSDL.pump_events
 
         @app.command(:destroy, @path) if @app.winfo.exists?(@path)

@@ -141,18 +141,16 @@ module Tryst
       # once now rather than from the label's current text on every
       # redraw. Height: line height varies by platform/font size/
       # accessibility settings, and a guessed fixed constant that
-      # happens to fit on one machine is exactly how the bubble's own
-      # top rounded corners end up clipped by the canvas's own top edge
+      # happens to fit on one machine clips the bubble's own top rounded
+      # corners against the canvas's own top edge the moment it doesn't
       # (the buffer has no pixels above y=0, so a shape that starts
-      # above it just loses its top - confirmed directly, this is what
-      # a screenshot showed). Width: sizing the chrome to the CURRENT
-      # value's formatted text makes the whole bubble visibly wobble
-      # while dragging, the moment the string length itself changes
-      # (e.g. "1.0" vs "1.25") - also confirmed directly. Both are
-      # measured once, not every redraw: the label's font never changes
-      # after construction, and a track/bubble that resized on every
-      # value change would look broken in a different way than the bugs
-      # this is fixing.
+      # above it just loses its top). Width: sizing the chrome to the
+      # CURRENT value's formatted text makes the whole bubble visibly
+      # wobble while dragging, the moment the string length itself
+      # changes (e.g. "1.0" vs "1.25"). Both are measured once, not
+      # every redraw: the label's font never changes after construction,
+      # and a track/bubble that resized on every value change would
+      # look broken in a different way than the bugs this is fixing.
       #
       # bubble_width: overrides the auto width outright - needed if a
       # custom format: proc's widest output isn't at either end of the
@@ -212,8 +210,7 @@ module Tryst
       # it (see #bubble_label_size's own doc comment), so the label's
       # text/color for THIS frame has to be in place first. Getting this
       # order backwards silently draws the chrome sized for the
-      # PREVIOUS frame's text instead - confirmed directly, not a
-      # hypothetical.
+      # PREVIOUS frame's text instead.
       update_bubble_label_content(accent) if @bubble_progress > 0
       bubble_geo = bubble_geometry(thumb_x, track_center_y) if @bubble_progress > 0
 

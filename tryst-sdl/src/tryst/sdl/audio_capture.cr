@@ -38,16 +38,16 @@ module Tryst
       # and friends) rather than a field assignment. That distinction
       # matters and is not obvious: `pointer.value.field = x` and
       # `pointer.value.field += x` both silently write to a throwaway
-      # copy and never reach the pointee (confirmed directly - Crystal's
-      # op-assign desugars to evaluating `pointer.value` once into a
-      # local temporary and never writing it back). A plain method call
-      # on that same receiver does not have this problem - Crystal passes
-      # `self` for a struct method by the address the receiver
-      # dereferenced from, so `pointer.value.push(...)` mutates the real
-      # memory in place (confirmed directly, including under genuine
-      # concurrent multi-thread stress). Every mutator on this struct is
-      # therefore a method, never a bare field write, and that rule must
-      # not be broken by future edits here.
+      # copy and never reach the pointee - Crystal's op-assign desugars
+      # to evaluating `pointer.value` once into a local temporary and
+      # never writing it back. A plain method call on that same
+      # receiver does not have this problem - Crystal passes `self` for
+      # a struct method by the address the receiver dereferenced from,
+      # so `pointer.value.push(...)` mutates the real memory in place,
+      # including under genuine concurrent multi-thread stress. Every
+      # mutator on this struct is therefore a method, never a bare
+      # field write, and that rule must not be broken by future edits
+      # here.
       #
       # `produced` is written only by the audio thread, `consumed` only
       # by the drain fiber - the single-writer-per-counter property that
@@ -177,9 +177,9 @@ module Tryst
         # (the caller's) one. This caller's fiber lives in the same
         # execution context as anything touching a live Tryst::App, and
         # Crystal's default context does not pin a fiber to its OS thread
-        # across a File.open - confirmed directly (open() alone in a
-        # loop, no concurrency involved at all, measurably migrates the
-        # calling fiber's thread over enough iterations). Moving the
+        # across a File.open - open() alone in a loop, no concurrency
+        # involved at all, migrates the calling fiber's thread over
+        # enough iterations. Moving the
         # syscall off this fiber entirely, rather than detecting the
         # fallout afterwards, is what keeps a live Tryst::App's Aqua/Tk
         # calls safely pinned to the thread that created them.
@@ -270,9 +270,9 @@ module Tryst
       # nowhere else. @bytes_written is deliberately never captured into
       # a local here - Atomic(Int64) is a struct, so
       # `local = @bytes_written` copies it into independent storage the
-      # getter never sees again (confirmed directly: the copy kept
-      # accumulating correctly in isolation while #bytes_written read the
-      # original, untouched, forever 0). Every mutation below goes
+      # getter never sees again: the copy keeps accumulating correctly
+      # in isolation while #bytes_written reads the original, untouched,
+      # forever 0. Every mutation below goes
       # through `@bytes_written` itself, which stays the one true
       # instance variable because this block keeps `self`.
       private def start_drain_loop(capacity : Int32) : Nil

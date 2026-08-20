@@ -1,11 +1,9 @@
 require "../spec_helper"
 
 # Proves the raw LibThorVG binding actually links and round-trips real
-# pixels - the Crystal counterpart to the throwaway C spike the
-# ThorVG-vs-Blend2D bake-off itself was decided on. Deliberately
-# low-level (straight LibThorVG calls, not Surface - see surface_spec.cr
-# for that layer) so THIS layer is proven on its own before anything
-# built on top of it.
+# pixels. Deliberately low-level (straight LibThorVG calls, not Surface
+# - see surface_spec.cr for that layer) so THIS layer is proven on its
+# own before anything built on top of it.
 describe Tryst::Vector do
   it "draws a rounded rect with a linear gradient and stroke into a straight-alpha buffer" do
     w, h = 240_u32, 112_u32

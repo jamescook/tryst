@@ -158,8 +158,7 @@ class FakeApp
     # whose #to_a is an Array(NoReturn) - #map over it then has no
     # element type to infer a block return type from and fails to
     # compile. The real App#bind is unaffected (it maps the Tuple
-    # directly, never through #to_a), so this was FakeApp-only, and
-    # invisible until the first zero-sub bind existed to call it.
+    # directly, never through #to_a).
     sub_names = [] of String
     subs.each { |sub| sub_names << sub.to_s }
     @binds << BindCall.new(widget.to_s, event, sub_names, block, owner)

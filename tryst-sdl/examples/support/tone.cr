@@ -1,9 +1,8 @@
 # Writes the WAV files the examples play.
 #
-# Generated at runtime rather than committed: a binary asset in the repo
-# is a thing nobody can review, and the pre-commit hook refuses binaries
-# on purpose. It also means the examples work in a fresh clone with
-# nothing to download.
+# Generated at runtime rather than committed - a binary asset can't be
+# reviewed (the pre-commit hook refuses one) and this way the examples
+# work in a fresh clone with nothing to download.
 #
 # Plain 16-bit mono PCM at 44.1kHz, written by hand - it is about thirty
 # lines and saves the examples depending on anything.

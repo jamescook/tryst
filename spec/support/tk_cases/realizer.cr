@@ -2,13 +2,12 @@ require "../tk_test_registry"
 require "../widget_dsl_harness"
 require "../../../src/tryst/ui/realizer"
 
-# From ruby-tryst's tryst-ui/test/test_realizer.rb - Realizer's own specs
-# (spec/tryst/ui/realizer_spec.cr) cover the create/link logic headlessly
-# against FakeApp; this confirms the same walk against a REAL Tk
-# interpreter actually creates and maps real widgets, not just records
-# what would have happened. Built directly against Realizer.new(app,
-# document) (WidgetDslHarness standing in for Session, which doesn't
-# exist yet) rather than through Tryst::UI.app.
+# Realizer's own specs (spec/tryst/ui/realizer_spec.cr) cover the
+# create/link logic headlessly against FakeApp; this confirms the same
+# walk against a REAL Tk interpreter actually creates and maps real
+# widgets, not just records what would have happened. Built directly
+# against Realizer.new(app, document) (WidgetDslHarness standing in for
+# Session, which doesn't exist yet) rather than through Tryst::UI.app.
 tk_test "realizing a nested tree creates real, mapped widgets at hierarchical paths" do |app|
   session = WidgetDslHarness.new
   session.panel(:controls, &.button(:go, text: "Go"))

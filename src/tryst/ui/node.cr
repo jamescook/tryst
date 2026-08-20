@@ -86,10 +86,10 @@ module Tryst
       # @api private - only for Document#initialize's own root node (see
       # the comment there): Crystal can't let self escape into Node.new
       # via document: self before Document's own ivars are all assigned
-      # (confirmed directly: doing so makes @root itself fail to
-      # type-check, a sharper variant of the usual "self escaped early"
-      # nilability quirk - see project notes), so the root Node is built
-      # with document: nil first and patched here immediately after.
+      # (doing so makes @root itself fail to type-check, a sharper
+      # variant of the usual "self escaped early" nilability quirk), so
+      # the root Node is built with document: nil first and patched
+      # here immediately after.
       setter document : Document?
 
       property key : String?

@@ -1,13 +1,8 @@
 # The full core aggregator, not just ../app directly - core's own
-# CommandInterceptors (menu_interceptor.cr/tag_bind_interceptor.cr/
-# canvas_bind_interceptor.cr) register themselves as a require-time side
-# effect, but nothing under src/tryst/ui/* requires them (session.cr and
-# friends only ever need the bare App type, via ../app). Confirmed
-# directly: without this, a tryst-ui canvas item's on_click/on_right_click
-# callback silently never got released on #delete - CanvasBindInterceptor
-# was simply never loaded, so App#command never found it to dispatch to.
-# Mirrors ruby-tryst's own tryst-ui/lib/tryst/ui.rb, which does `require
-# "tryst"` first for the exact same reason.
+# CommandInterceptors register themselves as a require-time side effect,
+# and nothing under src/tryst/ui/* requires them on its own. Skipping
+# this leaves CanvasBindInterceptor unloaded, so a canvas item's
+# on_click/on_right_click callback never gets released on #delete.
 require "../tryst"
 require "./ui/session"
 

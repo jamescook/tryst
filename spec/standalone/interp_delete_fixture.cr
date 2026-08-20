@@ -41,9 +41,8 @@ rescue Tryst::TclError
 end
 
 # A Photo's finalizer proc must not raise even when it runs against an
-# already-deleted interpreter (Photo.finalizer_for's own doc comment) -
-# its rescue TclError only became meaningful once #delete stopped
-# segfaulting and started raising a catchable error instead.
+# already-deleted interpreter - see Photo.finalizer_for's own doc
+# comment for why the rescue TclError there matters.
 Tryst::Photo.finalizer_for("tryst_test_nonexistent_photo", app).call
 app.interp.pump_once
 

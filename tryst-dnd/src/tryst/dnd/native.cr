@@ -19,10 +19,9 @@ require "tryst"
 
 lib LibTrystDndNative
   # native/tkdrop.h's own one entry point - identical across all three
-  # platform source files (tkdrop_x11.c/tkdrop_macos.m/tkdrop_win.c),
-  # confirmed directly. Returns TCL_OK (0) or TCL_ERROR (1), the same
-  # convention every other raw Tcl C API call in this project's own
-  # core already follows.
+  # platform source files (tkdrop_x11.c/tkdrop_macos.m/tkdrop_win.c).
+  # Returns TCL_OK (0) or TCL_ERROR (1), the same convention every
+  # other raw Tcl C API call in this project's own core already follows.
   fun register_drop_target = teek_register_drop_target(interp : Void*, tkwin : LibTk::Window,
                                                        widget_path : LibC::Char*) : LibC::Int
 end
@@ -43,8 +42,7 @@ lib LibTk
   # file requires "tryst" first), and `type` (unlike `alias`) makes a
   # genuinely distinct pointer type Crystal enforces, so these have to
   # spell it the same way core's own Tk_MainWindow/Tk_GetFont do rather
-  # than a bare Void* - confirmed directly, a Void*-typed tkwin here
-  # doesn't type-check against what Tk_MainWindow hands back.
+  # than a bare Void*.
   fun name_to_window = Tk_NameToWindow(interp : Void*, path_name : LibC::Char*, tkwin : Window) : Window
   fun make_window_exist = Tk_MakeWindowExist(tkwin : Window)
 end

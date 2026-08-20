@@ -21,10 +21,9 @@ tk_test "Theme resolves real, different colors under clam - not just the default
   fg = theme.foreground
 
   # clam's own stock colors (#dcdad5 background, black foreground) -
-  # confirmed directly against a live interpreter before writing this,
-  # not assumed. The point isn't the exact numbers so much as proving
-  # the whole style->color->winfo rgb pipeline runs correctly on a
-  # THEME THAT ANSWERS IN LITERAL HEX rather than aqua's own symbolic
+  # the point isn't the exact numbers so much as proving the whole
+  # style->color->winfo rgb pipeline runs correctly on a THEME THAT
+  # ANSWERS IN LITERAL HEX rather than aqua's own symbolic
   # system color names - the two real shapes `ttk::style lookup` hands
   # back, both exercised by this suite now.
   raise "expected clam's real background, got #{bg.inspect}" unless bg == {0xdc_u8, 0xda_u8, 0xd5_u8}

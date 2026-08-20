@@ -54,10 +54,9 @@ describe Tryst::UI::Handle do
   end
 
   # Doubles as the compile guard on #options: Crystal only typechecks a
-  # method body once something calls it, so this call is what keeps the
-  # option-dump parser behind it compiling under plain `crystal spec`.
-  # The real-Tk coverage in tk_cases.cr builds as a separate binary and
-  # doesn't serve that purpose.
+  # method body once something calls it, and only tk_cases.cr's own
+  # separate binary exercises real Tk, so plain `crystal spec` needs
+  # this call to compile the option-dump parser at all.
   it "options raises before realize" do
     node = Tryst::UI::Node.new(type: :button, name: :save)
     handle = Tryst::UI::Handle.new(node)
@@ -374,10 +373,10 @@ describe Tryst::UI::Handle do
     document.find(:box).should be_nil
   end
 
-  # destroy! used to release the node's NAME (#unregister) but never its
-  # claimed Tk path segment, so a subtree destroyed and rebuilt under the
-  # same name kept drifting to a new disambiguated path (.box, .box#2,
-  # .box#3, ...) instead of reclaiming .box every time.
+  # Without releasing the claimed path segment too (not just the name),
+  # a subtree destroyed and rebuilt under the same name drifts to a new
+  # disambiguated path (.box, .box#2, .box#3, ...) instead of reclaiming
+  # .box every time.
   it "destroy!(defer: false) releases the node's claimed path segment" do
     app = FakeApp.new
     document = Tryst::UI::Document.new

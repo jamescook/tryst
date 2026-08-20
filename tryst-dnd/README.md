@@ -19,11 +19,10 @@ app.bind(".", "<<DropFile>>", :data) do |values, _signal|
 end
 ```
 
-Verified for real, not just compiled: macOS (both Tcl/Tk 8.6 and 9.x)
-confirmed by actually dragging a file onto the demo window; Linux/X11
-confirmed under Docker/Xvfb with a real synthetic XDND-registration
-spec that proves the native call succeeds and the resulting
-`<<DropFile>>` event still fires correctly.
+Verified for real, not just compiled: a real drag onto the demo window
+on macOS (both Tcl/Tk 8.6 and 9.x), and a spec under Docker/Xvfb on
+Linux/X11 that proves the native call succeeds and `<<DropFile>>`
+still fires.
 
 ## Platform status
 

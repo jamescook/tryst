@@ -60,8 +60,7 @@ end
 
 # add_debug_console is only available on macOS/Windows (Tk has no console
 # window on Linux) - every case below tolerates either outcome rather
-# than asserting the console is actually available, same as ruby-tryst's
-# own test_debug_console.rb.
+# than asserting the console is actually available.
 tk_test "App#add_debug_console returns true or false" do |app|
   result = app.add_debug_console
   raise "expected a Bool, got #{result.inspect}" unless result.is_a?(Bool)

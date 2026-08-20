@@ -21,10 +21,9 @@ describe Tryst::CommandInterceptors do
       Tryst::CommandInterceptors.for_type("ctk_spec_never_registered").should be_empty
     end
 
-    # A lookup is a read. It used to insert an empty Array under any type
-    # it missed, so App#command grew the registry on every call for a
-    # type nobody intercepts - and whatever it handed back was that
-    # stored Array, not a throwaway.
+    # A lookup is a read - it must not insert an empty Array under a
+    # missed type, or App#command would grow the registry on every call
+    # for a type nobody intercepts.
     it "a lookup that misses doesn't stop a later registration taking" do
       Tryst::CommandInterceptors.for_type("ctk_spec_miss_then_register").should be_empty
       Tryst::CommandInterceptors.register("ctk_spec_miss_then_register", "late") { |_app, _path, _args, _kwargs| nil }

@@ -10,11 +10,6 @@
 # specifically to exercise options containing spaces (try picking/typing
 # a filename like "my file.png") and to show multi-pattern filetypes
 # work.
-#
-# Drops ruby-tryst's own demo_support.rb-driven automated smoke-test block
-# at the end (TrystDemo.active?/on_visible) - tooling for ruby-tryst's own
-# test/record pipeline with no Crystal-side counterpart, same as every
-# other example in this repo.
 require "../src/tryst"
 
 class DialogsDemo

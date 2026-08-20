@@ -66,7 +66,7 @@ describe Tryst::Vector::Surface do
     # premultiplied space even though ARGB8888S's OUTPUT is straight
     # alpha, so a non-255 alpha pixel round-trips through one
     # premultiply/unpremultiply pass and can land a channel or two off
-    # by a rounding unit (confirmed directly - 200 came back 199 here).
+    # by a rounding unit (e.g. 200 can come back 199).
     (pixel[:r] - 200).abs.should be <= 2
     (pixel[:g] - 40).abs.should be <= 2
     (pixel[:b] - 40).abs.should be <= 2

@@ -115,11 +115,11 @@ end
 # reaches Tk's own bgerror, not a raised Crystal exception - a spec that
 # only checks Crystal-side assertions after app.destroy can pass clean
 # while a real, ordinary destroy is quietly raising "unknown callback
-# id" behind its back (this exact bug: the grab-release safety net's
-# own bindtag used to be appended AFTER "all", so App's global
-# <Destroy> cleanup swept its callback id before the tag's own binding
-# got a chance to run it). See "after_idle releases its callback even
-# when the block raises" above for the same bgerror-redirect pattern.
+# id" behind its back (the grab-release safety net's own bindtag has to
+# be appended BEFORE "all", or App's global <Destroy> cleanup sweeps its
+# callback id before the tag's own binding gets a chance to run it).
+# See "after_idle releases its callback even when the block raises"
+# above for the same bgerror-redirect pattern.
 tk_test "Window#modal's grab-release safety net does not raise an unknown-callback-id error on ordinary destroy" do |app|
   app.tcl_eval("toplevel .t")
   app.update
@@ -146,11 +146,11 @@ tk_test "Window#modal's grab-release safety net does not raise an unknown-callba
   end
 end
 
-# Window#modal's own <Destroy> safety net used to go through
-# Interp#bind directly, bypassing CallbackRegistry - unreachable for
-# cleanup, so re-invoking #modal on the same still-live window (the
-# common case: Handle#show calling it again on every show) leaked one
-# more callback id per call, forever.
+# Window#modal's own <Destroy> safety net has to go through App#bind,
+# not Interp#bind directly - the latter bypasses CallbackRegistry
+# entirely, so re-invoking #modal on the same still-live window (the
+# common case: Handle#show calling it again on every show) would leak
+# one more unreachable callback id per call, forever.
 tk_test "Window#modal's <Destroy> safety net doesn't leak a callback id across repeated opens" do |app|
   app.tcl_eval("toplevel .t")
   app.update
@@ -171,9 +171,9 @@ tk_test "Window#modal's <Destroy> safety net doesn't leak a callback id across r
   app.destroy(".t")
 end
 
-# The leak above was also invisible to the app's own leak detector -
-# routing through Interp#bind rather than App#bind meant
-# CallbackRegistry never heard about this id at all.
+# Distinct from the count check above: routing through Interp#bind
+# rather than App#bind means CallbackRegistry never hears about this id
+# at all, so the app's own leak detector can't see it either.
 tk_test "Window#modal's <Destroy> safety net is visible in the callback registry" do |app|
   app.tcl_eval("toplevel .t")
   app.update
@@ -191,10 +191,10 @@ tk_test "Window#modal's <Destroy> safety net is visible in the callback registry
 end
 
 # Tcl's bind replaces rather than appends per tag+event - binding
-# <Destroy> straight on .t's own path (as Window#modal used to) would
-# silently clobber whichever of the two registered second: the user's
-# handler set before #modal, or the grab-release safety net #modal sets
-# up. Both have to fire regardless of order.
+# <Destroy> straight on .t's own path would silently clobber whichever
+# of the two registered second: the user's handler set before #modal,
+# or the grab-release safety net #modal sets up. Both have to fire
+# regardless of order, which is why #modal uses a separate bindtag.
 tk_test "Window#modal's grab-release safety net still fires alongside a user's own prior <Destroy> binding" do |app|
   app.tcl_eval("toplevel .t")
   app.update

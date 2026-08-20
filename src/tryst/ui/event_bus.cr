@@ -50,8 +50,8 @@ module Tryst
         # param's actual argument types are inferred per call site (e.g.
         # all-Node args here become Array(Node), not Array(T)), and
         # Array isn't covariant in Crystal even when every element type
-        # is itself a member of T (confirmed directly: passing that
-        # narrower array to a Proc(Array(T), Nil) fails to compile).
+        # is itself a member of T: passing that narrower array to a
+        # Proc(Array(T), Nil) fails to compile.
         values = Array(T).new
         args.each { |arg| values << arg }
         dispatch(@listeners[event]?, values)

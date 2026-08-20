@@ -67,8 +67,8 @@ own dependency on tryst) resolves using the literal relative-path string
 tryst-vector itself declared, and a shard one level deeper needs a
 different literal string to reach the same real tryst, which `shards`
 refuses as "ambiguous sources" even though both resolve to one
-directory. Confirmed directly by trying the nested layout first. Same
-depth as tryst-vector, same literal `../`, is what actually resolves —
+directory. Same depth as tryst-vector, same literal `../`, is what
+actually resolves —
 see `shard.yml`'s own comment for the full story.
 
 A separate shard rather than part of tryst-vector itself for the same

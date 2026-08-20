@@ -8,12 +8,11 @@ require "../src/tryst"
 # On macOS, Tk's Aqua backend sits on Cocoa/AppKit, which requires all UI
 # calls to happen on the process's actual main thread - not just "a"
 # dedicated thread. Fiber::ExecutionContext::Isolated always spawns a NEW
-# thread, so running Tk_Init/mainloop inside an Isolated context (as tried
-# first) crashes on macOS: it's simply not the main thread. Flipped the
-# architecture instead - Tk stays on the main thread (same as every
-# earlier demo in this project), and the BACKGROUND work gets its own
-# Isolated context. Same property being demonstrated (Tk's blocking wait
-# doesn't stall the rest of the program), opposite placement.
+# thread, so Tk_Init/mainloop must stay on the main thread (same as every
+# earlier demo in this project); the BACKGROUND work gets its own
+# Isolated context instead. Same property being demonstrated (Tk's
+# blocking wait doesn't stall the rest of the program), opposite
+# placement.
 interp = Tryst::Interp.new
 interp.tcl_invoke("wm", "title", ".", "crystal-tryst concurrency spike")
 interp.bring_to_front

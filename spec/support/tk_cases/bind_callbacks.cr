@@ -73,12 +73,12 @@ tk_test "App#bind with a raw %-code forwards the substitution" do |app|
   raise "expected .e_bind3, got #{got_widget.inspect}" unless got_widget == ".e_bind3"
 end
 
-# App#bind used to splice a raw %-code sub straight into the bound script
-# text. Tk re-parses that whole script as Tcl (after its own %-substitution)
-# every time the event fires, so a sub containing a brace and a semicolon
-# could close the callback's {} script early and run whatever followed as
-# a separate Tcl command - on every firing, not just at bind time. Now
-# rejected up front: a raw sub has to look like an actual Tk %-code.
+# A raw %-code sub gets spliced straight into the bound script text, and
+# Tk re-parses that whole script as Tcl (after its own %-substitution)
+# every time the event fires - a sub containing a brace and a semicolon
+# could close the callback's {} script early and run whatever followed
+# as a separate Tcl command, on every firing. So a raw sub is rejected
+# up front unless it actually looks like a real Tk %-code.
 tk_test "App#bind rejects a raw %-code sub that isn't a real %-code" do |app|
   app.tcl_eval("set ::tk_case_bind_injection_probe none")
   app.show

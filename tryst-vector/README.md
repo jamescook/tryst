@@ -4,17 +4,14 @@ CPU vector rasterization ([ThorVG](https://www.thorvg.org)) for
 [tryst](../), Crystal's Tcl/Tk binding — the appearance tier for
 owner-drawn widgets: antialiased curves, gradients and shadows, blitted
 into a Tk Photo. Tk's canvas primitives are never antialiased on X11
-(confirmed directly: Tk 9.0 renders pixel-identically jagged to 8.6
-there — this is an X11-backend limitation, not something either Tk
-version's canvas fixes; Aqua/Quartz has always antialiased canvas shapes
-on macOS, in both versions). Canvas shapes also have no native gradient
-fill in any Tk version. A GPU surface is the wrong shape at widget scale
-too (device setup + readback loses to a CPU rasterizer's latency for a
-small buffer). ThorVG won the backend bake-off against Blend2D on real
-packaging (a bottled Homebrew formula and MSYS2/Debian forky packages,
-versus none anywhere for Blend2D) and on emitting straight (not
-premultiplied) alpha directly, matching the format Tk's Photo already
-understands.
+in either 8.6 or 9.0 (an X11-backend limitation; Aqua/Quartz has always
+antialiased canvas shapes on macOS, in both versions), and canvas shapes
+have no native gradient fill in any Tk version. A GPU surface is the
+wrong shape at widget scale too (device setup + readback loses to a CPU
+rasterizer's latency for a small buffer). ThorVG has real packaging (a
+bottled Homebrew formula and MSYS2/Debian forky packages) and emits
+straight (not premultiplied) alpha directly, matching the format Tk's
+Photo already understands.
 
 A separate shard rather than part of tryst itself, so that tryst gains no
 ThorVG dependency: nothing here is reachable from a plain
@@ -59,8 +56,7 @@ vertices — a tooltip's pointer arrow, say), each returning a `Shape` you
 call `#fill`/`#stroke` on (a flat color or a `Tryst::Vector::Gradient`).
 `#blit_to(photo)` writes the whole rendered buffer into a Photo you
 already have with no pixel conversion (ThorVG's straight-alpha output is
-byte-for-byte `Tryst::PixelFormat::ARGB`, confirmed directly against a
-live Photo, not assumed); `#to_slice` hands back those same bytes
+byte-for-byte `Tryst::PixelFormat::ARGB`); `#to_slice` hands back those same bytes
 directly for a caller that manages its own Photo already —
 `OwnerDrawnWidget#blit`, most naturally, which needs exactly this to
 feed its own lazily-created Photo rather than one the caller sets up

@@ -34,14 +34,10 @@ module Tryst
     ptr = LibTcl.create_interp
     raise TclError.new("Tcl_CreateInterp returned NULL (utility interp)") if ptr.null?
 
-    # Tcl_Init was skipped here for a long time since a bare interp
-    # doesn't need init.tcl's library procs for pure Tcl_Obj value
-    # conversion - but ruby-tryst calls it (ext/tryst/tcltkbridge.c,
-    # Init_tcltklib) on this exact kind of bare utility interp too, not
-    # only its Tk-backed ones, and skipping it here is what a Tcl 9
-    # allocator segfault in Tcl_NewStringObj traced back to (a
-    # process/interp-scoped step Tcl 9's threading-aware allocator
-    # depends on that 8.6 tolerated going without).
+    # Required even for a bare, Tk-less interp: Tcl 9's threading-aware
+    # allocator depends on a process/interp-scoped init step Tcl_Init
+    # performs, and segfaults in Tcl_NewStringObj without it. 8.6
+    # tolerates skipping this; 9 does not.
     code = LibTcl.init(ptr)
     raise TclError.new("Tcl_Init failed (utility interp)") unless code == Interp::TCL_OK
 

@@ -79,8 +79,7 @@ raise "case B: on_action fired on the press alone, got #{action_hits}" unless ac
 # than as the <Button1-Leave> pattern: event generate does not infer a
 # modifier state from the pattern's own modifier for a crossing event, so
 # generating <Button1-Leave> leaves the state field empty, matches nothing,
-# and the widget stays pressed. Verified directly - the binding is there
-# either way, only the modifier state decides whether it fires.
+# and the widget stays pressed.
 app.tcl_eval("event generate #{path} <Leave> -state 256")
 app.tcl_eval("event generate #{path} <ButtonRelease-1>")
 settle.call

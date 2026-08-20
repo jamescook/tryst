@@ -30,9 +30,8 @@ module Tryst
     # ### Pixel format
     #
     # ThorVG's ARGB8888S colorspace (straight, non-premultiplied alpha)
-    # is byte-for-byte Tryst::PixelFormat::ARGB - confirmed directly
-    # against a live Tk Photo, not assumed from either side's doc
-    # comments. #blit_to hands the buffer to Tk with no conversion.
+    # is byte-for-byte Tryst::PixelFormat::ARGB. #blit_to hands the
+    # buffer to Tk with no conversion.
     #
     # ### Lifetime
     #

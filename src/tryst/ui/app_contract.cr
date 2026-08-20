@@ -11,13 +11,10 @@ module Tryst
     # stand in for a real Tryst::App with zero Tk interpreter involved.
     # Included by both the real Tryst::App (reopened below) and FakeApp.
     #
-    # This doubles as the compile-time equivalent of ruby-tryst's
-    # test_fake_app_contract.rb (which uses Method#parameters reflection
-    # at runtime; Crystal has no runtime signature reflection, but does
-    # statically enforce that every class including a module implements
-    # each abstract def with a compatible parameter/splat/keyword shape -
-    # confirmed directly: a missing *subs, a renamed required keyword
-    # arg, or a dropped method all fail to compile). If Tryst::App's real
+    # Crystal statically enforces that every class including a module
+    # implements each abstract def with a compatible parameter/splat/
+    # keyword shape - a missing *subs, a renamed required keyword arg,
+    # or a dropped method all fail to compile. If Tryst::App's real
     # methods ever drift from what FakeApp implements, THIS FILE stops
     # compiling - on every build, not just when a dedicated test file
     # happens to run.

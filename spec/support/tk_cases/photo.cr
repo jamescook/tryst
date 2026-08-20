@@ -52,11 +52,11 @@ ensure
   photo.try(&.delete)
 end
 
-# Photo#delete/#exists? used to build "image delete #{@name}"/"image type
-# #{@name}" via tcl_eval interpolation - a name containing a brace or
-# semicolon could close the command early and run whatever followed as
-# its own Tcl command. Now goes through tcl_invoke, so @name is always
-# one argv element regardless of its content.
+# Photo#delete/#exists? go through tcl_invoke rather than string-
+# interpolating @name into a tcl_eval script - a name containing a
+# brace or semicolon could otherwise close the command early and run
+# whatever followed as its own Tcl command. tcl_invoke keeps @name one
+# argv element regardless of its content.
 tk_test "Photo#delete and #exists? work for a name containing } and ;" do |app|
   photo = Tryst::Photo.new(app, name: "weird}photo;name", width: 2, height: 2)
 
@@ -474,10 +474,10 @@ tk_test "Photo.finalizer_for's proc deletes the image it names" do |app|
   raise "expected the finalizer proc to have deleted the image" if names.includes?("tryst_test_finalizer_target")
 end
 
-# .delete_task (what .finalizer_for wraps) used to build its `catch`
-# script via tcl_eval interpolation - "catch {image delete #{name}}"
-# doesn't round-trip a name containing a brace. Now builds the inner
-# script with Tryst.make_list instead, so any name is safe.
+# .delete_task (what .finalizer_for wraps) builds its `catch` script
+# with Tryst.make_list rather than tcl_eval interpolation - a plain
+# "catch {image delete #{name}}" string doesn't round-trip a name
+# containing a brace.
 tk_test "Photo.finalizer_for's proc deletes the image even when its name contains } and ;" do |app|
   hazard_name = "weird}photo;target"
   app.command(:image, :create, :photo, hazard_name, width: 5, height: 5)

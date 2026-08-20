@@ -6,9 +6,8 @@ require "../tk_test_registry"
 # every name/version/path below goes through #tcl_invoke (one Tcl_Obj
 # per argument, Tcl_EvalObjv), never string-interpolated into a script.
 #
-# Writes a minimal real Tcl package to a fresh temp directory - pkgIndex.tcl
-# plus one proc - the same fixture-package approach ruby-teek's own
-# test/test_package.rb uses. A unique package name per call matters more
+# Writes a minimal real Tcl package to a fresh temp directory -
+# pkgIndex.tcl plus one proc. A unique package name per call matters more
 # here than in most fixture helpers: the worker process (and its one Tcl
 # interpreter) is shared across every tk_test in the suite, and once Tcl
 # `package require`s a given name it stays loaded/cached for that
@@ -84,12 +83,10 @@ end
 # opt0.4 ships bundled with Tcl itself (a pure-Tcl script, part of Tcl's
 # own standard distribution - no compiled extension, nothing this suite
 # installs or vendors) - a real, unmodified package already on
-# ::auto_path, not a fixture written above. Used to be http1.0 here, but
-# that package is gone under Tcl 9 (verified directly against both
-# Homebrew's tcl-tk 9.0.3 and Debian's tcl9.0.1 packaging - upstream Tcl 9
-# dropped the legacy pre-namespace http package entirely, not just this
-# port's Linux lane). opt0.4 is still present and pkgIndex.tcl-based on
-# both 8.6 and 9.x, but its exact patch version drifts per platform
+# ::auto_path, not a fixture written above. Not http1.0: upstream Tcl 9
+# dropped the legacy pre-namespace http package entirely. opt0.4 is
+# still present and pkgIndex.tcl-based on both 8.6 and 9.x, but its
+# exact patch version drifts per platform
 # (0.4.9 on 8.6, 0.4.9-0.4.10 across 9.x builds seen so far) - unlike
 # http1.0's frozen "1.0", so this only pins the major.minor requested,
 # not the exact returned/listed version string.

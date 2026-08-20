@@ -64,10 +64,9 @@ class Minesweeper
   @snd_flag : Tryst::SDL::Sound
   @snd_explosion : Tryst::SDL::Sound
 
-  # Note the no-block form of Tryst::UI.app - see the same comment in the
-  # pre-split version of this file for why (a block can't populate a
-  # class's own fields; Crystal never counts an ivar assigned inside one
-  # as initialized).
+  # No-block form of Tryst::UI.app required: a block can't populate a
+  # class's own fields, since Crystal never counts an ivar assigned
+  # inside one as initialized.
   def initialize(level : String = "beginner")
     seed = ENV["SEED"]?.try(&.to_u64?)
     @board = Yam::Board.new(level, rng: seed ? Random.new(seed) : Random.new)

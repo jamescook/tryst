@@ -6,7 +6,7 @@
 #
 # LINKING. pkg-config knows the library as `thorvg-1` (matching its .pc
 # filename and the -lthorvg-1 it emits) on every platform that ships a
-# .pc at all - confirmed against Homebrew's bottle. Debian's forky/sid
+# .pc at all. Debian's forky/sid
 # libthorvg-dev package (the only apt lane with ThorVG at all right now -
 # see the Dockerfile's own comment) ships NO .pc file, so the plain -l
 # fallback below is load-bearing there, not just a "no pkg-config on the
