@@ -120,7 +120,7 @@ class ThreadingDemoUI
 
         status_row.row(gap: 8) do |info|
           info.label(text: "#{@files.size} files", width: 12, anchor: :e)
-          info.divider(orientation: :vertical)
+          info.divider(orient: :vertical)
           info.label(text: "Crystal #{Crystal::VERSION}", anchor: :e)
         end
       end
