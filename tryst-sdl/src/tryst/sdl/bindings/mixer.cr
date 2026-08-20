@@ -3,7 +3,14 @@ require "./audio"
 require "./properties"
 
 # SDL3_mixer. Note the prefix is the shouty MIX_ throughout, not Mix_.
-# Linked by core.cr's @[Link], which names all four packages.
+# Its own @[Link] rather than riding on core.cr's - pkg-config --libs
+# sdl3-mixer also emits -lSDL3, so a program that also uses core.cr's
+# LibSDL gets that flag twice; the linker on this machine (ld-1230.1)
+# silently dedupes it (confirmed directly - a warning, not an error, and
+# only when both blocks are actually referenced), which is the tradeoff
+# that buys per-library tree-shaking: a build touching only Mixer no
+# longer links SDL3_image or SDL3_ttf at all.
+@[Link(ldflags: "`command -v pkg-config >/dev/null && pkg-config --exists sdl3-mixer 2>/dev/null && pkg-config --libs sdl3-mixer || echo -lSDL3_mixer`")]
 lib LibSDLMixer
   fun version = MIX_Version : LibC::Int
 

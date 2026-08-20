@@ -1,34 +1,30 @@
-# SDL3 core bindings, and the one place the whole shard's link flags are
-# declared. `lib LibSDL` is reopened by the other files in this directory;
-# this is the block that carries the @[Link].
+# SDL3 core bindings. `lib LibSDL` is reopened by the other files in this
+# directory; this is the block that carries the base library's own
+# @[Link] - mixer.cr/image.cr/ttf.cr each carry their own for their
+# satellite library, so a program that never touches one of those never
+# links it (Crystal only emits a lib block's ldflags when something from
+# that block is actually referenced by reachable code).
 #
-# LINKING. pkg-config knows SDL3 by lowercase, hyphenated names: sdl3,
-# sdl3-mixer, sdl3-image, sdl3-ttf. The CMake-style spelling (SDL3_mixer,
-# SDL3_image, ...) is the one that comes to mind first, and there is no
-# .pc file under those names - so `pkg-config --libs SDL3_mixer` fails,
-# contributes nothing to the link line, and the build dies much later in
-# a wall of undefined _MIX_* references instead of saying "no such
-# package". Worth knowing before losing an afternoon to it.
-#
-# One @[Link] naming all four packages in a single pkg-config call, not
-# one annotation per library. Every satellite .pc requires sdl3, so
-# asking separately gets -lSDL3 and its -Wl,-rpath back four times over
-# and the macOS linker warns about each duplicate on every build; one
-# invocation lets pkg-config collapse them.
+# LINKING. pkg-config knows SDL3 by the lowercase, hyphenated name sdl3 -
+# the CMake-style spelling SDL3 is the one that comes to mind first, and
+# there is no .pc file under that name, so `pkg-config --libs SDL3` fails
+# and the build dies much later in a wall of undefined _SDL_* references
+# instead of saying "no such package". Worth knowing before losing an
+# afternoon to it.
 #
 # Nothing platform-specific in these flags, deliberately. tryst's own
 # interp.cr has to probe `brew --prefix tcl-tk@8` because that formula is
 # KEG-ONLY - Homebrew keeps it out of the default prefix, so its .pc file
-# is off pkg-config's search path unless you go looking. None of the four
-# SDL3 formulae are keg-only: they install into the normal prefix and
-# pkg-config finds them unaided, exactly as apt's libsdl3-*-dev do. Every
-# supported platform answers through the same pkg-config branch, so a
-# macOS-only fallback would be a branch no build ever takes.
+# is off pkg-config's search path unless you go looking. The SDL3 formula
+# is not keg-only: it installs into the normal prefix and pkg-config
+# finds it unaided, exactly as apt's libsdl3-dev does. Every supported
+# platform answers through the same pkg-config branch, so a macOS-only
+# fallback would be a branch no build ever takes.
 #
 # The bare -l fallback is for a box with no pkg-config at all, where the
-# libraries are expected in the linker's default search path.
+# library is expected in the linker's default search path.
 
-@[Link(ldflags: "`command -v pkg-config >/dev/null && pkg-config --exists sdl3 sdl3-mixer sdl3-image sdl3-ttf 2>/dev/null && pkg-config --libs sdl3 sdl3-mixer sdl3-image sdl3-ttf || echo -lSDL3 -lSDL3_mixer -lSDL3_image -lSDL3_ttf`")]
+@[Link(ldflags: "`command -v pkg-config >/dev/null && pkg-config --exists sdl3 2>/dev/null && pkg-config --libs sdl3 || echo -lSDL3`")]
 lib LibSDL
   # SDL_InitFlags. The subsystem bits themselves are Tryst::SDL::Subsystem.
   alias InitFlags = LibC::UInt

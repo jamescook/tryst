@@ -1,7 +1,9 @@
 require "./core"
 require "./render"
 
-# SDL3_ttf. Linked by core.cr's @[Link].
+# SDL3_ttf. Its own @[Link] (see mixer.cr's comment for why) rather than
+# riding on core.cr's.
+@[Link(ldflags: "`command -v pkg-config >/dev/null && pkg-config --exists sdl3-ttf 2>/dev/null && pkg-config --libs sdl3-ttf || echo -lSDL3_ttf`")]
 lib LibSDLTtf
   alias Font = Void
 
