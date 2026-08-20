@@ -203,61 +203,20 @@ needs it.
 
 ### File/DNS/TLS calls need `App#off_thread`, not a plain `spawn` fiber
 
-**The rule:** on macOS, never call `File.open` (or anything that opens a
-file internally, like `File.read(path)`), resolve DNS, or make a TLS/
-OpenSSL call directly from a fiber that shares Tk's OS thread — the main
-fiber, or any plain `spawn`ed fiber (both do, by default). Route it
-through `App#off_thread` instead:
+On macOS, route `File.open` (and anything that opens a file internally,
+like `File.read(path)`), DNS resolution, and TLS/OpenSSL calls through
+`App#off_thread` — never call them directly from a fiber that shares
+Tk's own OS thread (the main fiber, or any plain `spawn`ed fiber both
+do, by default). Skipping this doesn't fail loudly: it intermittently
+corrupts Tcl/Tk's internal state, with no warning most of the time.
 
 ```crystal
 content = app.off_thread { File.read(path) }
 ```
 
-**What happens if you don't:** nothing, most of the time — that's what
-makes this dangerous. The app runs fine on most calls, then
-intermittently corrupts or crashes in a way that's hard to reproduce and
-gives no indication of the real cause: a widget's window count reading
-wrong, a crash deep inside Tk's own internals, or the process just
-exiting with no error message at all. It won't happen every run, and it
-gets more likely the more such calls a piece of code makes (looping over
-many files is the worst case).
-
-**Why this happens, specifically.** Crystal's scheduler can migrate a
-fiber's continuation onto a different OS thread while that fiber is
-blocked inside one of these calls — the only operations Crystal routes
-through its internal `Fiber.syscall` wrapper (ordinary reads/writes on an
-already-open file descriptor are not affected; only the point where a
-file gets opened, or DNS/TLS runs, is). This exists as a general-purpose
-scheduler optimization, so a slow call doesn't stall every other fiber
-sharing that thread — but Tcl/Tk requires every call into a given
-interpreter to come from the exact OS thread that created it, forever,
-with no locking to protect against anything else. If that migration
-lands the continuation on a different thread than the one Tk was created
-on, and that continuation goes on to touch Tk (directly, or through
-something like a widget `configure` call), Tcl's internal state gets
-corrupted — undefined behavior, not a clean error.
-
-This is not a "the call was slow" threshold — it's a race against a
-periodic scheduler check, so it can fire even on a fast, local file open.
-It's macOS-specific: Linux has its own integration
-(`Tryst::Notifier`) that sidesteps the need for this pattern entirely.
-
-**Two safety nets exist, and neither is a substitute for following the
-rule above:**
-
-- A debug-time warning fires the moment a File/DNS/TLS call is made
-  directly from Tk's own thread, naming the exact call site with a
-  backtrace — before the migration race even has a chance to fire. It
-  only warns; it never changes what the call does. Compile with
-  `-Dtryst_no_syscall_guard` to remove it entirely once every such call
-  site in an app has been audited and routed through `off_thread`.
-- `Interp#tcl_eval`/`#tcl_invoke` — the two chokepoints every Tk call in
-  this codebase funnels through — raise a clear `Tryst::WrongThreadError`
-  if ever called from a thread other than the one that created the
-  interpreter, instead of silently corrupting state. This is the last
-  line of defense: by the time it fires, the call it would have made
-  never happens, but whatever the app was trying to do doesn't happen
-  either.
+Want the full mechanism — why, exactly, and the two safety nets that
+catch a missed call site? See `App#off_thread`'s own doc comment in
+`src/tryst/app.cr`.
 
 ### `App#off_thread` vs `Tryst::BackgroundWork`
 
