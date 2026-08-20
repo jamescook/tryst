@@ -35,13 +35,28 @@ still fires.
 | Linux/X11 (XDND v5) | Working, verified under Docker/Xvfb |
 | Windows | Not built - tracked separately, blocked on real Windows/VM access to verify against |
 
-## One-time setup: build the native library first
+## Building the native library
 
 **Crystal never compiles C/Objective-C.** It only links - `@[Link]`
 annotations add flags to one `cc`/`clang` invocation at the very end of
 `crystal build`, they don't run a compiler over a `.c`/`.m` file. So
 this shard's own native source (`native/`) has to be compiled into a
-static library *before* `shards install`/`crystal build` runs:
+static library, `libtryst_dnd_native.a`, that `src/tryst/dnd/native.cr`'s
+own `@[Link(ldflags: ...)]` then points the Crystal linker at.
+
+**If you're adding tryst-dnd as a dependency to your own project**,
+this is automatic: `shard.yml` wires `make` in as a
+[postinstall script](https://github.com/crystal-lang/shards/blob/master/docs/shard.yml.adoc),
+so plain `shards install`/`shards update` builds
+`lib/tryst-dnd/libtryst_dnd_native.a` for you, no separate step. Pass
+`--skip-postinstall` to opt out.
+
+**If you're developing this shard itself** (this checkout - its own
+spec suite, examples, Docker image), run `make` by hand before
+`shards install`/`crystal build`: postinstall only fires for a shard
+installed *as a dependency* (confirmed directly against shards' own
+source), never for the project `shards` is run inside, so it does
+nothing here.
 
 ```
 cd tryst-dnd
@@ -50,10 +65,8 @@ shards install
 ```
 
 `make` auto-detects your platform (macOS builds `tkdrop_macos.m`;
-Linux builds `tkdrop_x11.c`) and produces `libtryst_dnd_native.a`,
-which `src/tryst/dnd/native.cr`'s own `@[Link(ldflags: ...)]` points
-the Crystal linker at. Re-run `make` any time the native source
-changes; `shards install`/`crystal build` don't know to do it for you.
+Linux builds `tkdrop_x11.c`). Re-run it any time the native source
+changes; neither path above knows to do that for you automatically.
 
 ### Prerequisites
 
@@ -82,6 +95,9 @@ crystal run examples/drop_demo.cr
 Drag a real file from Finder/your file manager onto the window.
 
 ## Tests
+
+Same dev-checkout case as above - postinstall doesn't fire here, so
+`make` still comes first:
 
 ```
 make
