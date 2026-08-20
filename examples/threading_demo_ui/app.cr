@@ -16,6 +16,13 @@
 # pushes what it reports into the vars the widgets are bound to; the
 # service never sees a widget, a Var, or a BackgroundWork.
 #
+# No control here switches concurrency strategy - ruby-tryst's own demo
+# this was ported from has a mode combobox comparing four
+# (None/None+update/Thread/Ractor); this port has only ever had one
+# BackgroundWork implementation, so there's nothing left to compare
+# against and that whole UI was dropped. What's here is the single
+# background-thread path, unconditionally.
+#
 # Progress goes through a reactive var (bind:) rather than hand-written
 # set_variable calls - the progressbar just tracks it.
 #
@@ -120,7 +127,7 @@ class ThreadingDemoUI
 
         status_row.row(gap: 8) do |info|
           info.label(text: "#{@files.size} files", width: 12, anchor: :e)
-          info.divider(orient: :vertical)
+          info.divider(orientation: :vertical)
           info.label(text: "Crystal #{Crystal::VERSION}", anchor: :e)
         end
       end

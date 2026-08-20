@@ -197,7 +197,7 @@ describe Tryst::UI::WidgetDSL do
 
   it "divider appends a node of the matching type" do
     session = WidgetDslHarness.new
-    handle = session.divider(:sep, orient: "vertical")
+    handle = session.divider(:sep, orientation: :vertical)
     root_child = session.document.root.children.first
 
     root_child.type.should eq(:divider)
