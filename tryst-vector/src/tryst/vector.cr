@@ -1,6 +1,7 @@
 require "tryst"
 
 require "./vector/bindings/core"
+require "./vector/bindings/link_windows"
 require "./vector/gradient"
 require "./vector/shape"
 require "./vector/context"

@@ -13,7 +13,16 @@
 # box at all" escape hatch the way tryst-sdl's is. Both the pkg-config
 # route and the fallback link the same real name either way: Debian's
 # shared object is also libthorvg-1.so, so -lthorvg-1 resolves on both.
-@[Link(ldflags: "`command -v pkg-config >/dev/null && pkg-config --exists thorvg-1 2>/dev/null && pkg-config --libs thorvg-1 || echo -lthorvg-1`")]
+#
+# Windows gets its own @[Link] in link_windows.cr - Process.run(shell:
+# true), what this ldflags backtick evaluates through, never goes
+# through an actual shell there (see that file's comment for the full
+# explanation and why pkg-config also can't be trusted from bare PATH
+# search order on Windows) - same reason tryst itself splits
+# tcltk_link_windows.cr out of interp.cr's @[Link].
+{% unless flag?(:windows) %}
+  @[Link(ldflags: "`command -v pkg-config >/dev/null && pkg-config --exists thorvg-1 2>/dev/null && pkg-config --libs thorvg-1 || echo -lthorvg-1`")]
+{% end %}
 lib LibThorVG
   alias Result = Int32
   alias Canvas = Void*
