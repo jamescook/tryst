@@ -34,13 +34,9 @@ brightness = Tryst::ValueSlider.new(app, min: 0.0, max: 100.0, value: 40.0, pare
 brightness.disabled = true
 brightness.pack(fill: "x")
 
-# Sized to the packed content's own actual requested size, not a
-# guessed WxH - a fixed guess like the "280x360" this replaced silently
-# clips whatever's beyond the box the moment a slider's own default
-# height changes or a label wraps differently on another platform's
-# font metrics (confirmed directly: it was already 116px short of the
-# 476px three sliders + three labels actually need, cutting off most of
-# the third slider).
+# A hardcoded "280x360" silently clipped the third slider - it was
+# 116px short of what three sliders plus their labels actually need.
+# Measure the packed content's real requested size instead.
 app.update_idletasks
 app.set_window_geometry("#{app.winfo.reqwidth(".")}x#{app.winfo.reqheight(".")}")
 
