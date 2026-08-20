@@ -193,7 +193,7 @@ class ThreadingDemoUI
     end
 
     metrics = @metrics
-    metrics.write_log("PAUSED", current_algo, current_chunk, __DIR__) if @paused && metrics
+    @session.app.off_thread { metrics.write_log("PAUSED", current_algo, current_chunk, __DIR__) } if @paused && metrics
   end
 
   private def reset : Nil
@@ -226,7 +226,7 @@ class ThreadingDemoUI
     metrics = @metrics
     return unless metrics
 
-    metrics.write_log("DONE", current_algo, current_chunk, __DIR__) unless @stop_requested
+    @session.app.off_thread { metrics.write_log("DONE", current_algo, current_chunk, __DIR__) } unless @stop_requested
     return if @stop_requested
 
     status_label.configure(text: @service.status_done_text(metrics.elapsed_seconds, metrics.files_per_second))
@@ -278,6 +278,15 @@ class ThreadingDemoUI
   # still queues correctly, but nothing paints until this method returns
   # and control goes back to Tk's own event loop - that gap is the whole
   # point of this mode.
+  #
+  # The per-file hash_fn below routes each #hash_file call through
+  # App#off_thread - this whole method runs on Tk's own thread (that's
+  # what "Blocking" means here), so calling #hash_file's File.open/
+  # OpenSSL::Digest#file directly would be exactly the macOS-unsafe
+  # pattern App#off_thread's own doc comment warns about. Only the digest
+  # computation is relocated; the progress block below still touches
+  # log_text/progress_var/status_label directly, same as before - that
+  # part must stay on Tk's thread.
   private def run_blocking : Nil
     STDERR.puts "[demo] run_blocking: entered"
     job = HashJob.new(
@@ -287,15 +296,33 @@ class ThreadingDemoUI
       base_dir: Dir.current,
       allow_pause: false)
 
-    @service.run(job, -> { }) do |msg|
+    hash_fn = ->(path : String, algo : String) { @session.app.off_thread { @service.hash_file(path, algo) } }
+
+    @service.run(job, -> { }, hash_fn) do |msg|
       log_text.text_content.insert(:end, msg.updates)
       log_text.text_content.scroll_to(:end)
       @progress_var.value = @service.progress_percent(msg.index, msg.total)
       status_label.configure(text: @service.status_progress_text(msg.index, msg.total))
+      @metrics.try(&.record_ui_update(Time.instant, msg.index + 1))
     end
     STDERR.puts "[demo] run_blocking: loop finished"
 
     finish_hashing
+
+    # Every log_text/progress_var/status_label update above (both the
+    # per-chunk ones in the loop and finish_hashing's own) only queues a
+    # Tk idle task - nothing paints on its own until Tk's event loop
+    # actually processes idle tasks, which normally happens automatically
+    # once control returns to Tcl's own dispatch. A real button click
+    # drives this whole method from inside Tk's own press/release
+    # binding script, though, and that doesn't reliably get back around
+    # to flushing idle tasks promptly on its own - confirmed directly:
+    # without this, the button visually stays in its pressed state and
+    # nothing else repaints, even though every widget's configured value
+    # is already correct by this point. Same fix as BackgroundWork's own
+    # on_progress needed earlier - force the flush explicitly rather than
+    # assume Tk's own dispatch will get to it.
+    @session.app.update_idletasks
   end
 
   private def current_algo : String

@@ -388,6 +388,43 @@ tk_test "a Fiber::ExecutionContext::Isolated context executes alongside Tk" do |
   raise "isolated context did not execute" unless result == 42
 end
 
+tk_test "App#off_thread returns the block's value" do |app|
+  result = app.off_thread { 1 + 1 }
+  raise "expected 2, got #{result}" unless result == 2
+end
+
+tk_test "App#off_thread re-raises the block's exception on the caller's side" do |app|
+  begin
+    app.off_thread { raise ArgumentError.new("boom") }
+    raise "expected ArgumentError to propagate, nothing raised"
+  rescue ex : ArgumentError
+    raise "expected message 'boom', got #{ex.message.inspect}" unless ex.message == "boom"
+  end
+end
+
+tk_test "App#off_thread(new_thread: true) also returns the block's value" do |app|
+  result = app.off_thread(new_thread: true) { 40 + 2 }
+  raise "expected 42, got #{result}" unless result == 42
+end
+
+tk_test "App#off_thread serializes multiple default-mode calls through the same persistent worker" do |app|
+  results = Array(Int32).new
+  3.times { |i| results << app.off_thread { i * 10 } }
+  raise "expected [0, 10, 20], got #{results.inspect}" unless results == [0, 10, 20]
+end
+
+tk_test "App#off_thread works from inside a widget callback" do |app|
+  callback_result = nil
+  invoke_and_wait = app.callback do
+    callback_result = app.off_thread { "from_callback" }
+  end
+  app.command(:button, ".b_off", command: invoke_and_wait)
+  app.command(:pack, ".b_off")
+  app.command(".b_off", "invoke")
+
+  raise "expected 'from_callback', got #{callback_result.inspect}" unless callback_result == "from_callback"
+end
+
 tk_test "a widget callback can spawn an Isolated context" do |app|
   callback_thread_result = nil
   spawn_and_wait = app.callback do

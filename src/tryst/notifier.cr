@@ -4,22 +4,16 @@
 # does - see Interp#mainloop's doc comment for the bug this fixes (any
 # fiber spawned before #mainloop silently never runs again).
 #
-# Linux only, despite this file's own prose below still saying otherwise in
-# places - the poll(2)-based implementation (LibPoll) and its Int32 fd
+# Linux only - the poll(2)-based implementation (LibPoll) and its Int32 fd
 # assumptions never had a real Windows port (Windows pipe/handle fds aren't
-# small POSIX integers, and there's no poll(2)/WSAPoll binding here). The
-# whole file is compiled out on Windows; Interp#mainloop falls back to the
-# same poll+sleep loop it already uses on macOS instead. Fixing this for
-# real means writing a WSAPoll-based poll_once and Handle-typed fd table.
-{% unless flag?(:windows) %}
-  #
-  # Linux/Windows only. Not installed on macOS at all - Tk's real Aqua
-  # notifier (macosx/tkMacOSXNotify.c, macosx/tclMacOSXNotify.c in the real
-  # Tcl/Tk source) waits via CFRunLoopRunInMode, Apple's Cocoa run loop; real
-  # UI events are delivered *through* that call via AppKit's own run-loop
-  # source, not via any fd this notifier could hand to Crystal's kqueue
-  # reactor. There is no fd-level integration point on macOS - see
-  # Interp#mainloop for the poll+sleep fallback used there instead.
+# small POSIX integers, and there's no poll(2)/WSAPoll binding here), and
+# macOS has its own real notifier now (notifier_macos.cr - a different fix
+# for a different problem: no fd-level integration point exists there at
+# all, see that file's own header comment). This file is compiled out on
+# both platforms; Interp#mainloop falls back to the plain poll+sleep loop
+# on Windows specifically. Fixing Windows for real means writing a
+# WSAPoll-based poll_once and Handle-typed fd table.
+{% if flag?(:linux) %}
   #
   # We keep driving everything through our own Tcl_DoOneEvent(TCL_ALL_EVENTS)
   # loop exactly as before (never switching Tcl into its "external event

@@ -102,7 +102,18 @@ class HashingService
   # pausing - what "pause" actually means (BackgroundWork's cooperative
   # check) is entirely the caller's business; this method only calls the
   # proc it's handed.
-  def run(job : HashJob, pause_check : Proc(Nil), & : HashProgress -> Nil) : Nil
+  #
+  # hash_fn defaults to calling #hash_file directly - correct for a
+  # caller already running this whole method off Tk's thread (Background
+  # mode's BackgroundWork worker). A caller running #run ON Tk's thread
+  # (Blocking mode) must pass a hash_fn that routes the actual digest
+  # through App#off_thread instead - #hash_file's File.open/OpenSSL::
+  # Digest#file call is exactly the kind Fiber.syscall wraps, and calling
+  # it directly here would be exactly as unsafe on macOS as calling it
+  # from any other fiber sharing Tk's execution context.
+  def run(job : HashJob, pause_check : Proc(Nil),
+          hash_fn : Proc(String, String, {String, Float64}) = ->hash_file(String, String),
+          & : HashProgress -> Nil) : Nil
     total = job.files.size
     pending = [] of String
 
@@ -110,7 +121,7 @@ class HashingService
       pause_check.call if job.allow_pause && pending.empty?
 
       begin
-        hash, seconds = hash_file(path, job.algo_name)
+        hash, seconds = hash_fn.call(path, job.algo_name)
         pending << format_line(short_path(path, job.base_dir), hash, seconds)
       rescue ex
         pending << format_error_line(short_path(path, job.base_dir), ex.message)

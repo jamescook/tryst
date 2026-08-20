@@ -431,6 +431,52 @@ module Tryst
       AfterHandle.new(tcl_id, cb_id)
     end
 
+    # Runs block off Tk's own thread and returns its result, raising
+    # whatever exception block raised instead - same contract as calling
+    # block synchronously would have, just relocated. Exists because a
+    # small set of Crystal stdlib calls (File.open and anything that opens
+    # a file internally like File.read(path), DNS resolution, TLS/OpenSSL)
+    # are invisible to Crystal's own cross-thread scheduler migration in a
+    # way that can silently corrupt Tcl/Tk's internal state on macOS if
+    # called directly from a fiber sharing Tk's execution context - which
+    # the main fiber, and any plain `spawn`ed fiber, both do. See the
+    # README's macOS quirks section for the full mechanism.
+    #
+    # new_thread: false (default) dispatches to Tryst::OffThreadWorker's
+    # single persistent, lazily-started thread - shared across every
+    # default-mode call in the process, so concurrent calls queue behind
+    # each other rather than running in parallel. Pass new_thread: true
+    # for a one-shot dedicated Isolated thread instead (same shape
+    # Tryst::BackgroundWork uses per task) when a call is slow/heavy
+    # enough that it shouldn't make other off_thread calls wait behind it.
+    #
+    # @example
+    #   content = app.off_thread { File.read(path) }
+    def off_thread(new_thread : Bool = false, &block : -> T) : T forall T
+      reply = Channel(OffThreadValue(T) | OffThreadError).new(1)
+
+      job = Proc(Nil).new do
+        begin
+          reply.send(OffThreadValue(T).new(block.call))
+        rescue ex
+          reply.send(OffThreadError.new(ex))
+        end
+      end
+
+      if new_thread
+        Fiber::ExecutionContext::Isolated.new("Tryst::off_thread") { job.call }
+      else
+        Tryst::OffThreadWorker.enqueue(job)
+      end
+
+      case result = reply.receive
+      in OffThreadValue
+        result.value
+      in OffThreadError
+        raise result.exception
+      end
+    end
+
     # Schedule a repeating timer. Calls the block every ms milliseconds
     # until cancelled. The block runs on the main thread in the event
     # loop, so it must be fast (don't block the UI). Returns a

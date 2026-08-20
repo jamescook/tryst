@@ -1,5 +1,6 @@
 require "./event_source"
 require "./notifier"
+require "./notifier_macos"
 require "./tcltk_link_windows"
 
 # Deliberately skips Tcl/Tk's stub-library mechanism. Stubs exist to let one
@@ -539,6 +540,19 @@ module Tryst
     end
   end
 
+  # Raised by Interp#tcl_eval/#tcl_invoke - the two real chokepoints every
+  # higher-level Tcl call in this codebase funnels through, confirmed
+  # directly (only 6 LibTcl.eval*/do_one_event call sites exist in
+  # interp.cr; these two account for every one of them outside
+  # #initialize's own one-time setup and #mainloop's own event dispatch) -
+  # when called from a different OS thread than the one that created the
+  # interpreter. Not a TclError subclass: this is a Crystal/threading
+  # precondition violation caught before ever reaching Tcl, not something
+  # Tcl itself reported. See Interp#check_thread_affinity! for why this
+  # exists.
+  class WrongThreadError < Exception
+  end
+
   # Passed as the second block argument to #register_callback/#bind so a
   # callback can tell Tk to stop running any other bindings for the same
   # event (e.g. to override a widget's default key handling), without
@@ -638,16 +652,27 @@ module Tryst
     # the State the notifier holds a raw pointer to.
     @event_sources = [] of EventSource
 
+    # The OS thread that created this interpreter - the only one Tcl
+    # permits calling into it, ever, no exceptions. Captured as the very
+    # first thing #initialize does, before Tcl_CreateInterp - see
+    # #check_thread_affinity!.
+    @owning_thread : Thread = Thread.current
+
     def initialize
       # Must run before the very first Tcl_CreateInterp call below (which
-      # triggers Tcl_InitNotifier internally) - see Tryst::Notifier for why
-      # this only applies on Linux, not macOS or Windows. (Notifier's own
-      # header comment claims Linux/Windows, but its poll(2)-based
-      # implementation is POSIX-only and was never actually ported to
-      # Windows's Handle-typed fds/WSAPoll - Windows falls back to the same
-      # poll+sleep loop as macOS below in #mainloop instead.)
-      {% unless flag?(:darwin) || flag?(:windows) %}
+      # triggers Tcl_InitNotifier internally). Notifier.install_once
+      # (Linux) and NotifierMacOS.install_once (Darwin) both replace
+      # Tcl's own default notifier - see notifier.cr's header comment for
+      # why on Linux, and notifier_macos.cr's for why on Darwin (Tcl's
+      # own default there spawns a raw-pthread background thread Boehm
+      # GC's stop-the-world can't safely handle). Windows still falls
+      # back to the plain poll+sleep loop in #mainloop below - neither
+      # notifier has ever been ported there (see each file's own header
+      # comment on why).
+      {% if flag?(:linux) %}
         Tryst::Notifier.install_once
+      {% elsif flag?(:darwin) %}
+        Tryst::NotifierMacOS.install_once
       {% end %}
 
       LibTcl.find_executable("crystal_tryst")
@@ -683,11 +708,41 @@ module Tryst
       arm_keepalive_timer
     end
 
+    # Tcl requires every call into this interpreter to come from the exact
+    # OS thread that created it - nothing internal to Tcl protects against
+    # any other pattern, so a violation doesn't raise on its own; it
+    # silently corrupts Tcl/Tk's internal state (confirmed directly this
+    # project's own investigation: misread window counts, a segfault deep
+    # in Tk's own widget internals). Checked here rather than at every
+    # individual widget/App method, since #tcl_eval/#tcl_invoke are the
+    # only two real entry points every one of those ultimately funnels
+    # through.
+    #
+    # The most common real cause: a fiber's continuation resuming on a
+    # different OS thread after a Fiber.syscall-wrapped call (File.open,
+    # DNS resolution, TLS) - see App#off_thread for the actual fix (do
+    # that work off Tk's thread entirely, on a dedicated worker, instead
+    # of on whatever thread this fiber happens to be resumed on). This
+    # check is the last line of defense, not the fix: it turns what would
+    # otherwise be silent corruption into a clear, deterministic error
+    # naming exactly what happened, but by the time it fires the call
+    # this method was asked to make never happens at all.
+    private def check_thread_affinity! : Nil
+      return if Thread.current == @owning_thread
+      raise WrongThreadError.new(
+        "Tcl/Tk interpreter called from thread #{Thread.current} - it was " \
+        "created on thread #{@owning_thread} and only that thread may ever " \
+        "call into it. This almost always means a fiber's continuation " \
+        "resumed on a different OS thread after a File.open/DNS/TLS call - " \
+        "route that call through App#off_thread instead.")
+    end
+
     # Evaluates a full Tcl script string. Fine for static scripts, but
     # don't build one out of untrusted/dynamic pieces via interpolation -
     # use #tcl_invoke instead, which quotes each argument as a distinct
     # Tcl_Obj rather than relying on Tcl's string-quoting rules.
     def tcl_eval(script : String) : String
+      check_thread_affinity!
       raise_unless_ok("Tcl_Eval(#{script.inspect})") { LibTcl.eval(ptr, script, -1, 0) }
       result
     end
@@ -701,6 +756,7 @@ module Tryst
     end
 
     def tcl_invoke(args : Enumerable(String)) : String
+      check_thread_affinity!
       objv = args.map do |arg|
         obj = LibTcl.new_string_obj(arg, LibTcl::TclSize.new(arg.bytesize))
         LibTcl.db_incr_ref_count(obj, __FILE__, __LINE__)
