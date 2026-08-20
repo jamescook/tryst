@@ -148,3 +148,62 @@ if [ -n "$staged" ]; then
     exit 1
   fi
 fi
+
+# --- 5. Comment-verbosity review (WARN only, never blocks) ------------
+# Runs LAST, after every hard-fail gate above - this is the slow one
+# (~30-40s, a real Haiku call), so a commit that's broken for a real
+# reason fails fast on ameba/typecheck without waiting on this too.
+# WARN-only by deliberate choice, not a limitation: this is a judgment
+# call a human should weigh, not something that should ever block a
+# commit outright.
+#
+# Never fails the commit for its OWN sake either - no `claude` on PATH,
+# no `timeout`/`gtimeout`, a network hiccup, not logged in, whatever -
+# all of that just skips the check silently rather than treating "the
+# reviewer itself didn't run" as a reason to block.
+comment_review_bin=""
+if command -v timeout >/dev/null 2>&1; then
+  comment_review_bin="timeout"
+elif command -v gtimeout >/dev/null 2>&1; then
+  comment_review_bin="gtimeout"
+fi
+
+if [ -n "$comment_review_bin" ] && command -v claude >/dev/null 2>&1; then
+  comment_diff=$(git diff --cached -- '*.cr' 2>/dev/null || true)
+  if [ -n "$comment_diff" ]; then
+    # Cap what gets sent - keeps this fast and cheap even for a large
+    # commit; a truncated diff still gives real signal on whatever
+    # comments appear first, which is good enough for a WARN-only check.
+    comment_diff=$(printf '%s' "$comment_diff" | head -c 20000)
+
+    review_prompt="You are a strict code-comment reviewer for a Crystal codebase. Look at the comment lines that were ADDED (lines starting with + that are # comments) in the diff below, and judge whether each comment block is doing its job well.
+
+A GOOD comment explains a non-obvious WHY: a hidden constraint, an invariant, a workaround, something that would surprise a reader. It's as short as it can be while still conveying that.
+
+A BAD comment is narrative bloat: it re-explains what the code obviously does, narrates the history/process of how the author arrived at the change, over-justifies a simple decision with multiple redundant sentences making the same point, or reads like a mini-essay when one sentence would do.
+
+Here is the diff:
+
+\`\`\`
+${comment_diff}
+\`\`\`
+
+Respond in this exact format, nothing else:
+VERDICT: PASS or WARN
+REASON: (if WARN) point to the specific comment block(s) that are bloated, one sentence each on what's wrong and how to cut it down. If PASS, say so in one sentence."
+
+    review_result=$(printf '%s' "$review_prompt" | "$comment_review_bin" 60 claude -p --model haiku --allowedTools "" 2>/dev/null || true)
+
+    # The model's own response starts with "VERDICT: WARN"/"VERDICT: PASS"
+    # (matching the format the prompt asks for), not "WARN" at position 0 -
+    # *WARN* (WARN anywhere in the string) is what actually matches that.
+    case "$review_result" in
+      *WARN*)
+        echo "" >&2
+        echo "pre-commit: comment review (WARN only, not blocking):" >&2
+        printf '%s\n' "$review_result" >&2
+        echo "" >&2
+        ;;
+    esac
+  fi
+fi
