@@ -53,15 +53,37 @@ module Tryst
       getter spec : AudioSpec
       getter? destroyed : Bool = false
 
-      def initialize(@spec : AudioSpec = AudioSpec.new(format: AudioFormat::S16LE))
+      # True when this stream opened no real device and is quietly
+      # discarding everything instead - see `allow_silent` below.
+      getter? silent : Bool = false
+
+      # A fake "playing" state to answer #playing? while silent, since
+      # there is no real device to ask.
+      @silent_playing = false
+
+      # allow_silent: when the device fails to open, fall back to a
+      # silent no-op stream instead of raising. `available?`/
+      # `device_count` cannot be trusted to predict this in advance on
+      # every platform (confirmed directly: some containers report a
+      # nonzero device count from a stale ALSA config entry with no real
+      # node behind it, so the count says yes while the open still
+      # fails) - actually attempting the open is the only reliable
+      # check, which is why this is a fallback on failure rather than a
+      # pre-check.
+      def initialize(@spec : AudioSpec = AudioSpec.new(format: AudioFormat::S16LE), allow_silent : Bool = false)
         SDL.init(Subsystem::Audio)
         raw = @spec.to_unsafe
         # A null callback is what selects the queueing model: SDL pulls
         # from what has been put in rather than calling back for more.
         ptr = LibSDL.open_audio_device_stream(LibSDL::AUDIO_DEVICE_DEFAULT_PLAYBACK,
           pointerof(raw), nil, nil)
-        raise Error.new("SDL_OpenAudioDeviceStream failed: #{SDL.last_error}") if ptr.null?
-        @ptr = ptr
+        if ptr.null?
+          raise Error.new("SDL_OpenAudioDeviceStream failed: #{SDL.last_error}") unless allow_silent
+          @silent = true
+          @ptr = Pointer(LibSDL::AudioStream).null
+        else
+          @ptr = ptr
+        end
       end
 
       # @api private
@@ -87,16 +109,18 @@ module Tryst
       # and will happily play the misinterpretation.
       def queue(data : Bytes) : Nil
         check_open
-        return if data.empty?
+        return if data.empty? || silent?
         unless LibSDL.put_audio_stream_data(@ptr, data.to_unsafe.as(Void*), data.size)
           raise Error.new("SDL_PutAudioStreamData failed: #{SDL.last_error}")
         end
       end
 
       # Bytes still waiting to be played, measured in the format they
-      # were pushed in.
+      # were pushed in. Always 0 while silent - nothing is ever really
+      # queued.
       def queued_bytes : Int32
         check_open
+        return 0 if silent?
         queued = LibSDL.get_audio_stream_queued(@ptr)
         raise Error.new("SDL_GetAudioStreamQueued failed: #{SDL.last_error}") if queued < 0
         queued.to_i32
@@ -112,6 +136,10 @@ module Tryst
       # Starts, or restarts, playback of whatever is queued.
       def resume : self
         check_open
+        if silent?
+          @silent_playing = true
+          return self
+        end
         unless LibSDL.resume_audio_stream_device(@ptr)
           raise Error.new("SDL_ResumeAudioStreamDevice failed: #{SDL.last_error}")
         end
@@ -121,6 +149,10 @@ module Tryst
       # Stops the device pulling from the queue. Queued data is kept.
       def pause : self
         check_open
+        if silent?
+          @silent_playing = false
+          return self
+        end
         unless LibSDL.pause_audio_stream_device(@ptr)
           raise Error.new("SDL_PauseAudioStreamDevice failed: #{SDL.last_error}")
         end
@@ -131,12 +163,14 @@ module Tryst
       # playing - it is playing silence.
       def playing? : Bool
         check_open
+        return @silent_playing if silent?
         !LibSDL.audio_stream_device_paused(@ptr)
       end
 
       # Throws away everything queued but not yet played.
       def clear : self
         check_open
+        return self if silent?
         raise Error.new("SDL_ClearAudioStream failed: #{SDL.last_error}") unless LibSDL.clear_audio_stream(@ptr)
         self
       end
@@ -145,7 +179,7 @@ module Tryst
       def destroy : Nil
         return if @destroyed
         @destroyed = true
-        LibSDL.destroy_audio_stream(@ptr)
+        LibSDL.destroy_audio_stream(@ptr) unless silent?
       end
 
       private def check_open : Nil

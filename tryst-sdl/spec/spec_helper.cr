@@ -31,17 +31,17 @@ SDL3_FLOOR = Tryst::SDL::Version.new(major: 3, minor: 2, micro: 0)
 # the host and the container behave identically, which a real sound card
 # would not.
 #
-# Set through the ENVIRONMENT rather than SDL_SetHint, which looks like
-# the obvious way and does not survive: SDL_Quit clears every hint, and
-# the lifecycle examples call it, so the next SDL_Init after one of them
-# would pick the real backend and start playing out loud halfway through
-# a run. SDL re-reads the environment on each init, and nothing can clear
-# that.
+# SDL.audio_driver= is backed by the environment rather than SDL_SetHint,
+# which looks like the obvious way and does not survive: SDL_Quit clears
+# every hint, and the lifecycle examples call it, so the next SDL_Init
+# after one of them would pick the real backend and start playing out
+# loud halfway through a run. SDL re-reads the environment on each init,
+# and nothing can clear that - see SDL.audio_driver='s own doc comment.
 #
 # Left alone if already set, so `SDL_AUDIO_DRIVER=coreaudio crystal spec`
 # is still how you listen to what the specs are producing.
 SILENT_AUDIO_DRIVER = "dummy"
-ENV["SDL_AUDIO_DRIVER"] = SILENT_AUDIO_DRIVER unless ENV.has_key?("SDL_AUDIO_DRIVER")
+Tryst::SDL.audio_driver = SILENT_AUDIO_DRIVER unless Tryst::SDL.audio_driver
 
 # Runs the block with a device-less mixer and destroys it afterwards.
 #

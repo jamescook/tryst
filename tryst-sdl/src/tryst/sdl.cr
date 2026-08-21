@@ -86,5 +86,34 @@ module Tryst
     def self.version : Version
       Version.from_versionnum(LibSDL.get_version)
     end
+
+    # Selects which audio backend .init(Subsystem::Audio) picks - e.g.
+    # "dummy" for a real device that silently discards every sample
+    # (what a test suite wants), or a real backend name ("coreaudio",
+    # "pulseaudio", ...) to force one explicitly. nil to stop forcing
+    # anything and let SDL choose on its own.
+    #
+    # Backed by the SDL_AUDIO_DRIVER environment variable rather than
+    # SDL_SetHint, which looks like the more obvious API and does not
+    # survive: #quit clears every hint, but SDL re-reads the environment
+    # on each #init - the only setting of the two that a repeated
+    # init/quit cycle (what a test suite does) cannot undo out from under
+    # you. Must be set before the first #init(Subsystem::Audio) in the
+    # process; SDL only reads it while choosing a backend, so calling this
+    # after audio is already up has no effect until the next full #quit.
+    def self.audio_driver=(name : String?) : Nil
+      if name
+        ENV["SDL_AUDIO_DRIVER"] = name
+      else
+        ENV.delete("SDL_AUDIO_DRIVER")
+      end
+    end
+
+    # The backend .audio_driver= last forced, or nil if nothing has.
+    # Not necessarily what SDL is actually using yet - see
+    # AudioStream.driver_name for the backend a live subsystem picked.
+    def self.audio_driver : String?
+      ENV["SDL_AUDIO_DRIVER"]?
+    end
   end
 end
