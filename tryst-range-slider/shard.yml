@@ -1,0 +1,31 @@
+name: tryst-range-slider
+version: 0.1.0
+
+authors:
+  - James Cook
+
+crystal: ">= 1.21.0"
+
+license: MIT
+
+description: |
+  A dual-thumb range slider for tryst - two draggable thumbs bounding a
+  [low, high] range on one rounded track, with an accent-filled segment
+  between them. Built on Tryst::OwnerDrawnWidget and rendered through
+  tryst-vector.
+
+# Lives at the REPO ROOT, same depth as tryst-vector/tryst-sdl - see
+# tryst-value-slider's own shard.yml for the full reasoning (a
+# transitive path: dependency has to match the literal relative-path
+# string its declaring shard used; one level deeper breaks it).
+dependencies:
+  tryst:
+    path: ../
+  tryst-vector:
+    path: ../tryst-vector
+
+# Informational (shards does not install these) - see tryst-vector's own
+# shard.yml for the per-platform package names; this shard needs exactly
+# what tryst-vector needs, since it renders through the same Surface.
+libraries:
+  libthorvg: ">= 1.0.0"

@@ -124,7 +124,8 @@ For that case, subclass `Tryst::OwnerDrawnWidget` at the `App` layer
 instead, and use it directly rather than through `ui.<type>` -
 [tryst-spinner](tryst-spinner/) (an antialiased progress ring with its
 own animation loop), [tryst-switch](tryst-switch/) (an animated on/off
-toggle), and [tryst-segmented](tryst-segmented/) (a segmented control)
+toggle), [tryst-segmented](tryst-segmented/) (a segmented control), and
+[tryst-range-slider](tryst-range-slider/) (a dual-thumb range slider)
 are all real, shipped examples, built this way rather than as a
 registered `WidgetType`.
 
