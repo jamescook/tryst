@@ -215,17 +215,11 @@ module Tryst
     # raises, the grab is released immediately rather than left dangling
     # on a half-shown dialog.
     def modal(global : Bool = false, & : -> Nil) : Nil
-      # A local grab (the non-global default) requires the window to
-      # already be VIEWABLE - mapped, and every ancestor mapped too.
-      # Handle#show calls deiconify/raise right before this, but neither
-      # blocks for the window manager to actually process the map
-      # request; #update pumps the event loop so it has, by the time
-      # grab_set asks. Real Aqua tolerates the race (no WM round-trip in
-      # the same sense), but a bare Xvfb - no window manager at all -
-      # does not: confirmed directly, a modal window shown and grabbed
-      # back-to-back with no update in between fails there with "grab
-      # failed: another application has grab", even as the very first
-      # grab attempted in the whole process.
+      # A local grab requires the window to already be VIEWABLE; #update
+      # pumps the event loop so the pending map/raise from Handle#show
+      # has actually landed before grab_set asks. Aqua tolerates the
+      # race; a bare Xvfb (no window manager) does not - confirmed
+      # directly.
       @app.update
       grab_set(global: global)
       # -force: a modal dialog should own keyboard focus immediately, not
