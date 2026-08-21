@@ -2,6 +2,7 @@ require "./interp"
 require "./values"
 require "./callback_registry"
 require "./winfo"
+require "./style"
 require "./window"
 require "./widget"
 require "./command_interceptors"
@@ -873,6 +874,10 @@ module Tryst
     # Typed wrapper around Tk's `clipboard` command family - see
     # Clipboard. Built on first use, same reasoning as #winfo.
     getter clipboard : Clipboard { Clipboard.new(self) }
+
+    # Typed wrapper around Tk's `ttk::style` command family - see Style.
+    # Built on first use, same reasoning as #winfo.
+    getter style : Style { Style.new(self) }
 
     # Build and evaluate a Tcl command from Crystal values. Positional args
     # are converted: Symbols pass bare, Procs become callbacks (bind-shaped

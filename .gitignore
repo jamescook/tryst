@@ -39,6 +39,11 @@ desktop.ini
 # hook should be setup to inspect staged files to test if they look like
 # a built binary
 
+# Phase-0 HTML/CSS design mocks (approved as a visual reference, never
+# built as part of the app) - same /design/ convention every widget
+# shard's own .gitignore already uses.
+/design/
+
 # Sentinel that opts a local clone into the pre-commit hook's Haiku-
 # powered comment-verbosity review (see .githooks/pre-commit) - a repo-
 # local preference, not something to force on every future public
