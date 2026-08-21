@@ -2,13 +2,10 @@ require "tryst"
 require "tryst-vector"
 
 module Tryst
-  # A dual-thumb range slider: rounded track, an accent-filled segment
-  # between the two thumbs (not from an edge, unlike a single-thumb
-  # slider), and a value bubble per thumb while dragging or keyboard-
-  # adjusting. Built on OwnerDrawnWidget, same App-layer pattern as
-  # ValueSlider/Switch/SegmentedControl: no ui.<type>, no bind: (see
-  # CUSTOM_WIDGETS.md for why a stateful, animated widget doesn't fit
-  # the WidgetType/AppContract seam).
+  # A dual-thumb range slider. Built on OwnerDrawnWidget, same App-layer
+  # pattern as ValueSlider/Switch/SegmentedControl: no ui.<type>, no
+  # bind: (see CUSTOM_WIDGETS.md for why a stateful, animated widget
+  # doesn't fit the WidgetType/AppContract seam).
   #
   # ```
   # slider = Tryst::RangeSlider.new(app, min: 0.0, max: 100.0, low: 20.0, high: 70.0)
