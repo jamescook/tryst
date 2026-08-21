@@ -45,6 +45,8 @@ lib LibSDL
 
   fun set_texture_blend_mode = SDL_SetTextureBlendMode(texture : Texture*, mode : BlendMode) : Bool
   fun get_texture_blend_mode = SDL_GetTextureBlendMode(texture : Texture*, mode : BlendMode*) : Bool
+  fun set_texture_scale_mode = SDL_SetTextureScaleMode(texture : Texture*, mode : LibC::Int) : Bool
+  fun get_texture_scale_mode = SDL_GetTextureScaleMode(texture : Texture*, mode : LibC::Int*) : Bool
   fun set_texture_alpha_mod = SDL_SetTextureAlphaMod(texture : Texture*, alpha : UInt8) : Bool
   fun set_texture_color_mod = SDL_SetTextureColorMod(texture : Texture*, r : UInt8, g : UInt8,
                                                      b : UInt8) : Bool

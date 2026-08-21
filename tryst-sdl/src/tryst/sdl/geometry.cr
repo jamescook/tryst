@@ -88,5 +88,14 @@ module Tryst
       BlendPremultiplied = 0x00000010
       AddPremultiplied   = 0x00000020
     end
+
+    # How a texture is sampled when drawn at a size other than its own -
+    # Nearest keeps hard pixel edges (crisp upscaled pixel art), Linear
+    # smooths them (photographic content, or a deliberately softened
+    # scale-up).
+    enum ScaleMode : Int32
+      Nearest = 0
+      Linear  = 1
+    end
   end
 end

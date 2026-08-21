@@ -155,6 +155,25 @@ module Tryst
         value
       end
 
+      # How this texture is sampled when drawn at a size other than its
+      # own - Nearest for crisp upscaled pixel art, Linear to smooth it.
+      def scale_mode : ScaleMode
+        check_open
+        mode = 0
+        unless LibSDL.get_texture_scale_mode(@texture, pointerof(mode))
+          raise Error.new("SDL_GetTextureScaleMode failed: #{SDL.last_error}")
+        end
+        ScaleMode.from_value(mode)
+      end
+
+      def scale_mode=(value : ScaleMode) : ScaleMode
+        check_open
+        unless LibSDL.set_texture_scale_mode(@texture, value.value)
+          raise Error.new("SDL_SetTextureScaleMode(#{value}) failed: #{SDL.last_error}")
+        end
+        value
+      end
+
       # Tints the texture as it is drawn, without touching its pixels.
       # 255 everywhere leaves it alone.
       def color_mod=(color : Color) : Color

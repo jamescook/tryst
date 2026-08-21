@@ -297,6 +297,13 @@ end
 spare = renderer.create_texture(4, 4)
 spare.blend_mode = Tryst::SDL::BlendMode::Blend
 raise "texture: expected Blend, got #{spare.blend_mode}" unless spare.blend_mode.blend?
+
+# Case T5a: scale mode round-trips too.
+spare.scale_mode = Tryst::SDL::ScaleMode::Nearest
+raise "texture: expected Nearest, got #{spare.scale_mode}" unless spare.scale_mode.nearest?
+spare.scale_mode = Tryst::SDL::ScaleMode::Linear
+raise "texture: expected Linear, got #{spare.scale_mode}" unless spare.scale_mode.linear?
+
 spare.destroy
 spare.destroy
 raise "texture: expected destroyed?" unless spare.destroyed?
