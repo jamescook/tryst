@@ -63,6 +63,17 @@ unless app.interp.wait_until { viewport.key_down?("left") }
   raise "viewport: expected Left to register as left, got #{viewport.keys_down.inspect}"
 end
 raise "viewport: expected LEFT to match too" unless viewport.key_down?("LEFT")
+raise "viewport: expected mixed-case Left to match too" unless viewport.key_down?("Left")
+
+# Case 4a-2: already-lowercase queries must allocate nothing.
+GC.collect
+before_bytes = GC.stats.total_bytes
+1000.times { viewport.key_down?("left") }
+after_bytes = GC.stats.total_bytes
+if after_bytes != before_bytes
+  raise "viewport: expected an already-lowercase key_down? query to allocate nothing, " \
+        "got #{after_bytes - before_bytes} bytes over 1000 calls"
+end
 
 # Case 4b: losing focus forgets held keys. A frame that loses focus never
 # receives the KeyRelease, so without this the key reads as held forever.

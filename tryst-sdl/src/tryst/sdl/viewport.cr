@@ -137,8 +137,16 @@ module Tryst
       # Whether a key is held right now, by lowercased Tk keysym -
       # "left", "space", "a". For a game loop, which wants to ask rather
       # than be told.
+      #
+      # String#downcase allocates even for already-lowercase strings; in
+      # a game loop this runs once per key per frame, so avoid it.
       def key_down?(key : String) : Bool
-        @keys_down.includes?(key.downcase)
+        @keys_down.includes?(ascii_uppercase?(key) ? key.downcase : key)
+      end
+
+      private def ascii_uppercase?(key : String) : Bool
+        key.each_byte { |b| return true if b.in?(65_u8..90_u8) }
+        false
       end
 
       # Every key currently held.
