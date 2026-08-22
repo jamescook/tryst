@@ -1089,19 +1089,18 @@ module Tryst
     # Pixel width of text rendered in font. font is any Tk font
     # description - a named font ("TkDefaultFont") or a spec
     # ("Helvetica 12").
+    #
+    # Resolves and frees the font for this one call - see #with_font to
+    # measure many strings against the same font without paying that
+    # cost per call.
     def text_width(font : String, text : String) : Int32
-      with_font(font) do |tkfont|
-        LibTk.text_width(tkfont, text, text.bytesize)
-      end
+      with_font(font, &.text_width(text))
     end
 
     # A font's ascent and descent in pixels, plus the linespace Tk derives
     # from them (their sum).
     def font_metrics(font : String) : {ascent: Int32, descent: Int32, linespace: Int32}
-      with_font(font) do |tkfont|
-        LibTk.get_font_metrics(tkfont, out metrics)
-        {ascent: metrics.ascent, descent: metrics.descent, linespace: metrics.linespace}
-      end
+      with_font(font, &.font_metrics)
     end
 
     # How much of text fits within max_pixels, for truncation, ellipsis or
@@ -1115,14 +1114,8 @@ module Tryst
     def measure_chars(font : String, text : String, max_pixels : Int32,
                       partial_ok : Bool = false, whole_words : Bool = false,
                       at_least_one : Bool = false) : {bytes: Int32, width: Int32}
-      flags = 0
-      flags |= LibTk::TK_PARTIAL_OK if partial_ok
-      flags |= LibTk::TK_WHOLE_WORDS if whole_words
-      flags |= LibTk::TK_AT_LEAST_ONE if at_least_one
-
-      with_font(font) do |tkfont|
-        bytes = LibTk.measure_chars(tkfont, text, text.bytesize, max_pixels, flags, out width)
-        {bytes: bytes, width: width}
+      with_font(font) do |handle|
+        handle.measure_chars(text, max_pixels, partial_ok: partial_ok, whole_words: whole_words, at_least_one: at_least_one)
       end
     end
 
@@ -1169,11 +1162,18 @@ module Tryst
       {% end %}
     end
 
-    # Resolves a font description for the duration of the block. Tk_GetFont
-    # hands back a reference into a shared, interpreter-wide font cache, so
-    # the matching Tk_FreeFont runs in an ensure - a leaked reference keeps
-    # that cache entry alive for the life of the process.
-    private def with_font(font : String, &)
+    # Resolves a font description ONCE for the duration of the block,
+    # yielding a FontHandle to measure as many strings against it as
+    # needed - the batch counterpart to #text_width/#font_metrics/
+    # #measure_chars, which each pay their own Tk_GetFont/Tk_FreeFont
+    # pair. A per-glyph layout loop is exactly the case this amortizes:
+    # one resolve/free pair for the whole pass instead of one per glyph.
+    #
+    # Tk_GetFont hands back a reference into a shared, interpreter-wide
+    # font cache, so the matching Tk_FreeFont runs in an ensure - a
+    # leaked reference (e.g. the block raising) keeps that cache entry
+    # alive for the life of the process.
+    def with_font(font : String, & : FontHandle -> T) : T forall T
       main_win = LibTk.main_window(ptr)
       raise TclError.new("Tk is not initialized (no main window)") if main_win.null?
 
@@ -1181,7 +1181,7 @@ module Tryst
       raise TclError.new("font not found: #{font} - #{result}") if tkfont.null?
 
       begin
-        yield tkfont
+        yield FontHandle.new(tkfont)
       ensure
         LibTk.free_font(tkfont)
       end

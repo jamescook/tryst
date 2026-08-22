@@ -567,6 +567,14 @@ module Tryst
         partial_ok: partial_ok, whole_words: whole_words, at_least_one: at_least_one)
     end
 
+    # Resolves font once and yields a FontHandle to measure many strings
+    # against it - for a per-glyph layout pass that would otherwise pay
+    # #text_width/#font_metrics/#measure_chars's own Tk_GetFont/Tk_FreeFont
+    # cost per glyph. See Interp#with_font.
+    def with_font(font : String, & : FontHandle -> T) : T forall T
+      @interp.with_font(font) { |handle| yield handle }
+    end
+
     # The platform window identifier behind a widget, for handing to
     # something that draws into a window Tk owns. window accepts a Widget
     # or a path String. Raises unless the widget is mapped - see

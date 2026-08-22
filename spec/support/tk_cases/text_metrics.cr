@@ -80,3 +80,72 @@ tk_test "App#measure_chars whole_words breaks on a word boundary" do |app|
   fitted = text.byte_slice(0, r[:bytes])
   raise "expected a word break, got #{fitted.inspect}" if fitted.includes?("Wor") && !fitted.includes?("World")
 end
+
+# -- App#with_font --
+
+tk_test "App#with_font's handle matches App#text_width for the same font/text" do |app|
+  expected = app.text_width("TkDefaultFont", "Hello")
+  got = app.with_font("TkDefaultFont", &.text_width("Hello"))
+  raise "expected #{expected}, got #{got}" unless got == expected
+end
+
+tk_test "App#with_font's handle matches App#font_metrics for the same font" do |app|
+  expected = app.font_metrics("TkDefaultFont")
+  got = app.with_font("TkDefaultFont", &.font_metrics)
+  raise "expected #{expected}, got #{got}" unless got == expected
+end
+
+tk_test "App#with_font's handle matches App#measure_chars for the same font/text/limit" do |app|
+  text = "Hello World, this is a long string for measurement"
+  limit = app.text_width("TkDefaultFont", text) // 2
+  expected = app.measure_chars("TkDefaultFont", text, limit)
+  got = app.with_font("TkDefaultFont") { |handle| handle.measure_chars(text, limit) }
+  raise "expected #{expected}, got #{got}" unless got == expected
+end
+
+# The actual point of #with_font: measuring many glyphs against ONE
+# resolved font, not re-resolving per glyph - #text_width's own per-char
+# sum overcounts kerning/ligatures anyway, so this only checks per-glyph
+# widths are individually sane, not that they sum to the whole string's
+# width.
+tk_test "App#with_font measures many glyphs against a single resolved font" do |app|
+  widths = app.with_font("TkDefaultFont") do |handle|
+    "Hello".each_char.map { |char| handle.text_width(char.to_s) }.to_a
+  end
+  raise "expected 5 widths, got #{widths.size}" unless widths.size == 5
+  raise "expected every glyph width positive, got #{widths}" unless widths.all?(&.> 0)
+end
+
+tk_test "App#with_font re-raises the block's exception rather than swallowing it" do |app|
+  raised = false
+  begin
+    app.with_font("TkDefaultFont") { |_f| raise "boom" }
+  rescue ex : Exception
+    raised = ex.message == "boom"
+  end
+  raise "expected the block's own exception to propagate" unless raised
+end
+
+# Doesn't (and can't, from here) inspect Tk's internal font refcount
+# directly - what it CAN show is that #with_font leaves the interp in a
+# working state after the block raises, consistent with its ensure
+# having actually run rather than the free being skipped.
+tk_test "App#with_font still frees the font after the block raises, leaving the app usable" do |app|
+  begin
+    app.with_font("TkDefaultFont") { |_f| raise "boom" }
+  rescue
+  end
+
+  width = app.text_width("TkDefaultFont", "Hello")
+  raise "expected the app to still measure text normally, got #{width}" unless width > 0
+end
+
+tk_test "App#with_font raises for an unknown font, same as the single-shot methods" do |app|
+  expect_raised = false
+  begin
+    app.with_font("", &.text_width("Hello"))
+  rescue Tryst::TclError
+    expect_raised = true
+  end
+  raise "expected an unknown font to raise TclError" unless expect_raised
+end
