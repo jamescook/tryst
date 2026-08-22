@@ -475,6 +475,8 @@ module Tryst
   # would deliberately reach for. Only break (TCL_BREAK) has a real,
   # demonstrable effect. Revisit if a real use case for the other two
   # turns up.
+  # A class on purpose: #break! is mutated by the callback and read by
+  # dispatch_callback on that same instance. A struct would silently fail.
   class CallbackSignal
     # `getter?` can't generate this itself - `break` is a reserved keyword,
     # so it can't be used as a macro argument (only as a plain method name).

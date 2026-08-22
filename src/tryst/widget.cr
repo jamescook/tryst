@@ -14,7 +14,7 @@ module Tryst
   #   btn.command(:configure, text: "Updated")
   #   app.command(:pack, btn, pady: 10)  # to_s makes this work
   #   btn.destroy
-  class Widget
+  struct Widget
     getter app : App
     getter path : String
 

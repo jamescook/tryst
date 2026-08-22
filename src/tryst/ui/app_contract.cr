@@ -61,6 +61,6 @@ class Tryst::App
   include Tryst::UI::AppContract
 end
 
-class Tryst::Window
+struct Tryst::Window
   include Tryst::UI::WindowContract
 end

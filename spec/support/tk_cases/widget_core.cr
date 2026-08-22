@@ -48,13 +48,15 @@ tk_test "a Widget works directly as an app.command argument" do |app|
 end
 
 tk_test "Widget#pack/#grid return self for chaining" do |app|
+  # Widget is a struct, so #pack/#grid return a copy, not the same
+  # object - == is the right check here, not same?.
   btn = app.create_widget("ttk::button", text: "Hi")
-  raise "expected #pack to return self" unless btn.pack(pady: 10).same?(btn)
+  raise "expected #pack to return self" unless btn.pack(pady: 10) == btn
 
   frm = app.create_widget("ttk::frame")
   frm.pack
   btn2 = app.create_widget("ttk::button", parent: frm, text: "Hi")
-  raise "expected #grid to return self" unless btn2.grid(row: 0, column: 0).same?(btn2)
+  raise "expected #grid to return self" unless btn2.grid(row: 0, column: 0) == btn2
 end
 
 tk_test "Widget#on_close delegates to Window#on_close for this widget's path" do |app|

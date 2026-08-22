@@ -14,7 +14,7 @@ module Tryst
   #
   # @see https://www.tcl-lang.org/man/tcl9.0/TkCmd/wm.htm wm
   # @see https://www.tcl-lang.org/man/tcl9.0/TkCmd/grab.htm grab
-  class Window
+  struct Window
     getter path : String
 
     private EMPTY_KWARGS = {} of String => TclArgValue
