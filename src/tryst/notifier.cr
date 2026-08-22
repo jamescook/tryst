@@ -168,6 +168,15 @@
         getter alert_write : IO::FileDescriptor
         getter alert_fd : Int32
 
+        # poll_once's own buffers, cached here so the steady-state (nothing
+        # registered/unregistered since the last call) path is allocation-
+        # free - rebuilt only when create/delete_file_handler flips
+        # handlers_dirty. poll_fds is parallel to pollfds (same index),
+        # carrying -1 for the alert-fd sentinel entry - see poll_once.
+        property pollfds = Array(LibPoll::Pollfd).new
+        property poll_fds = Array(Int32).new
+        property handlers_dirty = true
+
         def initialize
           @alert_read, @alert_write = IO.pipe
           @alert_fd = @alert_read.fd
@@ -230,20 +239,34 @@
       # cross-thread wakeup fd), matching Tcl_WaitForEvent's "found
       # something" case - see this file's header comment for why this can't
       # go through Crystal's own IO readiness tracking.
+      #
+      # state.pollfds/poll_fds are rebuilt only when handlers_dirty (set by
+      # create/delete_file_handler) - the overwhelmingly common call finds
+      # the fd set unchanged since last time and reuses both buffers as-is,
+      # with no allocation. revents needs no manual reset between calls:
+      # poll(2) itself overwrites it fresh every call, never ORs onto a
+      # stale value.
       def self.poll_once(state : ThreadState) : Bool
-        pollfds = Array(LibPoll::Pollfd).new(state.handlers.size + 1)
-        fds = Array(Int32).new(state.handlers.size + 1)
+        if state.handlers_dirty
+          state.pollfds.clear
+          state.poll_fds.clear
 
-        state.handlers.each do |handler_fd, entry|
-          events = 0_i16
-          events |= LibPoll::POLLIN if (entry.mask & LibTcl::TCL_READABLE) != 0
-          events |= LibPoll::POLLOUT if (entry.mask & LibTcl::TCL_WRITABLE) != 0
-          next if events.zero?
-          pollfds << LibPoll::Pollfd.new(fd: handler_fd, events: events, revents: 0_i16)
-          fds << handler_fd
+          state.handlers.each do |handler_fd, entry|
+            events = 0_i16
+            events |= LibPoll::POLLIN if (entry.mask & LibTcl::TCL_READABLE) != 0
+            events |= LibPoll::POLLOUT if (entry.mask & LibTcl::TCL_WRITABLE) != 0
+            next if events.zero?
+            state.pollfds << LibPoll::Pollfd.new(fd: handler_fd, events: events, revents: 0_i16)
+            state.poll_fds << handler_fd
+          end
+          state.pollfds << LibPoll::Pollfd.new(fd: state.alert_fd, events: LibPoll::POLLIN, revents: 0_i16)
+          state.poll_fds << -1 # sentinel: the alert fd, not a registered handler
+
+          state.handlers_dirty = false
         end
-        pollfds << LibPoll::Pollfd.new(fd: state.alert_fd, events: LibPoll::POLLIN, revents: 0_i16)
-        fds << -1 # sentinel: the alert fd, not a registered handler
+
+        pollfds = state.pollfds
+        fds = state.poll_fds
 
         result = LibPoll.poll(pollfds.to_unsafe, LibC::ULong.new(pollfds.size), 0)
         return false if result <= 0
@@ -367,6 +390,7 @@
     else
       state.handlers[fd] = Tryst::Notifier::FileHandlerEntry.new(mask, proc, client_data, fd)
     end
+    state.handlers_dirty = true
   end
 
   fun tryst_notifier_delete_file_handler(fd : LibC::Int) : Nil
@@ -374,6 +398,7 @@
     return unless state
 
     state.handlers.delete(fd)
+    state.handlers_dirty = true
   end
 
   # Called later by Tcl_ServiceEvent, not from WaitForEvent - see this file's

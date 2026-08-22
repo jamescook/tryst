@@ -196,6 +196,16 @@
         getter alert_fd : Int32
         getter run_loop : LibCF::CFRunLoopRef
 
+        # poll_once's own buffers, cached here so the steady-state (nothing
+        # registered/unregistered since the last call) path is allocation-
+        # free - rebuilt only when create/delete_file_handler flips
+        # handlers_dirty. poll_fds is parallel to pollfds (same index) -
+        # see notifier.cr's own ThreadState for why this is a plain fd, not
+        # a sentinel here (macOS's poll set never includes the alert fd).
+        property pollfds = Array(LibPollMacOS::Pollfd).new
+        property poll_fds = Array(Int32).new
+        property handlers_dirty = true
+
         def initialize
           @alert_read, @alert_write = IO.pipe
           @alert_fd = @alert_read.fd
@@ -236,20 +246,30 @@
       # #tryst_notifier_macos_alert already wakes a blocked
       # CFRunLoopRunInMode directly via CFRunLoopWakeUp, so this only
       # needs to drain it, not detect it as "found something."
+      #
+      # state.pollfds/poll_fds are rebuilt only when handlers_dirty (set by
+      # create/delete_file_handler) - see notifier.cr's own #poll_once for
+      # why the steady-state path needs neither a rebuild nor a manual
+      # revents reset.
       def self.poll_once(state : ThreadState) : Bool
-        return false if state.handlers.empty?
+        if state.handlers_dirty
+          state.pollfds.clear
+          state.poll_fds.clear
 
-        pollfds = Array(LibPollMacOS::Pollfd).new(state.handlers.size)
-        fds = Array(Int32).new(state.handlers.size)
+          state.handlers.each do |handler_fd, entry|
+            events = 0_i16
+            events |= LibPollMacOS::POLLIN if (entry.mask & LibTcl::TCL_READABLE) != 0
+            events |= LibPollMacOS::POLLOUT if (entry.mask & LibTcl::TCL_WRITABLE) != 0
+            next if events.zero?
+            state.pollfds << LibPollMacOS::Pollfd.new(fd: handler_fd, events: events, revents: 0_i16)
+            state.poll_fds << handler_fd
+          end
 
-        state.handlers.each do |handler_fd, entry|
-          events = 0_i16
-          events |= LibPollMacOS::POLLIN if (entry.mask & LibTcl::TCL_READABLE) != 0
-          events |= LibPollMacOS::POLLOUT if (entry.mask & LibTcl::TCL_WRITABLE) != 0
-          next if events.zero?
-          pollfds << LibPollMacOS::Pollfd.new(fd: handler_fd, events: events, revents: 0_i16)
-          fds << handler_fd
+          state.handlers_dirty = false
         end
+
+        pollfds = state.pollfds
+        fds = state.poll_fds
         return false if pollfds.empty?
 
         result = LibPollMacOS.poll(pollfds.to_unsafe, LibC::UInt.new(pollfds.size), 0)
@@ -360,6 +380,7 @@
     else
       state.handlers[fd] = Tryst::NotifierMacOS::FileHandlerEntry.new(mask, proc, client_data, fd)
     end
+    state.handlers_dirty = true
   end
 
   fun tryst_notifier_macos_delete_file_handler(fd : LibC::Int) : Nil
@@ -367,6 +388,7 @@
     return unless state
 
     state.handlers.delete(fd)
+    state.handlers_dirty = true
   end
 
   # Called later by Tcl_ServiceEvent, not from WaitForEvent - mirrors
