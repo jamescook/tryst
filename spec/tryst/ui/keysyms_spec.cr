@@ -67,4 +67,25 @@ describe Tryst::UI::Keysyms do
   it "patterns_for plain Tab is unaffected by the Shift-Tab special case" do
     Tryst::UI::Keysyms.patterns_for([] of String, "Tab").should eq(["<Tab>"])
   end
+
+  it "patterns_for Shift-<letter> binds the real (uppercase) keysym, not a literal Shift modifier" do
+    patterns = Tryst::UI::Keysyms.patterns_for(["Shift"], "p")
+
+    patterns.should contain("<P>")
+    patterns.should contain("<Shift-p>")
+  end
+
+  it "patterns_for Shift-<letter> with another modifier keeps that modifier on the uppercase form" do
+    patterns = Tryst::UI::Keysyms.patterns_for(["Control", "Shift"], "s")
+
+    patterns.should contain("<Control-S>")
+  end
+
+  it "patterns_for a non-letter Shift combo (e.g. Shift-F1) is unaffected by the letter special case" do
+    Tryst::UI::Keysyms.patterns_for(["Shift"], "F1").should eq(["<Shift-F1>"])
+  end
+
+  it "patterns_for a plain letter (no Shift) is unaffected by the letter special case" do
+    Tryst::UI::Keysyms.patterns_for([] of String, "p").should eq(["<p>"])
+  end
 end

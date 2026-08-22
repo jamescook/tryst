@@ -73,6 +73,23 @@ tk_test "WidgetDSL#on_key binds a real app-wide keystroke to the root window" do
   raise "expected the F2 binding to fire, fired=#{fired}" unless app.interp.wait_until { fired > 0 }
 end
 
+# A real Shift+P key press reports keysym "P" outright, never keysym "p"
+# plus a Shift modifier bit - so a literal <Shift-p> Tk binding alone
+# never fires for it.
+tk_test "WidgetDSL#on_key(\"Shift-p\") fires on a real Shift+P key press" do |app|
+  session = WidgetDslHarness.new
+  fired = 0
+  session.on_key("Shift-p") { |_args, _signal| fired += 1 }
+  session.button(:elsewhere, text: "not focused")
+
+  Tryst::UI::Realizer.new(app, session.document).realize
+  app.show
+  app.update
+
+  app.interp.simulate_event(".", "<P>")
+  raise "expected the Shift-p binding to fire on a real Shift+P press, fired=#{fired}" unless app.interp.wait_until { fired > 0 }
+end
+
 # Keysyms.resolve passes an unrecognised key spec through into the event
 # pattern verbatim, and App#bind used to interpolate that pattern straight
 # into a tcl_eval script - so a spec containing Tcl metacharacters could

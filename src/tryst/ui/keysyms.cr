@@ -43,12 +43,16 @@ module Tryst
       end
 
       # Tk event patterns to bind for a resolved (modifiers, keysym) pair -
-      # usually just one, but Shift+Tab is a known cross-platform gotcha:
-      # X11 delivers it as the distinct keysym ISO_Left_Tab, not Tab with
-      # a Shift modifier, so binding only <Shift-Tab> silently never fires
-      # there. Bind every spelling so the handler fires regardless of
-      # platform; on platforms where a given spelling never occurs, that
-      # binding is simply inert.
+      # usually just one, but two combinations are known cross-platform
+      # gotchas where the literal <Modifier-key> pattern silently never
+      # fires, so every real spelling is bound instead:
+      #
+      # - Shift+Tab: X11 delivers it as the distinct keysym ISO_Left_Tab,
+      #   not Tab with a Shift modifier.
+      # - Shift+letter: a real Shift+P press reports keysym "P" outright,
+      #   never keysym "p" plus a Shift bit. Unlike Tab, the shifted
+      #   keysym here is simply the uppercase letter, so it's derived
+      #   rather than hardcoded per key.
       def self.patterns_for(modifiers : Array(String), keysym : String) : Array(String)
         if keysym == "Tab" && modifiers.includes?("Shift")
           without_shift = modifiers - ["Shift"]
@@ -57,6 +61,9 @@ module Tryst
             pattern(without_shift, "ISO_Left_Tab"),
             pattern(modifiers, "ISO_Left_Tab"),
           ].uniq
+        elsif modifiers.includes?("Shift") && keysym.matches?(/\A[a-z]\z/)
+          without_shift = modifiers - ["Shift"]
+          [pattern(without_shift, keysym.upcase), pattern(modifiers, keysym)].uniq
         else
           [pattern(modifiers, keysym)]
         end
