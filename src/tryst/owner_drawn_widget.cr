@@ -96,8 +96,14 @@ module Tryst
       @destroyed = false
       @tweens = [] of Tween
 
+      # background: matches the parent's real theme color - a plain Tk
+      # canvas otherwise defaults to plain white, which stands out as a
+      # visibly different rectangle against a themed ttk parent
+      # (confirmed directly, not a theoretical concern - this is
+      # PRECISELY the "every ad-hoc canvas widget skips this" gap
+      # Theme's own class comment already calls out).
       @canvas = @app.create_widget("canvas", parent: parent, width: width, height: height,
-        highlightthickness: 0, takefocus: 1)
+        highlightthickness: 0, takefocus: 1, background: @theme.background_name)
 
       wire_state_bindings
       @canvas.bind("Configure", :width, :height) do |_values, _signal|

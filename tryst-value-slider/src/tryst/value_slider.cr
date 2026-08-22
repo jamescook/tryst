@@ -80,6 +80,9 @@ module Tryst
     @bubble_tween : Tween?
     @hide_handle : AfterHandle?
     @surface : Vector::Surface?
+    @label_min : Widget
+    @label_max : Widget
+    @label_bubble : Widget
 
     # Snaps `raw` to the nearest `step` from `min`, then clamps to
     # [min, max] - the pure math every value change (drag, click,
@@ -130,12 +133,17 @@ module Tryst
 
       super(app, width: width, height: height, parent: parent)
 
+      # background: matches the real parent background - see
+      # OwnerDrawnWidget's own canvas background comment for why (a
+      # plain Tk label otherwise defaults to plain white and stands out
+      # against a themed ttk parent).
+      label_bg = theme.background_name
       @label_min = app.create_widget("label", parent: parent, text: @format.call(@min),
-        font: font, borderwidth: 0)
+        font: font, borderwidth: 0, background: label_bg)
       @label_max = app.create_widget("label", parent: parent, text: @format.call(@max),
-        font: font, borderwidth: 0)
+        font: font, borderwidth: 0, background: label_bg)
       @label_bubble = app.create_widget("label", parent: parent, font: font,
-        borderwidth: 0, padx: 7, pady: 2)
+        borderwidth: 0, padx: 7, pady: 2, background: label_bg)
 
       # Reserved height AND width for a fully-shown bubble, measured
       # once now rather than from the label's current text on every

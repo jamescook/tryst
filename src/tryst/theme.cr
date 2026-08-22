@@ -25,6 +25,22 @@ module Tryst
       color(style, "-background", default: "#ffffff")
     end
 
+    # The raw Tk colour NAME (symbolic on aqua, e.g.
+    # "systemWindowBackgroundColor"; literal hex on most other themes) -
+    # for handing straight to another real widget's own -background
+    # option (a plain Tk label/canvas, whose background otherwise
+    # defaults to plain white and stands out against a themed ttk
+    # parent - confirmed directly, this is exactly what made an owner-
+    # drawn widget's label sit in its own visibly brighter rectangle).
+    # Skips #background's own RGB round-trip on purpose: that path is
+    # for ThorVG/canvas drawing math, which needs real numbers, but
+    # `winfo rgb`'s 16-bit -> 8-bit downscale can round to a shade Tk
+    # itself doesn't actually paint - a real risk for the exact "match
+    # my surroundings exactly" job this method exists for.
+    def background_name(style : String = ".") : String
+      lookup(style, "-background", default: "#ffffff")
+    end
+
     # The current text/foreground color.
     def foreground(style : String = ".") : {UInt8, UInt8, UInt8}
       color(style, "-foreground", default: "#000000")
@@ -43,8 +59,11 @@ module Tryst
     # that an unrecognized option returns empty rather than raising, so
     # this always needs a caller-supplied fallback to stay meaningful.
     def color(style : String, option : String, default : String) : {UInt8, UInt8, UInt8}
-      name = @app.tcl_invoke("ttk::style", "lookup", style, option, "", default)
-      rgb(name)
+      rgb(lookup(style, option, default))
+    end
+
+    private def lookup(style : String, option : String, default : String) : String
+      @app.tcl_invoke("ttk::style", "lookup", style, option, "", default)
     end
 
     # Resolves any Tk color name (symbolic like "systemWindowBackgroundColor"
