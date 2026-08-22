@@ -1236,7 +1236,7 @@ module Tryst
     end
 
     private def to_tcl_arg_list(args) : Array(TclArgValue)
-      args.to_a.map { |arg| to_tcl_value(arg) }
+      Array(TclArgValue).new(args.size) { |i| to_tcl_value(args[i]) }
     end
 
     private def to_tcl_kwarg_hash(kwargs) : Hash(String, TclArgValue)

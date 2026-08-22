@@ -656,24 +656,29 @@ module Tryst
     # arguments, since there's no string-quoting step where injection could
     # creep in. Mirrors ruby-tryst's Interp#tcl_invoke.
     def tcl_invoke(*args : String) : String
-      tcl_invoke(args.to_a)
+      check_thread_affinity!
+      objv = Array(LibTcl::Obj*).new(args.size) { |i| new_owned_obj(args[i]) }
+      invoke_objv(objv)
     end
 
     def tcl_invoke(args : Enumerable(String)) : String
       check_thread_affinity!
-      objv = args.map do |arg|
-        obj = LibTcl.new_string_obj(arg, LibTcl::TclSize.new(arg.bytesize))
-        LibTcl.db_incr_ref_count(obj, __FILE__, __LINE__)
-        obj
-      end
+      objv = args.map { |arg| new_owned_obj(arg) }
+      invoke_objv(objv)
+    end
 
-      begin
-        code = LibTcl.eval_objv(ptr, LibTcl::TclSize.new(objv.size), objv.to_unsafe, 0)
-        raise_tcl_error(code) unless code == TCL_OK
-        result
-      ensure
-        objv.each { |obj| LibTcl.db_decr_ref_count(obj, __FILE__, __LINE__) }
-      end
+    private def new_owned_obj(arg : String) : LibTcl::Obj*
+      obj = LibTcl.new_string_obj(arg, LibTcl::TclSize.new(arg.bytesize))
+      LibTcl.db_incr_ref_count(obj, __FILE__, __LINE__)
+      obj
+    end
+
+    private def invoke_objv(objv : Array(LibTcl::Obj*)) : String
+      code = LibTcl.eval_objv(ptr, LibTcl::TclSize.new(objv.size), objv.to_unsafe, 0)
+      raise_tcl_error(code) unless code == TCL_OK
+      result
+    ensure
+      objv.each { |obj| LibTcl.db_decr_ref_count(obj, __FILE__, __LINE__) }
     end
 
     # Gets a Tcl variable's value (array-element and namespaced forms
