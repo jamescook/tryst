@@ -412,6 +412,23 @@ ensure
   textured.destroy
 end
 
+# Case G4: repeated same-size batches allocate nothing after warm-up -
+# draw_geometry's own scratch buffer, not a fresh Array every call.
+particle_fan = [
+  Tryst::SDL::Vertex.new(Tryst::SDL::Point.new(0, 0), red),
+  Tryst::SDL::Vertex.new(Tryst::SDL::Point.new(mid, 0), red),
+  Tryst::SDL::Vertex.new(Tryst::SDL::Point.new(0, h), red),
+]
+renderer.draw_geometry(particle_fan) # warm up
+GC.collect
+before_geometry_bytes = GC.stats.total_bytes
+50.times { renderer.draw_geometry(particle_fan) }
+after_geometry_bytes = GC.stats.total_bytes
+if after_geometry_bytes != before_geometry_bytes
+  raise "geometry: expected repeated same-size draw_geometry calls to allocate nothing, " \
+        "got #{after_geometry_bytes - before_geometry_bytes} bytes over 50 calls"
+end
+
 # Case 5: destroy takes the frame and leaves the application standing.
 viewport.destroy
 app.update

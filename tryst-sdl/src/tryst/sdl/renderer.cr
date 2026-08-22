@@ -63,6 +63,9 @@ module Tryst
       def initialize(@renderer : LibSDL::Renderer*)
       end
 
+      # #draw_geometry's own scratch buffer - see #vertex_scratch.
+      @vertex_scratch = Slice(LibSDL::Vertex).empty
+
       # The colour subsequent draws use.
       def color : Color
         r = 0_u8
@@ -183,7 +186,8 @@ module Tryst
       # and reused rather than duplicated.
       def draw_geometry(vertices : Array(Vertex), texture : Texture? = nil,
                         indices : Array(Int32)? = nil) : self
-        raw_vertices = vertices.map(&.to_unsafe)
+        raw_vertices = vertex_scratch(vertices.size)
+        vertices.each_with_index { |vertex, i| raw_vertices[i] = vertex.to_unsafe }
         texture_ptr = texture ? texture.to_unsafe : Pointer(LibSDL::Texture).null
 
         ok =
@@ -197,6 +201,18 @@ module Tryst
 
         raise Error.new("SDL_RenderGeometry failed: #{SDL.last_error}") unless ok
         self
+      end
+
+      # Safe to share across calls: the render loop is single-threaded,
+      # and each call overwrites every element it uses before handing
+      # the slice to SDL.
+      private def vertex_scratch(size : Int32) : Slice(LibSDL::Vertex)
+        current = @vertex_scratch
+        return current[0, size] if current.size >= size
+
+        buffer = Slice(LibSDL::Vertex).new(size) { LibSDL::Vertex.new }
+        @vertex_scratch = buffer
+        buffer
       end
 
       # Puts everything drawn since the last present on screen.
