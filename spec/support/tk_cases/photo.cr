@@ -1,5 +1,17 @@
 require "../tk_test_registry"
 
+module Tryst
+  class Interp
+    # @api private - test-only forwarder, so the non-fast-path branch
+    # can be exercised against a hand-built block (no real Tk photo
+    # reports a non-packed-RGBA layout to test it through otherwise).
+    def test_copy_pixels(block : LibTk::PhotoImageBlock, dest : Bytes,
+                         x_off : Int32, y_off : Int32, width : Int32, height : Int32) : Nil
+      copy_pixels(block, dest, x_off, y_off, width, height)
+    end
+  end
+end
+
 private def solid(r : Int32, g : Int32, b : Int32, a : Int32, pixels : Int32) : Bytes
   channels = StaticArray[r.to_u8, g.to_u8, b.to_u8, a.to_u8]
   Bytes.new(pixels * 4) { |i| channels[i % 4] }
@@ -307,6 +319,40 @@ tk_test "Photo#get_image rejects an offset outside the image" do |app|
   end
 ensure
   photo.try(&.delete)
+end
+
+tk_test "copy_pixels reads a non-packed-RGBA layout correctly (BGRA, via a hand-built block)" do |app|
+  src = Bytes[2, 1, 0, 255, 20, 10, 0, 200] # two BGRA pixels
+  block = LibTk::PhotoImageBlock.new
+  block.pixel_ptr = src.to_unsafe
+  block.width = 2
+  block.height = 1
+  block.pitch = 8
+  block.pixel_size = 4
+  block.offset = StaticArray[2, 1, 0, 3]
+
+  dest = Bytes.new(8)
+  app.interp.test_copy_pixels(block, dest, 0, 0, 2, 1)
+
+  expected = Bytes[0, 1, 2, 255, 0, 10, 20, 200]
+  raise "expected #{expected.to_a}, got #{dest.to_a}" unless dest == expected
+end
+
+tk_test "copy_pixels fills opaque alpha for a source with no alpha channel" do |app|
+  src = Bytes[10, 20, 30, 40, 50, 60] # two RGB (pixel_size 3) pixels, no alpha
+  block = LibTk::PhotoImageBlock.new
+  block.pixel_ptr = src.to_unsafe
+  block.width = 2
+  block.height = 1
+  block.pitch = 6
+  block.pixel_size = 3
+  block.offset = StaticArray[0, 1, 2, 3]
+
+  dest = Bytes.new(8)
+  app.interp.test_copy_pixels(block, dest, 0, 0, 2, 1)
+
+  expected = Bytes[10, 20, 30, 255, 40, 50, 60, 255]
+  raise "expected #{expected.to_a}, got #{dest.to_a}" unless dest == expected
 end
 
 tk_test "Photo#get_pixel reads exact RGBA values, including partial alpha" do |app|

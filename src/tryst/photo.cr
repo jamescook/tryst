@@ -247,23 +247,35 @@ module Tryst
     end
 
     # Copies a rectangle out of Tk's own pixel buffer into dest as packed
-    # RGBA. Reads through the block's channel offsets and honors its
-    # pitch/pixelSize rather than assuming a layout - Tk is free to store
-    # the image however it likes.
+    # RGBA, reading through the block's channel offsets/pitch/pixelSize
+    # rather than assuming a layout. Writes through a raw pointer since
+    # the loop arithmetic already guarantees in-bounds writes, with a
+    # whole-row memcpy fast path when the block is already packed RGBA
+    # (pixel_size 4, offsets {0,1,2,3}).
     private def copy_pixels(block : LibTk::PhotoImageBlock, dest : Bytes,
                             x_off : Int32, y_off : Int32, width : Int32, height : Int32) : Nil
       offsets = block.offset
       r_off, g_off, b_off, a_off = offsets[0], offsets[1], offsets[2], offsets[3]
       has_alpha = block.pixel_size >= 4
-      index = 0
+      dest_ptr = dest.to_unsafe
 
+      if has_alpha && r_off == 0 && g_off == 1 && b_off == 2 && a_off == 3
+        row_bytes = width * 4
+        height.times do |row|
+          src = block.pixel_ptr + (y_off + row) * block.pitch + x_off * block.pixel_size
+          Slice.new(src, row_bytes).copy_to(Slice.new(dest_ptr + row * row_bytes, row_bytes))
+        end
+        return
+      end
+
+      index = 0
       height.times do |row|
         src = block.pixel_ptr + (y_off + row) * block.pitch + x_off * block.pixel_size
         width.times do
-          dest[index] = src[r_off]
-          dest[index + 1] = src[g_off]
-          dest[index + 2] = src[b_off]
-          dest[index + 3] = has_alpha ? src[a_off] : 255_u8
+          dest_ptr[index] = src[r_off]
+          dest_ptr[index + 1] = src[g_off]
+          dest_ptr[index + 2] = src[b_off]
+          dest_ptr[index + 3] = has_alpha ? src[a_off] : 255_u8
           index += 4
           src += block.pixel_size
         end
