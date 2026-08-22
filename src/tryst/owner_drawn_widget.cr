@@ -1,3 +1,4 @@
+require "weak_ref"
 require "./app"
 require "./photo"
 require "./theme"
@@ -95,6 +96,7 @@ module Tryst
       @photo_item = nil
       @destroyed = false
       @tweens = [] of Tween
+      @animate_payloads = {} of Tween => {block: Float64 -> Nil, canvas: Widget}
 
       # background: a plain Tk canvas defaults to white; match the
       # theme instead so it doesn't stand out against its parent.
@@ -165,16 +167,52 @@ module Tryst
     # than an App#on_widget_destroyed hook), and #destroy cancels
     # whatever's still running immediately rather than waiting for its
     # next tick to notice.
+    #
+    # block typically closes over self (a subclass writes `animate(...)
+    # { redraw }`), so the tick closure captures only a WeakRef(self) and
+    # a box for the Tween's own identity - never self, block, or canvas
+    # directly. block/canvas instead live in @animate_payloads, reached
+    # only through the live widget once weak_self.value confirms it's
+    # still reachable. Otherwise this widget stays pinned reachable from
+    # App's own timer for as long as the tween runs (forever, for a
+    # looping animation), even after every other reference to it is
+    # dropped without #destroy - defeating the finalizer safety net.
     def animate(duration_ms : Int32, easing : Easing = :linear, &block : Float64 -> Nil) : Tween
       raise_if_destroyed!
-      @tweens.reject!(&.cancelled?)
-      canvas = @canvas
+      prune_finished_tweens
+
+      weak_self = WeakRef.new(self)
+      tween_box = [] of Tween
+
       tween = Tween.new(@app, duration_ms, easing) do |progress|
-        next unless canvas.exist?
-        block.call(progress)
+        if target = weak_self.value
+          target.deliver_animate_tick(tween_box.first?, progress)
+        else
+          tween_box.first?.try(&.cancel)
+        end
       end
+      tween_box << tween
+      @animate_payloads[tween] = {block: block, canvas: @canvas}
       @tweens << tween
       tween
+    end
+
+    # @api protected - called only from #animate's own tick closure, via
+    # the WeakRef it resolved to self. Never call directly.
+    protected def deliver_animate_tick(tween : Tween?, progress : Float64) : Nil
+      return unless tween
+      payload = @animate_payloads[tween]?
+      return unless payload
+      return unless payload[:canvas].exist?
+      payload[:block].call(progress)
+    end
+
+    private def prune_finished_tweens : Nil
+      @tweens.reject! do |tween|
+        stale = tween.cancelled?
+        @animate_payloads.delete(tween) if stale
+        stale
+      end
     end
 
     # Marks this widget disabled: no further hover/pressed tracking (a
@@ -206,6 +244,7 @@ module Tryst
       return if @destroyed
       @destroyed = true
       @tweens.each(&.cancel)
+      @animate_payloads.clear
       @photo.try(&.delete)
       @canvas.destroy
     end

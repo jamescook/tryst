@@ -1,3 +1,4 @@
+require "weak_ref"
 require "../tk_test_registry"
 require "../../../src/tryst/owner_drawn_widget"
 
@@ -163,4 +164,56 @@ tk_test "OwnerDrawnWidget's App#debug_info stays bounded across a create/destroy
   after = app.debug_info[:widget_types]? || 0
   raise "expected :widget_types back to baseline (#{baseline}) after 20 create/destroy cycles, got #{after}" \
     unless after == baseline
+end
+
+# Built in its own method so no local in the caller's stack frame keeps
+# a stale pointer to the widget alive longer than intended (Boehm's
+# conservative stack scanning). The animate block calls widget.redraw
+# (not just `redraw`, since this isn't itself an instance method) -
+# that's what makes it capture widget the same way a real subclass's
+# own `animate(...) { redraw }` captures self.
+private def spawn_widget_with_infinite_tween(app) : {WeakRef(TestOwnerDrawnWidget), Tryst::Tween}
+  widget = TestOwnerDrawnWidget.new(app, width: 10, height: 10)
+  path = widget.path
+  tween = widget.animate(999_999_999) { widget.redraw }
+  weak = WeakRef.new(widget)
+  # A parent cascading a destroy onto this widget's own canvas, without
+  # ever calling OwnerDrawnWidget#destroy - the scenario this whole
+  # bead is about.
+  app.tcl_invoke("destroy", path)
+  {weak, tween}
+end
+
+tk_test "a widget dropped without #destroy is still finalized while its own tween keeps running" do |app|
+  weak, tween = spawn_widget_with_infinite_tween(app)
+
+  # Let the tween tick for real at least once before ever attempting GC
+  # - the leak this guards against only shows up once App's own timer
+  # has actually started calling back, not merely having been scheduled.
+  10.times do
+    break if tween.cancelled?
+    sleep 20.milliseconds
+    app.update
+  end
+  raise "expected the tween to still be running before any GC" if tween.cancelled?
+
+  # Boehm's conservative stack scanning means one GC.collect isn't
+  # guaranteed to reclaim everything already unreachable (see Photo's
+  # own 200-Photos-in-one-collection case). A "Finalization cycle
+  # involving (???)" warning on stderr here is expected too.
+  10.times do
+    GC.collect
+    app.update
+    break if weak.value.nil?
+  end
+  raise "expected the widget to be finalized once nothing outside it referenced it" unless weak.value.nil?
+
+  # The tween doesn't learn its widget is gone until its OWN next tick -
+  # give it one more real chance before asserting the self-cancel.
+  10.times do
+    break if tween.cancelled?
+    sleep 20.milliseconds
+    app.update
+  end
+  raise "expected the tween to self-cancel once its widget was collected" unless tween.cancelled?
 end
