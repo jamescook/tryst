@@ -51,6 +51,12 @@ lib LibSDL
   fun get_render_draw_blend_mode = SDL_GetRenderDrawBlendMode(renderer : Renderer*,
                                                               mode : BlendMode*) : Bool
 
+  # SDL_BlendFactor/SDL_BlendOperation are C enums (default int-sized) -
+  # UInt32 matches SDL_ComposeCustomBlendMode's own parameter width.
+  fun compose_custom_blend_mode = SDL_ComposeCustomBlendMode(src_color_factor : UInt32, dst_color_factor : UInt32,
+                                                             color_operation : UInt32, src_alpha_factor : UInt32,
+                                                             dst_alpha_factor : UInt32, alpha_operation : UInt32) : BlendMode
+
   fun render_clear = SDL_RenderClear(renderer : Renderer*) : Bool
   fun render_present = SDL_RenderPresent(renderer : Renderer*) : Bool
 

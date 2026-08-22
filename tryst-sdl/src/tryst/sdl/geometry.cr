@@ -87,6 +87,51 @@ module Tryst
       # by alpha, which is what most image pipelines produce.
       BlendPremultiplied = 0x00000010
       AddPremultiplied   = 0x00000020
+
+      # Builds a BlendMode outside the fixed set above, from SDL's own
+      # lower-level src*dst*op algebra - e.g. an inverse blend that makes
+      # white text invert whatever colour is behind it, so it stays
+      # readable over any background:
+      #
+      # ```
+      # BlendMode.compose(:one_minus_dst_color, :one_minus_src_alpha, :add,
+      #   :zero, :one, :add)
+      # ```
+      #
+      # Not every renderer backend supports every combination - SDL falls
+      # back to ordinary alpha blending where it does not.
+      def self.compose(src_color : BlendFactor, dst_color : BlendFactor, color_op : BlendOperation,
+                       src_alpha : BlendFactor, dst_alpha : BlendFactor, alpha_op : BlendOperation) : BlendMode
+        BlendMode.new(LibSDL.compose_custom_blend_mode(
+          src_color.value, dst_color.value, color_op.value,
+          src_alpha.value, dst_alpha.value, alpha_op.value))
+      end
+    end
+
+    # The per-channel weight SDL multiplies a colour by before a
+    # BlendMode's operation combines source and destination - see
+    # BlendMode.compose.
+    enum BlendFactor : UInt32
+      Zero             = 0x1
+      One              = 0x2
+      SrcColor         = 0x3
+      OneMinusSrcColor = 0x4
+      SrcAlpha         = 0x5
+      OneMinusSrcAlpha = 0x6
+      DstColor         = 0x7
+      OneMinusDstColor = 0x8
+      DstAlpha         = 0x9
+      OneMinusDstAlpha = 0xA
+    end
+
+    # How the weighted source and destination from a BlendMode.compose
+    # call combine into the final pixel.
+    enum BlendOperation : UInt32
+      Add         = 0x1
+      Subtract    = 0x2
+      RevSubtract = 0x3
+      Minimum     = 0x4
+      Maximum     = 0x5
     end
 
     # How a texture is sampled when drawn at a size other than its own -
