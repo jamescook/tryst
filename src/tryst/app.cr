@@ -913,17 +913,17 @@ module Tryst
 
       type = @widget_types_by_path[cmd.to_s]?
       entries = type ? CommandInterceptors.for_type(type) : [] of CommandInterceptors::Entry
-      matches = [] of {String, String}
+      matches = nil
       entries.each do |entry|
         result = entry.block.call(self, cmd.to_s, args, kwargs)
-        matches << {entry.label, result} if result
+        next unless result
+        (matches ||= [] of {String, String}) << {entry.label, result}
       end
 
-      case matches.size
-      when 0
+      if matches.nil?
         processed = track_widget_option_callbacks(cmd, args, kwargs)
         raw_command_argv(cmd, args, processed)
-      when 1
+      elsif matches.size == 1
         matches.first[1]
       else
         labels = matches.map { |label, _| label }.join(", ")
@@ -1191,6 +1191,8 @@ module Tryst
     # three address the same underlying option namespace and must replace
     # each other.
     private def track_widget_option_callbacks(cmd, args : Array(TclArgValue), kwargs : Hash(String, TclArgValue)) : Hash(String, TclArgValue)
+      return kwargs unless kwargs.each_value.any?(Proc)
+
       first_arg = args[0]?
       if WIDGET_COMMANDS.includes?(cmd.to_s) && first_arg.is_a?(String)
         widget_path = first_arg
@@ -1215,7 +1217,6 @@ module Tryst
         ids[(context + [key.to_s]).join(" ")] = id
         replacements[key.to_s] = "crystal_callback #{id}"
       end
-      return kwargs if replacements.empty?
       callback_registry.reconcile({:widget_option, widget_path}) { |before| before.merge(ids) }
       kwargs.merge(replacements)
     end
