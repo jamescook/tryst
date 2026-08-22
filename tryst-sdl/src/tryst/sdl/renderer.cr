@@ -146,14 +146,22 @@ module Tryst
       # A CONNECTED polyline through the points, not a set of separate
       # segments - the same distinction SDL draws between RenderLines and
       # repeated RenderLine.
-      def draw_lines(points : Enumerable(Point), color : Color? = nil) : self
+      #
+      # An Array/Slice(Point) is handed to SDL directly with no per-call
+      # copy - see #point_ptr. Anything else (a general Enumerable, a
+      # lazily generated sequence) still works via the fallback below,
+      # which builds the array SDL needs.
+      def draw_lines(points : Array(Point) | Slice(Point), color : Color? = nil) : self
         self.color = color if color
-        raw = points.map(&.to_unsafe).to_a
-        return self if raw.size < 2
-        unless LibSDL.render_lines(@renderer, raw.to_unsafe, raw.size)
+        return self if points.size < 2
+        unless LibSDL.render_lines(@renderer, point_ptr(points), points.size)
           raise Error.new("SDL_RenderLines failed: #{SDL.last_error}")
         end
         self
+      end
+
+      def draw_lines(points : Enumerable(Point), color : Color? = nil) : self
+        draw_lines(points.to_a, color)
       end
 
       def draw_point(x : Number, y : Number, color : Color? = nil) : self
@@ -164,14 +172,32 @@ module Tryst
         self
       end
 
-      def draw_points(points : Enumerable(Point), color : Color? = nil) : self
+      # See #draw_lines for the Array/Slice(Point) vs. Enumerable(Point)
+      # split.
+      def draw_points(points : Array(Point) | Slice(Point), color : Color? = nil) : self
         self.color = color if color
-        raw = points.map(&.to_unsafe).to_a
-        return self if raw.empty?
-        unless LibSDL.render_points(@renderer, raw.to_unsafe, raw.size)
+        return self if points.empty?
+        unless LibSDL.render_points(@renderer, point_ptr(points), points.size)
           raise Error.new("SDL_RenderPoints failed: #{SDL.last_error}")
         end
         self
+      end
+
+      def draw_points(points : Enumerable(Point), color : Color? = nil) : self
+        draw_points(points.to_a, color)
+      end
+
+      # Point and LibSDL::FPoint are both exactly two Float32 fields (x,
+      # y) in the same order, so a Point's own memory already IS an
+      # FPoint - reinterpreting the pointer is safe and copies nothing.
+      # The raise is a guard against that ever silently stopping being
+      # true: it runs once, at load time, not per call.
+      raise "Tryst::SDL::Point's layout no longer matches LibSDL::FPoint - " \
+            "the zero-copy Renderer#draw_lines/#draw_points cast is unsafe" \
+             unless sizeof(Point) == sizeof(LibSDL::FPoint)
+
+      private def point_ptr(points : Array(Point) | Slice(Point)) : LibSDL::FPoint*
+        points.to_unsafe.as(LibSDL::FPoint*)
       end
 
       # Draws an arbitrary list of coloured (and, with a texture,

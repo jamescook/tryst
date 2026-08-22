@@ -160,6 +160,71 @@ renderer.read_pixels do |pixels|
   raise "renderer: expected off-line to stay red, got #{off_line}" unless off_line.r > 200
 end
 
+# Case R5a: draw_points/draw_lines with an Array(Point) - the zero-copy
+# path. Points placed off the diagonal (x-fraction != y-fraction), so a
+# transposed x/y from a wrong reinterpret would land on the wrong pixel
+# rather than accidentally passing.
+renderer.clear(red)
+p1 = Tryst::SDL::Point.new(viewport.width * 0.25, viewport.height * 0.75)
+p2 = Tryst::SDL::Point.new(viewport.width * 0.75, viewport.height * 0.25)
+renderer.draw_points([p1, p2], color: blue)
+renderer.read_pixels do |pixels|
+  on1 = pixels[(pixels.width * 0.25).to_i, (pixels.height * 0.75).to_i]
+  on2 = pixels[(pixels.width * 0.75).to_i, (pixels.height * 0.25).to_i]
+  transposed = pixels[(pixels.width * 0.75).to_i, (pixels.height * 0.75).to_i]
+  raise "renderer: expected p1 to be blue, got #{on1}" unless on1.b > 200
+  raise "renderer: expected p2 to be blue, got #{on2}" unless on2.b > 200
+  raise "renderer: expected the transposed point to stay red, got #{transposed}" unless transposed.r > 200
+end
+
+renderer.clear(red)
+renderer.draw_lines([p1, p2], color: blue)
+renderer.read_pixels do |pixels|
+  # Endpoints already checked above for transposition; here just
+  # confirm the line was drawn at all.
+  mid = pixels[(pixels.width * 0.5).to_i, (pixels.height * 0.5).to_i]
+  raise "renderer: expected the polyline to be blue, got #{mid}" unless mid.b > 200
+end
+
+# Case R5b: the Enumerable(Point) fallback (a Set, not an Array/Slice)
+# draws the same thing as the zero-copy path above.
+renderer.clear(red)
+renderer.draw_points(Set{p1, p2}, color: blue)
+renderer.read_pixels do |pixels|
+  on1 = pixels[(pixels.width * 0.25).to_i, (pixels.height * 0.75).to_i]
+  on2 = pixels[(pixels.width * 0.75).to_i, (pixels.height * 0.25).to_i]
+  raise "renderer: expected the Enumerable fallback's p1 to be blue, got #{on1}" unless on1.b > 200
+  raise "renderer: expected the Enumerable fallback's p2 to be blue, got #{on2}" unless on2.b > 200
+end
+
+# Case R5c: an Array(Point)/Slice(Point) with 2+ points allocates
+# nothing per call, once warmed up - no per-call Array anymore.
+line_points = [p1, p2]
+renderer.draw_lines(line_points, color: blue) # warm up
+renderer.draw_points(line_points, color: blue)
+GC.collect
+before_points_bytes = GC.stats.total_bytes
+1000.times do
+  renderer.draw_lines(line_points, color: blue)
+  renderer.draw_points(line_points, color: blue)
+end
+after_points_bytes = GC.stats.total_bytes
+if after_points_bytes != before_points_bytes
+  raise "renderer: expected Array(Point) draw_lines/draw_points to allocate nothing, " \
+        "got #{after_points_bytes - before_points_bytes} bytes over 1000 calls"
+end
+
+slice_points = Slice[p1, p2]
+renderer.draw_lines(slice_points, color: blue) # warm up
+GC.collect
+before_slice_bytes = GC.stats.total_bytes
+1000.times { renderer.draw_lines(slice_points, color: blue) }
+after_slice_bytes = GC.stats.total_bytes
+if after_slice_bytes != before_slice_bytes
+  raise "renderer: expected Slice(Point) draw_lines to allocate nothing, " \
+        "got #{after_slice_bytes - before_slice_bytes} bytes over 1000 calls"
+end
+
 # Case R6: the render block presents, and hands back the viewport so it
 # can be chained.
 drew = false
