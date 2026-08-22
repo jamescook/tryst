@@ -25,18 +25,10 @@ module Tryst
       color(style, "-background", default: "#ffffff")
     end
 
-    # The raw Tk colour NAME (symbolic on aqua, e.g.
-    # "systemWindowBackgroundColor"; literal hex on most other themes) -
-    # for handing straight to another real widget's own -background
-    # option (a plain Tk label/canvas, whose background otherwise
-    # defaults to plain white and stands out against a themed ttk
-    # parent - confirmed directly, this is exactly what made an owner-
-    # drawn widget's label sit in its own visibly brighter rectangle).
-    # Skips #background's own RGB round-trip on purpose: that path is
-    # for ThorVG/canvas drawing math, which needs real numbers, but
-    # `winfo rgb`'s 16-bit -> 8-bit downscale can round to a shade Tk
-    # itself doesn't actually paint - a real risk for the exact "match
-    # my surroundings exactly" job this method exists for.
+    # The raw Tk colour name/hex string, for another widget's own
+    # -background option - skips #background's RGB round-trip, which
+    # loses precision `winfo rgb`'s 16-bit -> 8-bit downscale can round
+    # away.
     def background_name(style : String = ".") : String
       lookup(style, "-background", default: "#ffffff")
     end

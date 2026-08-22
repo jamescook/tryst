@@ -133,10 +133,7 @@ module Tryst
 
       super(app, width: width, height: height, parent: parent)
 
-      # background: matches the real parent background - see
-      # OwnerDrawnWidget's own canvas background comment for why (a
-      # plain Tk label otherwise defaults to plain white and stands out
-      # against a themed ttk parent).
+      # A plain Tk label defaults to white; match the theme instead.
       label_bg = theme.background_name
       @label_min = app.create_widget("label", parent: parent, text: @format.call(@min),
         font: font, borderwidth: 0, background: label_bg)

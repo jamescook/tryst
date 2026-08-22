@@ -137,14 +137,9 @@ module Tryst
       canvas_h = (2 * MARGIN + @track_h).to_i
 
       if t = text
-        # A fresh Theme, not the inherited #theme getter - the label has
-        # to exist before #super (its measured size determines the
-        # canvas's own width/height), and #theme isn't available until
-        # OwnerDrawnWidget's own #initialize runs. Theme.new is cheap -
-        # just an app reference - so a short-lived local instance here
-        # costs nothing. background: matches the real parent background
-        # - see OwnerDrawnWidget's own canvas background comment for why
-        # this matters (a plain Tk label defaults to plain white).
+        # A fresh Theme, not #theme - the label must exist before #super
+        # (its measured size sets the canvas's own width/height), and
+        # #theme isn't available until OwnerDrawnWidget's #initialize runs.
         label = app.create_widget("label", parent: parent, text: t, font: font, borderwidth: 0,
           background: Theme.new(app).background_name)
         @label = label
