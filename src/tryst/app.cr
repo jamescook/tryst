@@ -1241,7 +1241,9 @@ module Tryst
     end
 
     private def to_tcl_kwarg_hash(kwargs) : Hash(String, TclArgValue)
-      kwargs.to_h.transform_keys(&.to_s).transform_values { |value| to_tcl_value(value).as(TclArgValue) }
+      hash = Hash(String, TclArgValue).new(initial_capacity: kwargs.size)
+      kwargs.each { |key, value| hash[key.to_s] = to_tcl_value(value) }
+      hash
     end
 
     private def raw_command_argv(cmd, args : Array(TclArgValue), kwargs : Hash(String, TclArgValue)) : String
