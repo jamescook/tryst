@@ -6,11 +6,14 @@ Tryst builds real desktop apps — native widgets, menus, dialogs, canvases —
 from plain Crystal, compiled to a single binary, with Tcl/Tk as the only
 system dependency.
 
-> **Status: pre-release.** No tagged version yet; the API is still
-> settling and may change without notice. It's developed and tested on
-> macOS (Aqua) and Linux (X11), with a full spec suite on Tcl/Tk 8.6
-> and 9.x, but nothing has shipped as a release. Pin a commit if you
-> need stability.
+> [!WARNING]
+> **Early development. Alpha quality. Expect breaking changes.**
+> This is a monorepo of shards under active, early development. Things
+> may change — including public APIs — commit-to-commit without notice.
+> No tagged version yet. It's developed and tested on macOS (Aqua) and
+> Linux (X11), with a full spec suite on Tcl/Tk 8.6 and 9.x, but nothing
+> has shipped as a release. Pin a commit if you need stability. Built
+> with AI assistance.
 
 ```crystal
 require "tryst/ui"
