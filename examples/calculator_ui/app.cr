@@ -35,11 +35,11 @@ session = Tryst::UI.app(title: "Calculator", resizable: false) do |builder|
 
   # A larger button font, since the macOS aqua theme ignores vertical
   # stretch - font size is what drives button height.
-  calc_button = builder.style(:button, "Calc", font: "{TkDefaultFont} 18")
+  calc_button = builder.style(:button, "Calc", font: builder.font(size: 18))
 
   builder.grid(gap: 2) do |grid|
     grid.cell(row: 0, col: 0, colspan: 4, sticky: :ew, ipady: 8) do
-      grid.text_box(bind: display, justify: :right, state: :readonly, font: "{TkDefaultFont} 24")
+      grid.text_box(bind: display, justify: :right, state: :readonly, font: grid.font(size: 24))
     end
 
     KEYS.each do |(label, row, col, span)|

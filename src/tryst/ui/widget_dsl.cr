@@ -10,6 +10,7 @@ require "./menu_builder"
 require "./structural_types"
 require "./split_orientation"
 require "./style_ref"
+require "./font"
 
 module Tryst
   module UI
@@ -466,6 +467,19 @@ module Tryst
         Handle.new(@document.root).on_key(spec) { |args, signal| block.call(args, signal) }
       end
 
+      # A Font value, buildable and inspectable with no interpreter at all
+      # (a plain record - see Font) - the canonical way to spell font:
+      # anywhere a widget or ui.style takes it, instead of Tk's own
+      # font-list syntax and brace quoting.
+      #
+      #     ui.font(size: 24)                          # default family at 24
+      #     ui.font("Helvetica", 18)                   # positional family, size
+      #     ui.font("Comic Sans MS", 14, bold: true)   # spaces safe, modifiers as bools
+      def font(family : String? = nil, size : Int32? = nil,
+               bold : Bool = false, italic : Bool = false, underline : Bool = false) : Font
+        Font.new(family: family, size: size, bold: bold, italic: italic, underline: underline)
+      end
+
       # Configure a ttk style, for the options ttk keeps on a style rather
       # than on the widget - a ttk::button has no -font of its own, so a
       # bigger label means a named style and `style:` on the widget. The
@@ -521,22 +535,42 @@ module Tryst
             hash.each { |key, value| kwargs[key.to_s] = value }
             app.command("ttk::style", ([:configure, ttk_name] of TclArgValue), kwargs)
           end
-          apply_style_map(app, ttk_name, "active", hover)
-          apply_style_map(app, ttk_name, "pressed", pressed)
-          apply_style_map(app, ttk_name, "disabled", disabled)
-          apply_style_map(app, ttk_name, "focus", focused)
+
+          # One `ttk::style map` call per option, not one per state:
+          # `ttk::style map style -option {...}` REPLACES that option's
+          # whole {state value ...} list rather than merging into it, so
+          # calling it separately per hover:/pressed:/disabled:/focused:
+          # would leave only the last one in effect. Every state's
+          # entries for a given option are accumulated here first and
+          # folded into a single call per option instead.
+          #
+          # Order is precedence, not declaration order: ttk checks a
+          # map's {state value} pairs in sequence and uses the first
+          # match, so a more overriding state has to come before a
+          # broader one it should win over even when both apply to the
+          # same widget at once (disabled AND hovered, say).
+          map_kwargs = Hash(String, Array(TclArgValue)).new { |dict, option| dict[option] = Array(TclArgValue).new }
+          append_style_map(map_kwargs, disabled, "disabled")
+          append_style_map(map_kwargs, pressed, "pressed")
+          append_style_map(map_kwargs, hover, "active")
+          append_style_map(map_kwargs, focused, "focus")
+
+          unless map_kwargs.empty?
+            tcl_kwargs = Hash(String, TclArgValue).new
+            map_kwargs.each { |option, list| tcl_kwargs[option] = list }
+            app.command("ttk::style", ([:map, ttk_name] of TclArgValue), tcl_kwargs)
+          end
         end
       end
 
-      # One state's worth of #style's hover:/pressed:/disabled:/focused: -
-      # a NamedTuple of options, each folded into `ttk::style map`'s own
-      # {state value} list shape. A no-op for a state nobody passed.
-      private def apply_style_map(app : AppContract, ttk_name : String, state : String, spec) : Nil
+      # Folds one state's worth of #style's hover:/pressed:/disabled:/
+      # focused: - a NamedTuple of options - into map_kwargs's running
+      # per-option {state value ...} lists. A no-op for a state nobody
+      # passed.
+      private def append_style_map(map_kwargs : Hash(String, Array(TclArgValue)), spec, state : String) : Nil
         return if spec.nil?
 
-        kwargs = Hash(String, TclArgValue).new
-        spec.each { |option, value| kwargs[option.to_s] = [state, value] of TclArgValue }
-        app.command("ttk::style", ([:map, ttk_name] of TclArgValue), kwargs) unless kwargs.empty?
+        spec.each { |option, value| map_kwargs[option.to_s] << state << value }
       end
 
       # Look up a named widget declared in the current scope, raising
@@ -637,7 +671,20 @@ module Tryst
       private def to_opts_hash(kwargs) : Hash(Symbol, TclArgValue)
         hash = Hash(Symbol, TclArgValue).new
         kwargs.each do |key, value|
-          if value.is_a?(Array)
+          if value.is_a?(Font)
+            # A Font isn't a TclArgValue itself (a ui-layer type, core
+            # stays unaware of it) - resolved to the real Tk font-list
+            # string right here.
+            hash[key] = value.to_tcl
+          elsif key == :font && value.is_a?(Symbol)
+            # font: :heading and friends - NamedFonts's symbol shorthand
+            # for one of Tk's own named system fonts. Gated on key: a
+            # Symbol is a perfectly ordinary value for plenty of OTHER
+            # options (justify: :right, sticky: :nsew, ...), which must
+            # keep passing straight through as themselves, not get run
+            # through the font-name table.
+            hash[key] = NamedFonts.resolve(value)
+          elsif value.is_a?(Array)
             arr = Array(TclArgValue).new
             value.each { |v| arr << v }
             hash[key] = arr

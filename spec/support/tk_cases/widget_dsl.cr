@@ -56,6 +56,86 @@ tk_test "WidgetDSL#style configures a ttk style the widgets can then name" do |a
   raise "expected the widget to name it" unless app.command(".styled", :cget, "-style") == "TkCase.TButton"
 end
 
+# type:/name: overload. The unnamed (app-wide) form touches
+# TProgressbar rather than TButton/TLabel - something no other tk_test
+# configures - since it's a genuinely global restyle of every widget of
+# that ttk class in the shared worker process, unlike the named form
+# (which only ever affects the one style name it creates).
+tk_test "WidgetDSL#style(type:) restyles a DSL widget type app-wide, by its ttk class" do |app|
+  session = WidgetDslHarness.new
+  result = session.style(:progress, troughcolor: "#654321")
+  raise "expected the app-wide overload to return nil, not a StyleRef" unless result.nil?
+
+  Tryst::UI::Realizer.new(app, session.document).realize
+
+  looked_up = app.command("ttk::style", :lookup, "TProgressbar", "-troughcolor")
+  raise "expected TProgressbar's troughcolor set, got #{looked_up.inspect}" unless looked_up == "#654321"
+ensure
+  app.command("ttk::style", :configure, "TProgressbar", troughcolor: "")
+end
+
+tk_test "WidgetDSL#style(type:, name:) derives Name.TWidgetClass and returns a usable StyleRef" do |app|
+  session = WidgetDslHarness.new
+  danger = session.style(:button, "TkCaseDanger", background: "#a00000")
+  raise "expected a StyleRef" unless danger.is_a?(Tryst::UI::StyleRef)
+  raise "expected the derived ttk name" unless danger.ttk_name == "TkCaseDanger.TButton"
+
+  session.button(:danger_btn, text: "Delete", style: danger)
+  Tryst::UI::Realizer.new(app, session.document).realize
+
+  looked_up = app.command("ttk::style", :lookup, "TkCaseDanger.TButton", "-background")
+  raise "expected the named style's background set, got #{looked_up.inspect}" unless looked_up == "#a00000"
+  raise "expected the widget to carry the derived style name" unless app.command(".danger_btn", :cget, "-style") == "TkCaseDanger.TButton"
+end
+
+tk_test "WidgetDSL#style hover:/pressed:/disabled:/focused: produce real ttk::style map entries" do |app|
+  session = WidgetDslHarness.new
+  session.style(:button, "TkCaseHover", background: "#111111",
+    hover: {background: "#222222"}, pressed: {background: "#333333"},
+    disabled: {background: "#444444"}, focused: {background: "#555555"})
+
+  Tryst::UI::Realizer.new(app, session.document).realize
+
+  mapped = app.split_list(app.command("ttk::style", :map, "TkCaseHover.TButton", "-background"))
+  {"active" => "#222222", "pressed" => "#333333", "disabled" => "#444444", "focus" => "#555555"}.each do |state, color|
+    idx = mapped.index(state)
+    raise "expected state #{state} in #{mapped.inspect}" unless idx
+    raise "expected #{state} -> #{color}, got #{mapped[idx + 1]?}" unless mapped[idx + 1]? == color
+  end
+end
+
+# WidgetDSL#font.
+tk_test "WidgetDSL#font builds a real Tk font spec - a family with spaces round-trips" do |app|
+  session = WidgetDslHarness.new
+  session.label(:spaced, text: "hi", font: session.font("Comic Sans MS", 14, bold: true))
+
+  Tryst::UI::Realizer.new(app, session.document).realize
+
+  elements = app.split_list(app.command(".spaced", :cget, "-font"))
+  raise "expected [Comic Sans MS, 14, bold], got #{elements.inspect}" unless elements == ["Comic Sans MS", "14", "bold"]
+end
+
+tk_test "WidgetDSL#font with no family: overrides just the size on TkDefaultFont" do |app|
+  session = WidgetDslHarness.new
+  session.label(:sized, text: "hi", font: session.font(size: 24))
+
+  Tryst::UI::Realizer.new(app, session.document).realize
+
+  elements = app.split_list(app.command(".sized", :cget, "-font"))
+  raise "expected [TkDefaultFont, 24], got #{elements.inspect}" unless elements == ["TkDefaultFont", "24"]
+end
+
+tk_test "font: resolves a NamedFonts symbol, and passes a raw String through unchanged" do |app|
+  session = WidgetDslHarness.new
+  session.label(:named, text: "hi", font: :heading)
+  session.label(:raw, text: "hi", font: "TkFixedFont 10")
+
+  Tryst::UI::Realizer.new(app, session.document).realize
+
+  raise "expected the named font resolved" unless app.command(".named", :cget, "-font") == "TkHeadingFont"
+  raise "expected the raw string untouched" unless app.command(".raw", :cget, "-font") == "TkFixedFont 10"
+end
+
 # The root window is what an app-wide shortcut has to attach to, and it's a
 # structural node with no widget of its own - so this also pins that the
 # realizer gives :root a path to bind on.
