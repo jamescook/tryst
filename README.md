@@ -110,7 +110,13 @@ ui[:save].configure(state: :disabled)
 ```
 
 Handles configure, show/hide, destroy, and wire events after the fact
-(`on_action`, `on_close`, key and mouse bindings).
+(`on_action`, `on_close`, key and mouse bindings). For anything else,
+`on` binds an arbitrary event:
+
+```crystal
+ui[:save].on(:enter) { ui[:save].configure(cursor: "hand2") }
+ui[:save].on([:control, :s]) { save }
+```
 
 ### Timers, dialogs, and the rest
 
