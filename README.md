@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/tryst-logo-fan.svg" width="340" alt="The tryst logo: the same purple crystal shown in three window chromes — classic, macOS, and Ubuntu — fanned out like a hand of playing cards">
+</p>
+
 # tryst
 
 Tcl/Tk bindings for Crystal, with a declarative UI DSL on top.
