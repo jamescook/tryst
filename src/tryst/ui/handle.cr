@@ -9,6 +9,7 @@ require "./keysyms"
 require "./canvas_item"
 require "./text_content"
 require "./option_error"
+require "../event_spec"
 
 module Tryst
   module UI
@@ -318,6 +319,18 @@ module Tryst
       def on_key(spec : Symbol | String, &block : Array(String), CallbackSignal -> Nil) : Handle
         modifiers, keysym = Keysyms.resolve(spec)
         Keysyms.patterns_for(modifiers, keysym).each { |event| bind_event(event, block) }
+        self
+      end
+
+      # The escape hatch for any event the on_* methods above don't
+      # curate - a custom virtual event, or a native combo none of them
+      # expose. Scoped to this handle's own widget, so no path/target
+      # argument is needed the way session.app.bind's would be. event
+      # follows the same rules as App#bind: a bare Symbol/Array resolved
+      # against Tk's real vocabulary (EventSpec.resolve), or a raw Tk
+      # sequence String as its own escape hatch.
+      def on(event : EventArg, *, subs : SubsArg = nil, &block : Array(String), CallbackSignal -> Nil) : Handle
+        bind_event(EventSpec.resolve(event), block, normalize_subs(subs))
         self
       end
 
@@ -634,6 +647,16 @@ module Tryst
         list = Array(Symbol | String).new(subs.size)
         subs.each { |sub| list << sub }
         list
+      end
+
+      # Same normalization App#bind's own subs: keyword does - a single
+      # Symbol/String, an Array of them, or nil for none.
+      private def normalize_subs(subs : SubsArg) : Array(Symbol | String)
+        case subs
+        when Nil   then [] of Symbol | String
+        when Array then subs_list(subs)
+        else            [subs] of Symbol | String
+        end
       end
 
       private def bind_event(event : String, handler : Proc(Array(String), CallbackSignal, Nil), subs : Array(Symbol | String) = [] of Symbol | String) : Nil

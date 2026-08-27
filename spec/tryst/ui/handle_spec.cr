@@ -308,6 +308,68 @@ describe Tryst::UI::Handle do
     node.events.map(&.event).should eq(["<Control-s>"])
   end
 
+  # #on is the escape hatch for anything the curated on_* methods above
+  # don't cover - no session.app.bind(handle.path, ...) drop-down needed.
+  it "on resolves a bare Symbol as a virtual event, no path/target needed" do
+    node = Tryst::UI::Node.new(type: :canvas, name: :root_area)
+    handle = Tryst::UI::Handle.new(node)
+
+    result = handle.on(:drop_file) { |_v, _s| }
+
+    result.should be(handle)
+    node.events.map(&.event).should eq(["<<DropFile>>"])
+    node.events.first.subs.should be_empty
+  end
+
+  it "on resolves a bare Symbol native keysym/event the same way App#bind does" do
+    node = Tryst::UI::Node.new(type: :canvas, name: :root_area)
+    Tryst::UI::Handle.new(node).on(:configure) { |_v, _s| }
+
+    node.events.map(&.event).should eq(["<Configure>"])
+  end
+
+  it "on resolves an Array as a native modifier combo" do
+    node = Tryst::UI::Node.new(type: :canvas, name: :root_area)
+    Tryst::UI::Handle.new(node).on([:control, :s]) { |_v, _s| }
+
+    node.events.map(&.event).should eq(["<Control-s>"])
+  end
+
+  it "on accepts subs: as a single Symbol, an Array, or nil" do
+    single = Tryst::UI::Node.new(type: :canvas, name: :a)
+    Tryst::UI::Handle.new(single).on(:drop_file, subs: :data) { |_v, _s| }
+    single.events.first.subs.should eq([:data] of Symbol | String)
+
+    many = Tryst::UI::Node.new(type: :canvas, name: :b)
+    Tryst::UI::Handle.new(many).on(:click, subs: [:x, :y]) { |_v, _s| }
+    many.events.first.subs.should eq([:x, :y] of Symbol | String)
+
+    none = Tryst::UI::Node.new(type: :canvas, name: :c)
+    Tryst::UI::Handle.new(none).on(:enter) { |_v, _s| }
+    none.events.first.subs.should be_empty
+  end
+
+  it "on still accepts a raw Tk sequence String as its own escape hatch" do
+    node = Tryst::UI::Node.new(type: :canvas, name: :root_area)
+    Tryst::UI::Handle.new(node).on("<<SomeThirdPartyEvent>>") { |_v, _s| }
+
+    node.events.map(&.event).should eq(["<<SomeThirdPartyEvent>>"])
+  end
+
+  it "on wires immediately once already realized" do
+    app = FakeApp.new
+    node = Tryst::UI::Node.new(type: :canvas, name: :root_area)
+    node.realized = Tryst::UI::RealizedNode.new(app: app, path: ".win.area")
+    handle = Tryst::UI::Handle.new(node)
+
+    handle.on(:drop_file, subs: :data) { |_v, _s| }
+
+    app.binds.size.should eq(1)
+    app.binds.first.widget.should eq(".win.area")
+    app.binds.first.event.should eq("<<DropFile>>")
+    app.binds.first.subs.should eq(["data"])
+  end
+
   it "on_right_click queues the platform-appropriate event patterns" do
     node = Tryst::UI::Node.new(type: :button, name: :go)
     handle = Tryst::UI::Handle.new(node)

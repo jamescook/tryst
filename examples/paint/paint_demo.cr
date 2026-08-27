@@ -247,9 +247,8 @@ end
 Tool.each do |tool|
   button = tool_buttons[tool]
   button.on_click { state.select_tool(tool) }
-  # Handle has no public bind escape hatch yet (tracked separately).
-  app.bind(button.path, :enter) { |_args, _sig| show_tooltip(app, tool.tooltip) }
-  app.bind(button.path, :leave) { |_args, _sig| hide_tooltip(app) }
+  button.on(:enter) { |_args, _sig| show_tooltip(app, tool.tooltip) }
+  button.on(:leave) { |_args, _sig| hide_tooltip(app) }
 end
 
 COLORS.each_with_index do |color, index|
