@@ -11,8 +11,28 @@ require "./error_policy"
 require "./repeating_timer"
 require "./clipboard"
 require "./dialogs"
+require "weak_ref"
 
 module Tryst
+  # @api private - one entry in App's weak on_widget_destroyed list (see
+  # App#on_widget_destroyed's owner-taking overload). T is erased: both
+  # `alive` and `notify` are built inside that generic method, closing
+  # over the owner's own WeakRef, so this struct itself stays a plain,
+  # non-generic type regardless of how many different owner types
+  # subscribe.
+  private struct WeakDestroyObserver
+    def initialize(@alive : Proc(Bool), @notify : Proc(String, Nil))
+    end
+
+    def alive? : Bool
+      @alive.call
+    end
+
+    def notify(path : String) : Nil
+      @notify.call(path)
+    end
+  end
+
   # Raised by App#command when more than one registered CommandInterceptor
   # claims the same call (CommandInterceptors itself lands in a later
   # task) - the message names each matching interceptor's label so it's
@@ -145,6 +165,7 @@ module Tryst
       @track_widgets = track_widgets
       @_pending_exception = nil
       @destroy_observers = [] of Proc(String, Nil)
+      @weak_destroy_observers = [] of WeakDestroyObserver
       setup_widget_tracking if track_widgets
       setup_destroy_cleanup
       hide
@@ -1053,6 +1074,7 @@ module Tryst
     def debug_info : Hash(Symbol, Int32)
       info = {} of Symbol => Int32
       info[:widget_types] = @widget_types_by_path.size unless @widget_types_by_path.empty?
+      info[:weak_destroy_observers] = @weak_destroy_observers.size unless @weak_destroy_observers.empty?
       info
     end
 
@@ -1178,6 +1200,28 @@ module Tryst
       @destroy_observers << block
     end
 
+    # Same hook, scoped to owner's own lifetime via a WeakRef: the
+    # subscription is swept once owner is unreachable, rather than
+    # staying registered (and permanently unregisterable) for the life
+    # of the App the way the plain block form above is - what makes this
+    # one safe for a per-widget subscription instead of just a
+    # once-per-App one like Session's own node_destroyed hook.
+    #
+    # block receives owner as an explicit argument for exactly this
+    # reason - write against that, not against self/an outer local, or
+    # the block itself pins owner reachable and defeats the WeakRef.
+    def on_widget_destroyed(owner : T, &block : (T, String) -> Nil) : Nil forall T
+      weak = WeakRef.new(owner)
+      @weak_destroy_observers << WeakDestroyObserver.new(
+        alive: -> { !weak.value.nil? },
+        notify: ->(path : String) {
+          if target = weak.value
+            block.call(target, path)
+          end
+        }
+      )
+    end
+
     # Installed unconditionally (unlike widget-creation tracking, which is
     # opt-out via track_widgets: false) so that bind-callback cleanup
     # always runs. A single `bind all <Destroy>` script is used because
@@ -1190,6 +1234,12 @@ module Tryst
         path = args[0]
         callback_registry.forget_all_for_path(path)
         @destroy_observers.each(&.call(path))
+        # Notify first (a still-live owner may care about THIS destroy),
+        # then sweep - not the other way round, or an owner whose only
+        # remaining reference was this notification's own call frame
+        # could be swept before ever hearing about it.
+        @weak_destroy_observers.each(&.notify(path))
+        @weak_destroy_observers.reject! { |observer| !observer.alive? }
         # Unconditional, unlike @widgets below - #record_widget_type writes
         # this one unconditionally too (not gated by track_widgets:), so a
         # user who opted out of widget tracking still pays for the write

@@ -1,3 +1,4 @@
+require "weak_ref"
 require "../tk_test_registry"
 
 # Widget wrapper tests. Two ruby-tryst test cases aren't ported here since
@@ -167,4 +168,58 @@ tk_test "reconfiguring -command releases the old callback" do |app|
   btn.command(:configure, command: app.callback { })
 
   raise "reconfiguring should replace, not accumulate, the tracked callback" unless app.interp.callback_ids.size == baseline
+end
+
+# A trivial owner for App#on_widget_destroyed(owner, &block)'s weak
+# overload.
+private class DestroySubscriber
+  getter notified = [] of String
+
+  def record(path : String) : Nil
+    @notified << path
+  end
+end
+
+tk_test "on_widget_destroyed(owner, &block) fires with the owner while it's alive" do |app|
+  btn = app.create_widget("ttk::button", text: "Go")
+  subscriber = DestroySubscriber.new
+  app.on_widget_destroyed(subscriber) { |owner, path| owner.record(path) }
+
+  btn.destroy
+
+  raise "expected the owner's own block to have run with the destroyed path" \
+         unless subscriber.notified == [btn.path]
+end
+
+# Built in its own method so no local in the caller's stack frame keeps
+# a stale pointer to the subscriber alive longer than intended (Boehm's
+# conservative stack scanning) - same reasoning as owner_drawn_widget.cr's
+# own spawn_widget_with_infinite_tween.
+private def subscribe_and_drop(app) : WeakRef(DestroySubscriber)
+  subscriber = DestroySubscriber.new
+  app.on_widget_destroyed(subscriber) { |owner, path| owner.record(path) }
+  WeakRef.new(subscriber)
+end
+
+tk_test "on_widget_destroyed(owner, &block) is swept once nothing else references owner" do |app|
+  weak = subscribe_and_drop(app)
+  baseline = app.debug_info[:weak_destroy_observers]? || 0
+  raise "expected the subscription to be registered" unless baseline > 0
+
+  # Boehm's conservative stack scanning means one GC.collect isn't
+  # guaranteed to reclaim everything already unreachable (see Photo's
+  # and owner_drawn_widget.cr's own retry loops for the same reason).
+  10.times do
+    GC.collect
+    break if weak.value.nil?
+  end
+  raise "expected the subscriber to be finalized once nothing outside it referenced it" unless weak.value.nil?
+
+  # The sweep only runs on the next destroy notification, not on GC
+  # itself - one more widget's destroy is what actually prunes the array.
+  app.create_widget("ttk::button", text: "unrelated").destroy
+
+  after = app.debug_info[:weak_destroy_observers]? || 0
+  raise "expected the dead subscription to be swept, not just skipped (baseline #{baseline}, after #{after})" \
+    unless after < baseline
 end
