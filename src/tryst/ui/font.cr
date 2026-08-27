@@ -15,7 +15,18 @@ module Tryst
     record Font, family : String? = nil, size : Int32? = nil,
       bold : Bool = false, italic : Bool = false, underline : Bool = false do
       # The real Tk font-list string this value represents.
+      #
+      # size: 0 is rejected here rather than left for Tk to interpret:
+      # Tk accepts it silently and the result is a broken or invisible
+      # font at Tk's own discretion, with nothing pointing back at the
+      # actual mistake.
       def to_tcl : String
+        if (actual_size = size) && actual_size.zero?
+          raise ArgumentError.new(
+            "font: size: 0 is not a valid Tk font size - use a positive point size, " \
+            "a negative pixel size, or omit size: for the default")
+        end
+
         elements = [family || "TkDefaultFont"]
         elements << size.to_s if size
         elements << "bold" if bold
