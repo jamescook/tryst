@@ -14,14 +14,14 @@ tk_test "<<DropFile>> fires the bound callback" do |app|
   app.show
   app.update
 
-  app.bind(".", "<<DropFile>>") { |_values, _signal| fired = true }
+  app.bind(:root, :drop_file) { |_values, _signal| fired = true }
 
   app.tcl_eval("event generate . <<DropFile>>")
   app.update
 
   raise "<<DropFile>> callback did not fire" unless fired
 ensure
-  app.unbind(".", "<<DropFile>>")
+  app.unbind(:root, :drop_file)
 end
 
 tk_test "<<DropFile>> delivers a single dropped file as a one-element Tcl list" do |app|
@@ -30,7 +30,7 @@ tk_test "<<DropFile>> delivers a single dropped file as a one-element Tcl list" 
   app.show
   app.update
 
-  app.bind(".", "<<DropFile>>", :data) { |values, _signal| received = values[0] }
+  app.bind(:root, :drop_file, subs: :data) { |values, _signal| received = values[0] }
 
   app.tcl_eval("event generate . <<DropFile>> -data {/tmp/test.gba}")
   app.update
@@ -38,7 +38,7 @@ tk_test "<<DropFile>> delivers a single dropped file as a one-element Tcl list" 
   paths = app.split_list(received)
   raise "expected [\"/tmp/test.gba\"], got #{paths.inspect}" unless paths == ["/tmp/test.gba"]
 ensure
-  app.unbind(".", "<<DropFile>>")
+  app.unbind(:root, :drop_file)
 end
 
 tk_test "<<DropFile>> delivers multiple dropped files as a multi-element Tcl list" do |app|
@@ -47,7 +47,7 @@ tk_test "<<DropFile>> delivers multiple dropped files as a multi-element Tcl lis
   app.show
   app.update
 
-  app.bind(".", "<<DropFile>>", :data) { |values, _signal| received = values[0] }
+  app.bind(:root, :drop_file, subs: :data) { |values, _signal| received = values[0] }
 
   app.tcl_eval("event generate . <<DropFile>> -data {/tmp/a.gba /tmp/b.gba /tmp/c.gba}")
   app.update
@@ -56,7 +56,7 @@ tk_test "<<DropFile>> delivers multiple dropped files as a multi-element Tcl lis
   expected = ["/tmp/a.gba", "/tmp/b.gba", "/tmp/c.gba"]
   raise "expected #{expected.inspect}, got #{paths.inspect}" unless paths == expected
 ensure
-  app.unbind(".", "<<DropFile>>")
+  app.unbind(:root, :drop_file)
 end
 
 tk_test "<<DropFile>> handles a dropped path containing spaces" do |app|
@@ -65,7 +65,7 @@ tk_test "<<DropFile>> handles a dropped path containing spaces" do |app|
   app.show
   app.update
 
-  app.bind(".", "<<DropFile>>", :data) { |values, _signal| received = values[0] }
+  app.bind(:root, :drop_file, subs: :data) { |values, _signal| received = values[0] }
 
   # A Tcl list element containing a space has to be braced for the list
   # itself to parse as one path, not two - the same as ruby-teek's own
@@ -77,7 +77,7 @@ tk_test "<<DropFile>> handles a dropped path containing spaces" do |app|
   expected = ["/tmp/my games/rom file.gba"]
   raise "expected #{expected.inspect}, got #{paths.inspect}" unless paths == expected
 ensure
-  app.unbind(".", "<<DropFile>>")
+  app.unbind(:root, :drop_file)
 end
 
 tk_test "<<DropFile>> works bound to a child widget, not just the root window" do |app|
@@ -88,7 +88,7 @@ tk_test "<<DropFile>> works bound to a child widget, not just the root window" d
   app.tcl_eval("pack .f_drop1")
   app.update
 
-  app.bind(".f_drop1", "<<DropFile>>", :data) { |values, _signal| received = values[0] }
+  app.bind(".f_drop1", :drop_file, subs: :data) { |values, _signal| received = values[0] }
 
   app.tcl_eval("event generate .f_drop1 <<DropFile>> -data {/home/user/game.gba}")
   app.update
@@ -105,13 +105,13 @@ tk_test "App#unbind removes a <<DropFile>> binding" do |app|
   app.show
   app.update
 
-  app.bind(".", "<<DropFile>>") { |_values, _signal| count += 1 }
+  app.bind(:root, :drop_file) { |_values, _signal| count += 1 }
 
   app.tcl_eval("event generate . <<DropFile>>")
   app.update
   raise "expected 1 fire, got #{count}" unless count == 1
 
-  app.unbind(".", "<<DropFile>>")
+  app.unbind(:root, :drop_file)
 
   app.tcl_eval("event generate . <<DropFile>>")
   app.update
@@ -126,5 +126,5 @@ tk_test "App#register_drop_target accepts a widget path and does not raise" do |
   app.show
   app.update
 
-  app.register_drop_target(".")
+  app.register_drop_target(:root)
 end

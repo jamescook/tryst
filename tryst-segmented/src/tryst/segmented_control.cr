@@ -140,8 +140,8 @@ module Tryst
       # no matter how correctly #position_labels places it.
       @labels.each { |label| app.tcl_invoke("raise", label.path) }
 
-      canvas.bind("Left") { |_, _| step_selection(-1) }
-      canvas.bind("Right") { |_, _| step_selection(1) }
+      canvas.bind(:left) { |_, _| step_selection(-1) }
+      canvas.bind(:right) { |_, _| step_selection(1) }
 
       wire_segment_interaction
     end
@@ -236,17 +236,17 @@ module Tryst
 
     private def wire_segment_interaction : Nil
       @labels.each_with_index do |label, idx|
-        label.bind("ButtonPress-1") do |_, _|
+        label.bind(:click) do |_, _|
           next if disabled? || @segment_disabled[idx]
           app.tcl_invoke("focus", canvas.path)
           set_selected_index(idx, notify: true)
         end
-        label.bind("Enter") do |_, _|
+        label.bind(:enter) do |_, _|
           next if disabled? || @segment_disabled[idx]
           @hover_index = idx
           redraw
         end
-        label.bind("Leave") do |_, _|
+        label.bind(:leave) do |_, _|
           @hover_index = nil
           redraw
         end

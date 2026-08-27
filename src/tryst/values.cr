@@ -150,4 +150,12 @@ module Tryst
   def self.bool_to_tcl(val) : String
     val ? "1" : "0"
   end
+
+  # :root as a widget/window target, resolved to Tk's own "." spelling -
+  # the one raw-path lore App's otherwise-untyped widget/window/path
+  # parameters still forced on a caller. Anything else (a Widget, a raw
+  # path String) passes through via #to_s exactly as it always has.
+  def self.resolve_widget_target(target) : String
+    target == :root ? "." : target.to_s
+  end
 end

@@ -167,8 +167,8 @@ module Tryst
         app.tcl_invoke("raise", label.path)
       end
 
-      canvas.bind("space") { |_, _| toggle }
-      canvas.bind("Return") { |_, _| toggle }
+      canvas.bind(:space) { |_, _| toggle }
+      canvas.bind(:return) { |_, _| toggle }
     end
 
     # The current on/off state.

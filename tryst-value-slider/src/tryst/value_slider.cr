@@ -272,19 +272,19 @@ module Tryst
     end
 
     private def wire_slider_interaction : Nil
-      canvas.bind("B1-Motion", :x) do |values, _signal|
+      canvas.bind([:button1, :motion], subs: :x) do |values, _signal|
         next if disabled? || !@dragging
         set_from_pixel_x(values[0].to_i, notify: true)
       end
 
-      canvas.bind("Right") { |_, _| step_by(@step) }
-      canvas.bind("Up") { |_, _| step_by(@step) }
-      canvas.bind("Left") { |_, _| step_by(-@step) }
-      canvas.bind("Down") { |_, _| step_by(-@step) }
-      canvas.bind("Prior") { |_, _| step_by(@step * 10) } # Page Up
-      canvas.bind("Next") { |_, _| step_by(-@step * 10) } # Page Down
-      canvas.bind("Home") { |_, _| jump_to(@min) }
-      canvas.bind("End") { |_, _| jump_to(@max) }
+      canvas.bind(:right) { |_, _| step_by(@step) }
+      canvas.bind(:up) { |_, _| step_by(@step) }
+      canvas.bind(:left) { |_, _| step_by(-@step) }
+      canvas.bind(:down) { |_, _| step_by(-@step) }
+      canvas.bind(:page_up) { |_, _| step_by(@step * 10) }
+      canvas.bind(:page_down) { |_, _| step_by(-@step * 10) }
+      canvas.bind(:home) { |_, _| jump_to(@min) }
+      canvas.bind(:end) { |_, _| jump_to(@max) }
     end
 
     private def step_by(delta : Float64) : Nil

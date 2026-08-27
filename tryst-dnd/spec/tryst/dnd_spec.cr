@@ -11,7 +11,7 @@ describe "Tryst::App#register_drop_target (real native registration)" do
     TK_APP.show
     TK_APP.update
 
-    TK_APP.register_drop_target(".")
+    TK_APP.register_drop_target(:root)
   end
 
   it "raises Tryst::Dnd::Error for a widget path that doesn't exist" do
@@ -24,8 +24,8 @@ describe "Tryst::App#register_drop_target (real native registration)" do
     TK_APP.show
     TK_APP.update
 
-    TK_APP.register_drop_target(".")
-    TK_APP.register_drop_target(".")
+    TK_APP.register_drop_target(:root)
+    TK_APP.register_drop_target(:root)
   end
 
   it "works on a child widget, not just the root window" do
@@ -34,7 +34,7 @@ describe "Tryst::App#register_drop_target (real native registration)" do
     frame.pack
     TK_APP.update
 
-    TK_APP.register_drop_target(frame.path)
+    TK_APP.register_drop_target(frame)
   ensure
     frame.try(&.destroy)
   end
@@ -42,10 +42,10 @@ describe "Tryst::App#register_drop_target (real native registration)" do
   it "leaves the existing <<DropFile>> event contract working after a real registration" do
     TK_APP.show
     TK_APP.update
-    TK_APP.register_drop_target(".")
+    TK_APP.register_drop_target(:root)
 
     received = nil
-    TK_APP.bind(".", "<<DropFile>>", :data) { |values, _signal| received = values[0] }
+    TK_APP.bind(:root, :drop_file, subs: :data) { |values, _signal| received = values[0] }
 
     TK_APP.tcl_eval("event generate . <<DropFile>> -data {/tmp/still_works.gba}")
     TK_APP.update
@@ -53,6 +53,6 @@ describe "Tryst::App#register_drop_target (real native registration)" do
     paths = TK_APP.split_list(received)
     paths.should eq ["/tmp/still_works.gba"]
   ensure
-    TK_APP.unbind(".", "<<DropFile>>")
+    TK_APP.unbind(:root, :drop_file)
   end
 end

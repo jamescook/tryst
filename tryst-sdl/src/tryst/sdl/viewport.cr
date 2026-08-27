@@ -250,26 +250,26 @@ module Tryst
       # on its own. Without it #key_down? is simply always false, which
       # is a maddening thing to debug.
       private def track_keyboard : Nil
-        @app.bind(@path, "KeyPress", :keysym) do |args, _signal|
+        @app.bind(@path, :key_press, subs: :keysym) do |args, _signal|
           @keys_down << args[0].downcase
         end
-        @app.bind(@path, "KeyRelease", :keysym) do |args, _signal|
+        @app.bind(@path, :key_release, subs: :keysym) do |args, _signal|
           @keys_down.delete(args[0].downcase)
         end
-        @app.bind(@path, "ButtonPress-1") do |_args, _signal|
+        @app.bind(@path, :click) do |_args, _signal|
           @app.command(:focus, @path)
         end
 
         # A frame that loses focus never sees the KeyRelease, so a key
         # held at that moment would stay "down" forever.
-        @app.bind(@path, "FocusOut") { |_args, _signal| @keys_down.clear }
+        @app.bind(@path, :focus_out) { |_args, _signal| @keys_down.clear }
       end
 
       # The Tk frame and the SDL window are two views of one native
       # window, and only Tk is told when the user resizes. Without this
       # the drawing area keeps its original size while the frame grows.
       private def track_resize : Nil
-        @app.bind(@path, "Configure", :width, :height) do |args, _signal|
+        @app.bind(@path, :configure, subs: [:width, :height]) do |args, _signal|
           next if @destroyed
           @width = args[0].to_i
           @height = args[1].to_i

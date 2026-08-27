@@ -229,10 +229,10 @@ spray_density_var.on_change { |value| state.update_spray_density(value.as(Int32)
 
 canvas.on_click(:x, :y) { |args, _sig| state.start_stroke(args[0].to_i, args[1].to_i) }
 canvas.on_release { |_args, _sig| state.end_stroke }
-canvas_widget.bind("B1-Motion", :x, :y) { |values, _sig| state.continue_stroke(values[0].to_i, values[1].to_i) }
+canvas_widget.bind([:button1, :motion], subs: [:x, :y]) { |values, _sig| state.continue_stroke(values[0].to_i, values[1].to_i) }
 
 last_coords_update = Time.instant
-canvas_widget.bind("Motion", :x, :y) do |values, _sig|
+canvas_widget.bind(:motion, subs: [:x, :y]) do |values, _sig|
   now = Time.instant
   if now.duration_since(last_coords_update) >= COORDS_INTERVAL
     coords_var.value = "#{values[0]}, #{values[1]}"
@@ -240,15 +240,16 @@ canvas_widget.bind("Motion", :x, :y) do |values, _sig|
   end
 end
 
-canvas_widget.bind("Configure", :width, :height) do |values, _sig|
+canvas_widget.bind(:configure, subs: [:width, :height]) do |values, _sig|
   state.resize(values[0].to_i, values[1].to_i)
 end
 
 Tool.each do |tool|
   button = tool_buttons[tool]
   button.on_click { state.select_tool(tool) }
-  app.bind(button.path, "Enter") { |_args, _sig| show_tooltip(app, tool.tooltip) }
-  app.bind(button.path, "Leave") { |_args, _sig| hide_tooltip(app) }
+  # Handle has no public bind escape hatch yet (tracked separately).
+  app.bind(button.path, :enter) { |_args, _sig| show_tooltip(app, tool.tooltip) }
+  app.bind(button.path, :leave) { |_args, _sig| hide_tooltip(app) }
 end
 
 COLORS.each_with_index do |color, index|

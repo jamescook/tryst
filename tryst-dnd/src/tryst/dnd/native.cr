@@ -86,7 +86,7 @@ module Tryst
     # "tryst-dnd" is the only thing that has to change for an existing
     # caller to start receiving real OS drops.
     def register_drop_target(widget) : Nil
-      Dnd.register(self, widget.to_s)
+      Dnd.register(self, Tryst.resolve_widget_target(widget))
     end
   end
 end

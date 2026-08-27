@@ -104,7 +104,7 @@ module Tryst
         highlightthickness: 0, takefocus: 1, background: @theme.background_name)
 
       wire_state_bindings
-      @canvas.bind("Configure", :width, :height) do |_values, _signal|
+      @canvas.bind(:configure, subs: [:width, :height]) do |_values, _signal|
         redraw
       end
     end
@@ -265,9 +265,9 @@ module Tryst
     # and a single reconcile-to-empty (already automatic on Tk destroy,
     # see #destroy's own comment) releases all of them together.
     private def wire_state_bindings : Nil
-      @canvas.bind("Enter") { |_, _| set_hover(true) unless @disabled }
-      @canvas.bind("Leave") { |_, _| set_hover(false) unless @disabled }
-      @canvas.bind("ButtonPress-1", :x, :y) do |values, signal|
+      @canvas.bind(:enter) { |_, _| set_hover(true) unless @disabled }
+      @canvas.bind(:leave) { |_, _| set_hover(false) unless @disabled }
+      @canvas.bind(:click, subs: [:x, :y]) do |values, signal|
         next if @disabled
         # Plain Tk widgets, unlike ttk ones, don't focus themselves on
         # click just because -takefocus is set (that only decides Tab
@@ -277,13 +277,13 @@ module Tryst
         set_pressed(true)
         on_press(values, signal)
       end
-      @canvas.bind("ButtonRelease-1") do |values, signal|
+      @canvas.bind(:release) do |values, signal|
         next if @disabled
         set_pressed(false)
         on_release(values, signal)
       end
-      @canvas.bind("FocusIn") { |_, _| set_focused(true) }
-      @canvas.bind("FocusOut") { |_, _| set_focused(false) }
+      @canvas.bind(:focus_in) { |_, _| set_focused(true) }
+      @canvas.bind(:focus_out) { |_, _| set_focused(false) }
     end
 
     # @api protected - a subclass that needs to react to the press itself

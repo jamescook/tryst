@@ -56,7 +56,7 @@ module Tryst
 
         # The scrollable region is whatever the content currently adds up
         # to, re-measured every time the viewport resizes.
-        app.bind(viewport_path, "<Configure>") do |_values, _signal|
+        app.bind(viewport_path, :configure) do |_values, _signal|
           region = app.command(canvas_path, ([:bbox, :all] of TclArgValue), {} of String => TclArgValue)
           app.command(canvas_path, [:configure] of TclArgValue,
             {"scrollregion" => region} of String => TclArgValue)
@@ -69,7 +69,7 @@ module Tryst
         # alone is the whole point: content wider than the canvas is what
         # there is to scroll to.
         unless x
-          app.bind(canvas_path, "<Configure>", :width) do |values, _signal|
+          app.bind(canvas_path, :configure, subs: :width) do |values, _signal|
             app.command(canvas_path, [:itemconfigure, window_id] of TclArgValue,
               {"width" => values[0]} of String => TclArgValue)
             nil
@@ -158,7 +158,7 @@ module Tryst
         button_4 = "<#{modifier}Button-4>"
         button_5 = "<#{modifier}Button-5>"
 
-        app.bind(tag, mouse_wheel, :mouse_wheel, owner: canvas_path) do |values, _signal|
+        app.bind(tag, mouse_wheel, subs: :mouse_wheel, owner: canvas_path) do |values, _signal|
           scroll_wheel(app, canvas_path, view_command, wheel_units(values[0]))
         end
         app.bind(tag, button_4, owner: canvas_path) do |_values, _signal|
@@ -188,7 +188,7 @@ module Tryst
       private def release_wheel_bindings_on_destroy(realizer : Realizer, canvas_path : String, tag : String,
                                                     event_strs : Array(String)) : Nil
         app = realizer.app
-        app.bind(canvas_path, "<Destroy>", owner: canvas_path) do |_values, _signal|
+        app.bind(canvas_path, :destroy, owner: canvas_path) do |_values, _signal|
           event_strs.each { |event_str| app.command(:bind, ([tag, event_str, ""] of TclArgValue), {} of String => TclArgValue) }
           nil
         end

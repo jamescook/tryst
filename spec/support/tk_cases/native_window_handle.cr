@@ -33,7 +33,7 @@ tk_test "native_window_handle is per-widget everywhere except macOS" do |app|
   app.show
   app.update
 
-  root = app.native_window_handle(".")
+  root = app.native_window_handle(:root)
   frame = app.native_window_handle(".nwh_scope")
 
   if Tryst.platform.darwin?

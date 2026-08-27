@@ -1,3 +1,5 @@
+require "./values"
+
 module Tryst
   # A single toplevel window, addressed by its Tk path - the window-scoped
   # counterpart to the future Widget (which covers any widget of any
@@ -20,7 +22,7 @@ module Tryst
     private EMPTY_KWARGS = {} of String => TclArgValue
 
     def initialize(@app : App, path)
-      @path = path.to_s
+      @path = Tryst.resolve_widget_target(path)
     end
 
     def to_s(io : IO) : Nil
@@ -242,7 +244,7 @@ module Tryst
       @app.tcl_invoke("focus", "-force", @path)
 
       tag = grab_release_tag
-      @app.bind(tag, "<Destroy>", owner: @path) do |_values, _signal|
+      @app.bind(tag, :destroy, owner: @path) do |_values, _signal|
         grab_release
         # Not a real window - clears the same way a scroll region's
         # shared wheel tag does (Realizer#release_wheel_bindings_on_destroy),

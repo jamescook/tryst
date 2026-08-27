@@ -65,10 +65,10 @@ class CircularProgress < Tryst::OwnerDrawnWidget
   end
 
   private def wire_keys : Nil
-    canvas.bind("Up") { |_, _| self.value = @value + 10 }
-    canvas.bind("Right") { |_, _| self.value = @value + 10 }
-    canvas.bind("Down") { |_, _| self.value = @value - 10 }
-    canvas.bind("Left") { |_, _| self.value = @value - 10 }
+    canvas.bind(:up) { |_, _| self.value = @value + 10 }
+    canvas.bind(:right) { |_, _| self.value = @value + 10 }
+    canvas.bind(:down) { |_, _| self.value = @value - 10 }
+    canvas.bind(:left) { |_, _| self.value = @value - 10 }
   end
 
   private def dim(color : {UInt8, UInt8, UInt8}, factor : Float64) : {UInt8, UInt8, UInt8}

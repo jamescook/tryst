@@ -17,9 +17,9 @@ app.set_window_geometry("400x200")
 info = app.create_widget("label", text: "Drop files here", font: "TkDefaultFont 16", anchor: "center")
 info.pack(expand: true, fill: "both", padx: 20, pady: 20)
 
-app.register_drop_target(".")
+app.register_drop_target(:root)
 
-app.bind(".", "<<DropFile>>", :data) do |values, _signal|
+app.bind(:root, :drop_file, subs: :data) do |values, _signal|
   paths = app.split_list(values[0])
   lines = paths.map do |path|
     if File.exists?(path)

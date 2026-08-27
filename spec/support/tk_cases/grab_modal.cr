@@ -201,7 +201,7 @@ tk_test "Window#modal's grab-release safety net still fires alongside a user's o
 
   w = app.window(".t")
   user_fired = false
-  app.bind(".t", "Destroy") { user_fired = true }
+  app.bind(".t", :destroy) { user_fired = true }
 
   w.modal
   raise "expected .t to hold the grab" unless app.tcl_eval("grab current .t") == ".t"
@@ -221,7 +221,7 @@ tk_test "a user's own <Destroy> binding set after #modal still fires alongside t
   raise "expected .t to hold the grab" unless app.tcl_eval("grab current .t") == ".t"
 
   user_fired = false
-  app.bind(".t", "Destroy") { user_fired = true }
+  app.bind(".t", :destroy) { user_fired = true }
 
   app.destroy(".t")
 

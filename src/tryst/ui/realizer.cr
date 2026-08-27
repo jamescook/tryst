@@ -533,7 +533,7 @@ module Tryst
         target_realized = target_node.realized
         raise ArgumentError.new("#{WidgetValidators.describe(target_node)} has no realized path to bind an event on") unless target_realized
 
-        @app.bind(target_realized.path, binding.event, binding.subs) { |args, signal| binding.handler.call(args, signal) }
+        @app.bind(target_realized.path, binding.event, subs: binding.subs) { |args, signal| binding.handler.call(args, signal) }
       end
 
       # Claims this node's own hierarchical/meaningful Tk path segment

@@ -282,21 +282,21 @@ module Tryst
     end
 
     private def wire_interaction : Nil
-      canvas.bind("B1-Motion", :x) do |values, _signal|
+      canvas.bind([:button1, :motion], subs: :x) do |values, _signal|
         next if disabled? || !pressed?
         set_from_pixel_x(values[0].to_i, notify: true)
       end
 
-      canvas.bind("Right") { |_, _| step_active(@step) }
-      canvas.bind("Up") { |_, _| step_active(@step) }
-      canvas.bind("Left") { |_, _| step_active(-@step) }
-      canvas.bind("Down") { |_, _| step_active(-@step) }
-      canvas.bind("Shift-Right") { |_, _| step_active(@step * BIG_STEP_MULT) }
-      canvas.bind("Shift-Up") { |_, _| step_active(@step * BIG_STEP_MULT) }
-      canvas.bind("Shift-Left") { |_, _| step_active(-@step * BIG_STEP_MULT) }
-      canvas.bind("Shift-Down") { |_, _| step_active(-@step * BIG_STEP_MULT) }
-      canvas.bind("Home") { |_, _| jump_active(@min) }
-      canvas.bind("End") { |_, _| jump_active(@max) }
+      canvas.bind(:right) { |_, _| step_active(@step) }
+      canvas.bind(:up) { |_, _| step_active(@step) }
+      canvas.bind(:left) { |_, _| step_active(-@step) }
+      canvas.bind(:down) { |_, _| step_active(-@step) }
+      canvas.bind([:shift, :right]) { |_, _| step_active(@step * BIG_STEP_MULT) }
+      canvas.bind([:shift, :up]) { |_, _| step_active(@step * BIG_STEP_MULT) }
+      canvas.bind([:shift, :left]) { |_, _| step_active(-@step * BIG_STEP_MULT) }
+      canvas.bind([:shift, :down]) { |_, _| step_active(-@step * BIG_STEP_MULT) }
+      canvas.bind(:home) { |_, _| jump_active(@min) }
+      canvas.bind(:end) { |_, _| jump_active(@max) }
 
       # Cycles which thumb is active instead of leaving the widget, but
       # only once - already-on-high lets the event through unconsumed
@@ -309,7 +309,7 @@ module Tryst
       # to it - rebinding one of THOSE would silently break the base
       # class's own hover/focus/press tracking. Confirmed directly
       # against Interp#bind before relying on this.
-      canvas.bind("Tab") do |_, signal|
+      canvas.bind(:tab) do |_, signal|
         next if disabled?
         if @active_thumb.low?
           @active_thumb = Thumb::High

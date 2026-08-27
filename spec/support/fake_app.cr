@@ -157,22 +157,15 @@ class FakeApp
     @command_result
   end
 
-  def bind(widget, event : String, *subs, owner : String? = nil,
-           &block : Array(String), Tryst::CallbackSignal -> Nil) : String
-    bind(widget, event, subs, owner: owner, &block)
-  end
-
-  def bind(widget, event : String, subs : Enumerable, *, owner : String? = nil,
-           &block : Array(String), Tryst::CallbackSignal -> Nil) : String
-    # Built element-wise rather than subs.to_a.map(&.to_s): a bind with
-    # NO subs at all reaches the splat overload above as an empty Tuple,
-    # whose #to_a is an Array(NoReturn) - #map over it then has no
-    # element type to infer a block return type from and fails to
-    # compile. The real App#bind is unaffected (it maps the Tuple
-    # directly, never through #to_a).
-    sub_names = [] of String
-    subs.each { |sub| sub_names << sub.to_s }
-    @binds << BindCall.new(widget.to_s, event, sub_names, block, owner)
+  def bind(widget, event : Tryst::EventArg, *, subs : Tryst::SubsArg = nil,
+           owner : String? = nil, &block : Array(String), Tryst::CallbackSignal -> Nil) : String
+    event_str = Tryst::EventSpec.resolve(event)
+    sub_names = case subs
+                when Nil   then [] of String
+                when Array then subs.map(&.to_s)
+                else            [subs.to_s]
+                end
+    @binds << BindCall.new(widget.to_s, event_str, sub_names, block, owner)
     "" # see #command's own comment - same reasoning, App#bind returns String too
   end
 

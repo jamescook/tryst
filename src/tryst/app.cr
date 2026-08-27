@@ -1,4 +1,5 @@
 require "./interp"
+require "./event_spec"
 require "./values"
 require "./callback_registry"
 require "./winfo"
@@ -308,17 +309,31 @@ module Tryst
     end
 
     # Bind a Tk event on a widget, with optional substitutions forwarded
-    # as the block's Array(String) argument, in order requested. subs can
-    # be Symbols (mapped via BIND_SUBS) or raw Tcl %-codes passed through
-    # as-is. widget accepts a Widget, a path String, or a class tag (e.g.
-    # "Entry").
+    # as the block's Array(String) argument, in order requested. widget
+    # accepts a Widget, a path String, or a class tag (e.g. "Entry").
+    #
+    # event is never Tk's own event-sequence syntax spelled by hand - see
+    # EventSpec.resolve for the full rules. In short: a bare Symbol
+    # resolves to whichever of Tk's own native events/keysyms it names
+    # (:return, :configure, :click), or a virtual event otherwise
+    # (:drop_file -> "<<DropFile>>"); an Array is always a native
+    # modifier combo ([:control, :s]). A raw Tk sequence String
+    # ("<<DropFile>>", "<Control-s>") remains a fully-supported escape
+    # hatch for anything the Symbol vocabulary doesn't cover yet.
+    #
+    # subs: can be a single Symbol/String or an Array of them - Symbols
+    # map through BIND_SUBS, a String must be a raw Tk %-code.
     #
     # @example Mouse click with window coordinates
-    #   app.bind(".c", "Button-1", :x, :y) { |values, _signal| puts values.join(",") }
+    #   app.bind(".c", :click, subs: [:x, :y]) { |values, _signal| puts values.join(",") }
     # @example No substitutions
-    #   app.bind(".btn", "Enter") { |_values, _signal| highlight }
+    #   app.bind(".btn", :enter) { |_values, _signal| highlight }
+    # @example A custom virtual event with its own data
+    #   app.bind(".", :drop_file, subs: :data) { |values, _signal| puts values[0] }
+    # @example A modifier combo
+    #   app.bind(".", [:control, :s]) { save }
     # @example Raw Tcl expression (for codes not in BIND_SUBS)
-    #   app.bind(".c", "Button-1", "%T") { |values, _signal| ... }
+    #   app.bind(".c", :click, subs: "%T") { |values, _signal| ... }
     #
     # owner: names the widget whose destruction releases this binding's
     # callback, and defaults to widget itself - always right when widget
@@ -335,20 +350,15 @@ module Tryst
     # Leave it nil for a genuine CLASS tag ("Entry", "Button"): those
     # outlive every individual widget on purpose, so there is no owner to
     # name and nothing to release.
-    def bind(widget, event : String, *subs, owner : String? = nil,
-             &block : Array(String), CallbackSignal -> Nil) : String
-      bind(widget, event, subs, owner: owner, &block)
-    end
-
-    # Same as the splat overload above, but for a subs list only known at
-    # runtime (e.g. Realizer forwarding an EventBinding's own subs) -
-    # Crystal has no way to splat a runtime-sized Array/Enumerable into a
-    # plain *subs parameter the way Ruby's *binding.subs does. Mirrors
-    # #tcl_invoke's own splat-args/Enumerable-args pair.
-    def bind(widget, event : String, subs : Enumerable, *, owner : String? = nil,
-             &block : Array(String), CallbackSignal -> Nil) : String
-      event_str = event.starts_with?('<') ? event : "<#{event}>"
-      tcl_subs = subs.map do |sub|
+    def bind(widget, event : EventArg, *, subs : SubsArg = nil,
+             owner : String? = nil, &block : Array(String), CallbackSignal -> Nil) : String
+      event_str = EventSpec.resolve(event)
+      sub_list = case subs
+                 when Nil   then [] of Symbol | String
+                 when Array then subs
+                 else            [subs]
+                 end
+      tcl_subs = sub_list.map do |sub|
         next BIND_SUBS[sub] if sub.is_a?(Symbol)
 
         raw = sub.to_s
@@ -358,22 +368,24 @@ module Tryst
         raw
       end
 
+      target = Tryst.resolve_widget_target(widget)
       cb = register_callback(&block)
-      callback_registry.reconcile({:bind, owner || widget.to_s}) do |before|
-        before.merge({bind_key(widget, event_str) => cb})
+      callback_registry.reconcile({:bind, owner || target}) do |before|
+        before.merge({bind_key(target, event_str) => cb})
       end
       sub_str = tcl_subs.empty? ? "" : " " + tcl_subs.join(" ")
-      tcl_invoke("bind", widget.to_s, event_str, "crystal_callback #{cb}#{sub_str}")
+      tcl_invoke("bind", target, event_str, "crystal_callback #{cb}#{sub_str}")
     end
 
     # Remove an event binding previously set with #bind. Pass the same
     # owner: #bind was given, or this reconciles a different container
     # and the callback is never released.
-    def unbind(widget, event : String, *, owner : String? = nil) : Nil
-      event_str = event.starts_with?('<') ? event : "<#{event}>"
-      key = bind_key(widget, event_str)
-      callback_registry.reconcile({:bind, owner || widget.to_s}) { |before| before.reject { |k, _| k == key } }
-      tcl_invoke("bind", widget.to_s, event_str, "")
+    def unbind(widget, event : EventArg, *, owner : String? = nil) : Nil
+      event_str = EventSpec.resolve(event)
+      target = Tryst.resolve_widget_target(widget)
+      key = bind_key(target, event_str)
+      callback_registry.reconcile({:bind, owner || target}) { |before| before.reject { |k, _| k == key } }
+      tcl_invoke("bind", target, event_str, "")
     end
 
     # A binding's key within its registry container - the bind target as
@@ -384,8 +396,8 @@ module Tryst
     # a live Tcl binding still refers to. That's worse than the leak
     # owner: exists to fix: a dangling id fails when the event fires,
     # rather than just costing memory.
-    private def bind_key(widget, event_str : String) : String
-      "#{widget} #{event_str}"
+    private def bind_key(target : String, event_str : String) : String
+      "#{target} #{event_str}"
     end
 
     # Evaluate *script* once per App instance under *name*, skipping it on
@@ -536,20 +548,20 @@ module Tryst
     end
 
     # Destroy a widget and all its children. widget accepts a Widget, a
-    # path String, or the default (the root window).
-    def destroy(widget = ".") : Nil
-      tcl_invoke("destroy", widget.to_s)
+    # path String, :root, or the default (the root window).
+    def destroy(widget = :root) : Nil
+      tcl_invoke("destroy", Tryst.resolve_widget_target(widget))
     end
 
-    # Show a window. Defaults to the root window ("."). window accepts a
-    # Widget or a path String.
-    def show(window = ".") : Nil
+    # Show a window. Defaults to the root window (:root). window accepts
+    # a Widget, a path String, or :root.
+    def show(window = :root) : Nil
       self.window(window).deiconify
     end
 
     # Hide a window without destroying it. Defaults to the root window
-    # ("."). window accepts a Widget or a path String.
-    def hide(window = ".") : Nil
+    # (:root). window accepts a Widget, a path String, or :root.
+    def hide(window = :root) : Nil
       self.window(window).withdraw
     end
 
@@ -560,9 +572,9 @@ module Tryst
     # loop, so call this before entering #mainloop (Session#run already
     # does).
     #
-    # Only the Widget-or-path coercion lives here - window accepts either,
-    # the same as #show/#hide.
-    def bring_to_front(window = ".") : Nil
+    # Only the Widget-or-path coercion lives here - window accepts a
+    # Widget, a path String, or :root, the same as #show/#hide.
+    def bring_to_front(window = :root) : Nil
       @interp.bring_to_front(self.window(window).path)
     end
 
@@ -597,37 +609,37 @@ module Tryst
     end
 
     # The platform window identifier behind a widget, for handing to
-    # something that draws into a window Tk owns. window accepts a Widget
-    # or a path String. Raises unless the widget is mapped - see
-    # Interp#native_window_handle.
-    def native_window_handle(window = ".") : NativeWindow
-      @interp.native_window_handle(window.to_s)
+    # something that draws into a window Tk owns. window accepts a
+    # Widget, a path String, or :root. Raises unless the widget is
+    # mapped - see Interp#native_window_handle.
+    def native_window_handle(window = :root) : NativeWindow
+      @interp.native_window_handle(Tryst.resolve_widget_target(window))
     end
 
     # A widget's on-screen content rectangle, formatted for macOS
     # `screencapture -R`: "x,y,w,h". Chrome-free by construction - a
     # window manager's title bar/shadow is a separate frame that winfo's
     # rootx/rooty/width/height never include. See scripts/screenshot.sh.
-    def screenshot_rect(window = ".") : String
-      path = window.to_s
+    def screenshot_rect(window = :root) : String
+      path = Tryst.resolve_widget_target(window)
       "#{winfo.rootx(path)},#{winfo.rooty(path)},#{winfo.width(path)},#{winfo.height(path)}"
     end
 
     # Show the busy cursor on a window while the block runs, and return
-    # whatever the block returned. Defaults to the root window (".").
-    # window accepts a Widget or a path String.
+    # whatever the block returned. Defaults to the root window (:root).
+    # window accepts a Widget, a path String, or :root.
     #
     # Tk's busy cursor also swallows mouse events for the window and its
     # children while held, which is the point - it's how you stop a user
     # clicking into a half-finished operation. The cursor is forgotten
     # again even if the block raises, so a failure can't leave the window
     # wedged looking busy forever.
-    def busy(window = ".", &)
-      tcl_invoke("tk", "busy", "hold", window.to_s)
+    def busy(window = :root, &)
+      tcl_invoke("tk", "busy", "hold", Tryst.resolve_widget_target(window))
       update_idletasks
       yield
     ensure
-      tcl_invoke("tk", "busy", "forget", window.to_s)
+      tcl_invoke("tk", "busy", "forget", Tryst.resolve_widget_target(window))
     end
 
     # Enable the Tk debug console, toggled with the given keyboard
@@ -641,7 +653,7 @@ module Tryst
       @interp.create_console
       @console_visible = false
 
-      bind(".", keybinding) do
+      bind(:root, keybinding) do
         if @console_visible
           tcl_eval("console hide")
           @console_visible = false
@@ -659,62 +671,62 @@ module Tryst
 
     # Set a window's title. Defaults to the root window ("."). window
     # accepts a Widget or a path String.
-    def set_window_title(title : String, window = ".") : Nil
+    def set_window_title(title : String, window = :root) : Nil
       self.window(window).title = title
     end
 
     # Get a window's current title. Defaults to the root window (".").
     # window accepts a Widget or a path String.
-    def window_title(window = ".") : String
+    def window_title(window = :root) : String
       self.window(window).title
     end
 
     # Set a window's geometry (e.g. "400x300", "400x300+100+50"). Defaults
     # to the root window ("."). window accepts a Widget or a path String.
-    def set_window_geometry(geometry : String, window = ".") : Nil
+    def set_window_geometry(geometry : String, window = :root) : Nil
       self.window(window).geometry = geometry
     end
 
     # Get a window's current geometry. Defaults to the root window (".").
     # window accepts a Widget or a path String.
-    def window_geometry(window = ".") : String
+    def window_geometry(window = :root) : String
       self.window(window).geometry
     end
 
     # Set whether a window is resizable. Defaults to the root window
     # ("."). window accepts a Widget or a path String.
-    def set_window_resizable(width : Bool, height : Bool, window = ".") : Nil
+    def set_window_resizable(width : Bool, height : Bool, window = :root) : Nil
       self.window(window).set_resizable(width, height)
     end
 
     # Get whether a window is resizable ({width_resizable,
     # height_resizable}). Defaults to the root window ("."). window
     # accepts a Widget or a path String.
-    def window_resizable(window = ".") : {Bool, Bool}
+    def window_resizable(window = :root) : {Bool, Bool}
       self.window(window).resizable
     end
 
     # Set a window's minimum size, as {width, height} in pixels. Defaults
     # to the root window ("."). window accepts a Widget or a path String.
-    def set_window_min_size(width : Int32, height : Int32, window = ".") : Nil
+    def set_window_min_size(width : Int32, height : Int32, window = :root) : Nil
       self.window(window).set_minsize(width, height)
     end
 
     # Get a window's minimum size. Defaults to the root window (".").
     # window accepts a Widget or a path String.
-    def window_min_size(window = ".") : {Int32, Int32}
+    def window_min_size(window = :root) : {Int32, Int32}
       self.window(window).minsize
     end
 
     # Set a window's maximum size, as {width, height} in pixels. Defaults
     # to the root window ("."). window accepts a Widget or a path String.
-    def set_window_max_size(width : Int32, height : Int32, window = ".") : Nil
+    def set_window_max_size(width : Int32, height : Int32, window = :root) : Nil
       self.window(window).set_maxsize(width, height)
     end
 
     # Get a window's maximum size. Defaults to the root window (".").
     # window accepts a Widget or a path String.
-    def window_max_size(window = ".") : {Int32, Int32}
+    def window_max_size(window = :root) : {Int32, Int32}
       self.window(window).maxsize
     end
 
@@ -750,31 +762,31 @@ module Tryst
     # spelling arrived in Tk 9. Tk answers with the appearance a window had
     # *before* the call, and with an empty string if the window has no
     # NSWindow yet, so show and settle a window before trusting this.
-    def appearance(window = ".") : String?
+    def appearance(window = :root) : String?
       return unless aqua?
-      tcl_invoke("tk::unsupported::MacWindowStyle", "appearance", window.to_s)
+      tcl_invoke("tk::unsupported::MacWindowStyle", "appearance", Tryst.resolve_widget_target(window))
     end
 
     # Force a window's macOS appearance, opting it out of the system
     # light/dark preference; :auto hands it back. A no-op on every other
     # platform. Not appearance=, since it takes the window to act on as
     # well as the mode - the same reason #set_window_title isn't a setter.
-    def set_appearance(mode : Appearance, window = ".") : Nil
+    def set_appearance(mode : Appearance, window = :root) : Nil
       set_appearance(mode.to_tcl, window)
     end
 
     # Raw-value overload, for an appearance name Appearance doesn't cover.
-    def set_appearance(mode : String, window = ".") : Nil
+    def set_appearance(mode : String, window = :root) : Nil
       return unless aqua?
-      tcl_invoke("tk::unsupported::MacWindowStyle", "appearance", window.to_s, mode)
+      tcl_invoke("tk::unsupported::MacWindowStyle", "appearance", Tryst.resolve_widget_target(window), mode)
     end
 
     # Whether a window is currently being displayed in dark mode. Always
     # false off macOS. Reflects the window's own forced appearance when
     # #set_appearance pinned one, and the system preference otherwise.
-    def dark?(window = ".") : Bool
+    def dark?(window = :root) : Bool
       return false unless aqua?
-      tcl_to_bool(tcl_invoke("tk::unsupported::MacWindowStyle", "isdark", window.to_s))
+      tcl_to_bool(tcl_invoke("tk::unsupported::MacWindowStyle", "isdark", Tryst.resolve_widget_target(window)))
     end
 
     # Register widget as a native OS file-drop target. Once a real drag
@@ -782,8 +794,8 @@ module Tryst
     # dropped path(s) as a Tcl list in its -data field:
     #
     # ```
-    # app.register_drop_target(".")
-    # app.bind(".", "<<DropFile>>", :data) do |values, _signal|
+    # app.register_drop_target(:root)
+    # app.bind(:root, :drop_file, subs: :data) do |values, _signal|
     #   paths = app.split_list(values[0])
     #   puts "Dropped #{paths.size} file(s): #{paths.inspect}"
     # end
@@ -807,7 +819,7 @@ module Tryst
     # to the root window ("."). window accepts a Widget or a path String.
     # Prefer app.window(window).on_close { } for new code - this flat
     # method is kept for parity with ruby-tryst and just delegates there.
-    def on_close(window = ".", &block : Array(String), CallbackSignal -> Nil) : Nil
+    def on_close(window = :root, &block : Array(String), CallbackSignal -> Nil) : Nil
       self.window(window).on_close(&block)
     end
 
@@ -815,7 +827,7 @@ module Tryst
     # window accepts a Widget or a path String. Prefer
     # app.window(window).grab_set for new code - this flat method is kept
     # for parity with ruby-tryst and just delegates there.
-    def grab_set(window = ".", global : Bool = false) : Nil
+    def grab_set(window = :root, global : Bool = false) : Nil
       self.window(window).grab_set(global: global)
     end
 
@@ -823,7 +835,7 @@ module Tryst
     # window ("."). window accepts a Widget or a path String. Prefer
     # app.window(window).grab_release for new code - this flat method is
     # kept for parity with ruby-tryst and just delegates there.
-    def grab_release(window = ".") : Nil
+    def grab_release(window = :root) : Nil
       self.window(window).grab_release
     end
 
@@ -831,13 +843,13 @@ module Tryst
     # accepts a Widget or a path String. Prefer app.window(window).modal
     # for new code - this flat method is kept for parity with ruby-tryst
     # and just delegates there.
-    def modal(window = ".", global : Bool = false, & : -> Nil) : Nil
+    def modal(window = :root, global : Bool = false, & : -> Nil) : Nil
       self.window(window).modal(global: global) { yield }
     end
 
     # Make a window modal without a setup block. Defaults to the root
     # window ("."). window accepts a Widget or a path String.
-    def modal(window = ".", global : Bool = false) : Nil
+    def modal(window = :root, global : Bool = false) : Nil
       self.window(window).modal(global: global)
     end
 
@@ -845,7 +857,7 @@ module Tryst
     # subcommands and composite window-lifecycle behaviors (#on_close,
     # #grab_set/#grab_release, #modal) into one object. Defaults to the
     # root window ("."). path accepts a Widget or a path String.
-    def window(path = ".") : Window
+    def window(path = :root) : Window
       Window.new(self, path)
     end
 

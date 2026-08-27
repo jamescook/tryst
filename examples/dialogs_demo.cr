@@ -67,7 +67,7 @@ class DialogsDemo
     @context_menu.command(:add, :separator)
     @context_menu.command(:add, :command, label: "(just closes the menu)", command: @app.callback { })
 
-    @app.bind(@log, "<Button-3>") { demo_popup_menu }
+    @log.bind(:right_click) { demo_popup_menu }
   end
 
   def run : Nil

@@ -15,8 +15,8 @@ require "tryst"
 require "tryst-dnd"
 
 app = Tryst::App.new
-app.register_drop_target(".")
-app.bind(".", "<<DropFile>>", :data) do |values, _signal|
+app.register_drop_target(:root)
+app.bind(:root, :drop_file, subs: :data) do |values, _signal|
   paths = app.split_list(values[0])
   puts "Dropped: #{paths.inspect}"
 end

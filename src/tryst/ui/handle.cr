@@ -646,7 +646,7 @@ module Tryst
 
       private def wire(realized_node : RealizedNode, binding : EventBinding) : Nil
         app_ref = realized_node.app || raise NotRealizedError.new
-        app_ref.bind(realized_node.path, binding.event, binding.subs) { |args, signal| binding.handler.call(args, signal) }
+        app_ref.bind(realized_node.path, binding.event, subs: binding.subs) { |args, signal| binding.handler.call(args, signal) }
       end
     end
   end

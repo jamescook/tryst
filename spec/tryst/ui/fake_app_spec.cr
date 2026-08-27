@@ -31,12 +31,12 @@ describe FakeApp do
     app = FakeApp.new
     fired = false
 
-    app.bind(".btn", "Button-1", :x, :y) { |_values, _signal| fired = true }
+    app.bind(".btn", :click, subs: [:x, :y]) { |_values, _signal| fired = true }
 
     app.binds.size.should eq(1)
     call = app.binds.first
     call.widget.should eq(".btn")
-    call.event.should eq("Button-1")
+    call.event.should eq("<Button-1>")
     call.subs.should eq(["x", "y"])
     call.block.call([] of String, Tryst::CallbackSignal.new)
     fired.should be_true

@@ -1,3 +1,5 @@
+require "./event_spec"
+
 module Tryst
   # Thin wrapper around a Tk widget path. Holds a reference to the App and
   # the widget's Tcl path string.
@@ -69,12 +71,13 @@ module Tryst
     end
 
     # Bind an event on this widget. See App#bind.
-    def bind(event : String, *subs, &block : Array(String), CallbackSignal -> Nil) : String
-      @app.bind(@path, event, *subs, &block)
+    def bind(event : EventArg, *, subs : SubsArg = nil,
+             &block : Array(String), CallbackSignal -> Nil) : String
+      @app.bind(@path, event, subs: subs, &block)
     end
 
     # Remove an event binding from this widget. See App#unbind.
-    def unbind(event : String) : Nil
+    def unbind(event : EventArg) : Nil
       @app.unbind(@path, event)
     end
 

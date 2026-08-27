@@ -7,7 +7,7 @@ tk_test "App#bind fires the callback on the event" do |app|
   app.tcl_eval("entry .e_bind1")
   app.tcl_eval("pack .e_bind1")
 
-  app.bind(".e_bind1", "Key-a") { fired = true }
+  app.bind(".e_bind1", :a) { fired = true }
 
   app.tcl_eval("focus -force .e_bind1")
   app.update
@@ -30,7 +30,7 @@ tk_test "App#bind forwards a single substitution value" do |app|
   app.tcl_eval("entry .e_bind2")
   app.tcl_eval("pack .e_bind2")
 
-  app.bind(".e_bind2", "KeyPress", :keysym) { |values, _signal| received_keysym = values[0] }
+  app.bind(".e_bind2", :key_press, subs: :keysym) { |values, _signal| received_keysym = values[0] }
 
   app.tcl_eval("focus -force .e_bind2")
   app.update
@@ -49,7 +49,7 @@ tk_test "App#bind forwards multiple substitution values in order" do |app|
   app.tcl_eval("pack .f_bind1")
   app.update
 
-  app.bind(".f_bind1", "Button-1", :x, :y) { |values, _signal| got_x = values[0]; got_y = values[1] }
+  app.bind(".f_bind1", :click, subs: [:x, :y]) { |values, _signal| got_x = values[0]; got_y = values[1] }
 
   app.tcl_eval("event generate .f_bind1 <Button-1> -x 42 -y 17")
   app.update
@@ -65,7 +65,7 @@ tk_test "App#bind with a raw %-code forwards the substitution" do |app|
   app.tcl_eval("entry .e_bind3")
   app.tcl_eval("pack .e_bind3")
 
-  app.bind(".e_bind3", "FocusIn", "%W") { |values, _signal| got_widget = values[0] }
+  app.bind(".e_bind3", :focus_in, subs: "%W") { |values, _signal| got_widget = values[0] }
 
   app.tcl_eval("focus -force .e_bind3")
   app.update
@@ -87,7 +87,7 @@ tk_test "App#bind rejects a raw %-code sub that isn't a real %-code" do |app|
 
   sub = "%W} ;set ::tk_case_bind_injection_probe hit;#"
   begin
-    app.bind(".e_bind_inject_sub", "FocusIn", sub) { |_values, _signal| }
+    app.bind(".e_bind_inject_sub", :focus_in, subs: sub) { |_values, _signal| }
     raise "expected ArgumentError, got no exception"
   rescue ArgumentError
     # expected
@@ -107,7 +107,7 @@ tk_test "App#bind still accepts a genuine raw %-code sub" do |app|
   app.tcl_eval("entry .e_bind_raw_sub")
   app.tcl_eval("pack .e_bind_raw_sub")
 
-  app.bind(".e_bind_raw_sub", "FocusIn", "%W") { |values, _signal| got_widget = values[0] }
+  app.bind(".e_bind_raw_sub", :focus_in, subs: "%W") { |values, _signal| got_widget = values[0] }
 
   app.tcl_eval("focus -force .e_bind_raw_sub")
   app.update
@@ -157,14 +157,14 @@ tk_test "App#bind on a class tag works" do |app|
   app.tcl_eval("entry .e_bind5")
   app.tcl_eval("pack .e_bind5")
 
-  app.bind("Entry", "Key-z") { fired = true }
+  app.bind("Entry", :z) { fired = true }
 
   app.tcl_eval("focus -force .e_bind5")
   app.update
   app.tcl_eval("event generate .e_bind5 <Key-z>")
   app.update
 
-  app.unbind("Entry", "Key-z")
+  app.unbind("Entry", :z)
 
   raise "class binding did not fire" unless fired
 end
@@ -235,7 +235,7 @@ tk_test "App#unbind removes a binding" do |app|
   app.tcl_eval("entry .e_bind7")
   app.tcl_eval("pack .e_bind7")
 
-  app.bind(".e_bind7", "Key-q") { count += 1 }
+  app.bind(".e_bind7", :q) { count += 1 }
 
   app.tcl_eval("focus -force .e_bind7")
   app.update
@@ -243,7 +243,7 @@ tk_test "App#unbind removes a binding" do |app|
   app.update
   raise "binding didn't fire initially" unless count == 1
 
-  app.unbind(".e_bind7", "Key-q")
+  app.unbind(".e_bind7", :q)
 
   app.tcl_eval("event generate .e_bind7 <Key-q>")
   app.update
@@ -253,10 +253,10 @@ end
 tk_test "rebinding the same widget+event does not grow the callback count" do |app|
   app.tcl_eval("entry .e_bind8")
 
-  app.bind(".e_bind8", "Key-a") { }
+  app.bind(".e_bind8", :a) { }
   baseline = app.interp.callback_ids.size
 
-  5.times { app.bind(".e_bind8", "Key-a") { } }
+  5.times { app.bind(".e_bind8", :a) { } }
 
   raise "rebinding should replace, not accumulate, the registered callback" unless app.interp.callback_ids.size == baseline
 end
@@ -265,10 +265,10 @@ tk_test "App#unbind releases the registered callback" do |app|
   app.tcl_eval("entry .e_bind9")
 
   baseline = app.interp.callback_ids.size
-  app.bind(".e_bind9", "Key-a") { }
+  app.bind(".e_bind9", :a) { }
   raise "bind should register one callback" unless app.interp.callback_ids.size == baseline + 1
 
-  app.unbind(".e_bind9", "Key-a")
+  app.unbind(".e_bind9", :a)
 
   raise "unbind should release the callback" unless app.interp.callback_ids.size == baseline
 end
@@ -277,8 +277,8 @@ tk_test "destroying a widget releases its bind callbacks" do |app|
   app.tcl_eval("frame .f_bind3")
 
   baseline = app.interp.callback_ids.size
-  app.bind(".f_bind3", "Button-1") { }
-  app.bind(".f_bind3", "Key-a") { }
+  app.bind(".f_bind3", :click) { }
+  app.bind(".f_bind3", :a) { }
   raise "bind should register two callbacks" unless app.interp.callback_ids.size == baseline + 2
 
   app.destroy(".f_bind3")
@@ -333,7 +333,7 @@ end
 tk_test "a class-tag binding survives destroying a widget of that class" do |app|
   app.tcl_eval("entry .e_bind10")
   fired = 0
-  app.bind("Entry", "Key-y") { fired += 1 }
+  app.bind("Entry", :y) { fired += 1 }
 
   app.destroy(".e_bind10")
 
@@ -345,7 +345,7 @@ tk_test "a class-tag binding survives destroying a widget of that class" do |app
   app.tcl_eval("event generate .e_bind11 <Key-y>")
   app.update
 
-  app.unbind("Entry", "Key-y")
+  app.unbind("Entry", :y)
   raise "the class binding should still fire for a later widget" unless fired == 1
 end
 
@@ -354,8 +354,8 @@ tk_test "destroying a widget releases bind callbacks on its descendants" do |app
   app.tcl_eval("button .f_bind4.b -text hi")
 
   baseline = app.interp.callback_ids.size
-  app.bind(".f_bind4", "Button-1") { }
-  app.bind(".f_bind4.b", "Key-a") { }
+  app.bind(".f_bind4", :click) { }
+  app.bind(".f_bind4.b", :a) { }
   raise "bind should register two callbacks" unless app.interp.callback_ids.size == baseline + 2
 
   app.destroy(".f_bind4")
@@ -368,7 +368,7 @@ tk_test "bind cleanup works even with track_widgets disabled" do |_app|
   app2.tcl_eval("frame .f_bind5")
 
   baseline = app2.interp.callback_ids.size
-  app2.bind(".f_bind5", "Button-1") { }
+  app2.bind(".f_bind5", :click) { }
   raise "bind should register one callback" unless app2.interp.callback_ids.size == baseline + 1
 
   app2.destroy(".f_bind5")
@@ -381,8 +381,8 @@ tk_test "menu and toplevel widgets release bind callbacks on destroy" do |app|
   app.tcl_eval("toplevel .t_bind1")
 
   baseline = app.interp.callback_ids.size
-  app.bind(".m_bind1", "<<MenuSelect>>") { }
-  app.bind(".t_bind1", "Key-a") { }
+  app.bind(".m_bind1", :menu_select) { }
+  app.bind(".t_bind1", :a) { }
   raise "bind should register two callbacks" unless app.interp.callback_ids.size == baseline + 2
 
   app.destroy(".m_bind1")
