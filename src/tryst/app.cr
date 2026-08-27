@@ -673,6 +673,30 @@ module Tryst
       self.window(window).resizable
     end
 
+    # Set a window's minimum size, as {width, height} in pixels. Defaults
+    # to the root window ("."). window accepts a Widget or a path String.
+    def set_window_min_size(width : Int32, height : Int32, window = ".") : Nil
+      self.window(window).set_minsize(width, height)
+    end
+
+    # Get a window's minimum size. Defaults to the root window (".").
+    # window accepts a Widget or a path String.
+    def window_min_size(window = ".") : {Int32, Int32}
+      self.window(window).minsize
+    end
+
+    # Set a window's maximum size, as {width, height} in pixels. Defaults
+    # to the root window ("."). window accepts a Widget or a path String.
+    def set_window_max_size(width : Int32, height : Int32, window = ".") : Nil
+      self.window(window).set_maxsize(width, height)
+    end
+
+    # Get a window's maximum size. Defaults to the root window (".").
+    # window accepts a Widget or a path String.
+    def window_max_size(window = ".") : {Int32, Int32}
+      self.window(window).maxsize
+    end
+
     # macOS window appearances accepted by #set_appearance. Crystal
     # converts a symbol literal at the call site, so set_appearance(:dark)
     # works and reads much like ruby-tryst's own `app.appearance = :dark`.

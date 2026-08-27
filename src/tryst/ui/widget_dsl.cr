@@ -9,6 +9,7 @@ require "./image"
 require "./menu_builder"
 require "./structural_types"
 require "./split_orientation"
+require "./style_ref"
 
 module Tryst
   module UI
@@ -154,9 +155,10 @@ module Tryst
 
       # A separate toplevel window. Configure it with title:, geometry:
       # ("WxH+X+Y", or just "+X+Y"), resizable: (one Bool for both axes,
-      # or [width, height]), transient: false to make it independent of
-      # its parent rather than subordinate to it, and modal: true to have
-      # #show grab input when it opens.
+      # {width:, height:}, or [width, height]), min_size:/max_size:
+      # ({width, height} Tuples, wm minsize/maxsize), transient: false to
+      # make it independent of its parent rather than subordinate to it,
+      # and modal: true to have #show grab input when it opens.
       #
       # on_close: runs when the window manager's close button is used;
       # handle.on_close { } does the same thing after the fact. It is its
@@ -305,12 +307,50 @@ module Tryst
 
       # Mark which columns/rows of the enclosing ui.grid absorb leftover
       # space - the named replacement for grid columnconfigure -weight.
-      # Only valid directly inside a grid's block.
-      def stretch(columns : Array(Int32) = [] of Int32, rows : Array(Int32) = [] of Int32) : Nil
+      # min_size:, if given, applies the same minimum pixel width/height
+      # (-minsize) to every listed column AND row - the common "these N
+      # columns share a floor" case. For a floor that differs per column,
+      # or a weight that isn't the flat 1 every listed index gets here,
+      # use #column/#row instead. Only valid directly inside a grid's
+      # block.
+      def stretch(columns : Array(Int32) = [] of Int32, rows : Array(Int32) = [] of Int32,
+                  min_size : Int32? = nil) : Nil
         grid_node = current_grid!("stretch")
 
-        grid_node.stretch_columns = columns unless columns.empty?
-        grid_node.stretch_rows = rows unless rows.empty?
+        columns.each { |col| grid_node.column_configs[col] = merge_axis_config(grid_node.column_configs[col]?, weight: 1, min_size: min_size) }
+        rows.each { |row| grid_node.row_configs[row] = merge_axis_config(grid_node.row_configs[row]?, weight: 1, min_size: min_size) }
+      end
+
+      # Precise, single-column control over grid columnconfigure - weight:
+      # and min_size: (-minsize), independently of #stretch's flat
+      # every-listed-column-gets-weight-1 shape. Only valid directly
+      # inside a grid's block.
+      #
+      # Overloads ui.column (the flow container widget, defined above via
+      # container_widget) rather than colliding with it: that one's name:
+      # is Symbol?, so a call passing an Int32 index here - grid.column(0,
+      # ...) - only ever matches this overload.
+      def column(index : Int32, weight : Int32? = nil, min_size : Int32? = nil) : Nil
+        grid_node = current_grid!("column")
+        grid_node.column_configs[index] = merge_axis_config(grid_node.column_configs[index]?, weight: weight, min_size: min_size)
+      end
+
+      # Ditto, for a grid row.
+      def row(index : Int32, weight : Int32? = nil, min_size : Int32? = nil) : Nil
+        grid_node = current_grid!("row")
+        grid_node.row_configs[index] = merge_axis_config(grid_node.row_configs[index]?, weight: weight, min_size: min_size)
+      end
+
+      # Folds a new weight:/min_size: into an axis's existing config
+      # (from an earlier #stretch/#column/#row call on the same index),
+      # keeping whichever side isn't being updated this time - the same
+      # "only touch what's given" rule #stretch's own two-axis form
+      # already follows.
+      private def merge_axis_config(existing : GridAxisConfig?, weight : Int32?, min_size : Int32?) : GridAxisConfig
+        GridAxisConfig.new(
+          weight: weight.nil? ? existing.try(&.weight) : weight,
+          min_size: min_size.nil? ? existing.try(&.min_size) : min_size,
+        )
       end
 
       container_widget canvas
@@ -428,7 +468,11 @@ module Tryst
 
       # Configure a ttk style, for the options ttk keeps on a style rather
       # than on the widget - a ttk::button has no -font of its own, so a
-      # bigger label means a named style and `style:` on the widget.
+      # bigger label means a named style and `style:` on the widget. The
+      # raw ttk name overload - name is exactly what ttk::style configure
+      # takes, "Calc.TButton" lore and all. Stays working unchanged as the
+      # escape hatch; #style(type:, name:) below is the DSL-language
+      # spelling that doesn't require knowing ttk's own naming convention.
       #
       # Deferred to realize like #raw, since it's a live-interpreter call.
       def style(name : String, **opts) : Nil
@@ -438,6 +482,61 @@ module Tryst
           hash.each { |key, value| kwargs[key.to_s] = value }
           app.command("ttk::style", ([:configure, name] of TclArgValue), kwargs)
         end
+      end
+
+      # Restyle a DSL widget type app-wide, by its type: (:button, :label,
+      # ...) - see TtkStyleNames for the full vocabulary - instead of
+      # ttk's own Prefix.TWidgetClass spelling. Every widget of that type
+      # picks up the change immediately; there's no name involved, and
+      # nothing to pass to a widget's own style: - see the two-arg
+      # overload below for a named variant instead.
+      #
+      # hover:/pressed:/disabled:/focused: are each a NamedTuple of the
+      # same options, translated into a `ttk::style map` state entry
+      # (ttk's own per-state color mechanism, the one feature every ttk
+      # app needs and nobody remembers the syntax for) - e.g.
+      # style(:button, background: "#a00", hover: {background: "#c00"}).
+      def style(type : Symbol, *, hover = nil, pressed = nil, disabled = nil, focused = nil, **opts) : Nil
+        configure_ttk_style(TtkStyleNames.for(type), hover, pressed, disabled, focused, opts)
+      end
+
+      # The named variant: configures "name.TWidgetClass" and returns a
+      # StyleRef to pass as a widget's own style: (ui.button(style: calc)),
+      # so nothing downstream ever has to know the ttk class or spell out
+      # the Prefix.TWidgetClass convention by hand. Same hover:/pressed:/
+      # disabled:/focused: as the app-wide overload above.
+      def style(type : Symbol, name : String, *,
+                hover = nil, pressed = nil, disabled = nil, focused = nil, **opts) : StyleRef
+        ttk_name = "#{name}.#{TtkStyleNames.for(type)}"
+        configure_ttk_style(ttk_name, hover, pressed, disabled, focused, opts)
+        StyleRef.new(ttk_name)
+      end
+
+      # Shared by both #style(type:) overloads above.
+      private def configure_ttk_style(ttk_name : String, hover, pressed, disabled, focused, opts) : Nil
+        hash = to_opts_hash(opts)
+        raw do |app|
+          unless hash.empty?
+            kwargs = Hash(String, TclArgValue).new
+            hash.each { |key, value| kwargs[key.to_s] = value }
+            app.command("ttk::style", ([:configure, ttk_name] of TclArgValue), kwargs)
+          end
+          apply_style_map(app, ttk_name, "active", hover)
+          apply_style_map(app, ttk_name, "pressed", pressed)
+          apply_style_map(app, ttk_name, "disabled", disabled)
+          apply_style_map(app, ttk_name, "focus", focused)
+        end
+      end
+
+      # One state's worth of #style's hover:/pressed:/disabled:/focused: -
+      # a NamedTuple of options, each folded into `ttk::style map`'s own
+      # {state value} list shape. A no-op for a state nobody passed.
+      private def apply_style_map(app : AppContract, ttk_name : String, state : String, spec) : Nil
+        return if spec.nil?
+
+        kwargs = Hash(String, TclArgValue).new
+        spec.each { |option, value| kwargs[option.to_s] = [state, value] of TclArgValue }
+        app.command("ttk::style", ([:map, ttk_name] of TclArgValue), kwargs) unless kwargs.empty?
       end
 
       # Look up a named widget declared in the current scope, raising
@@ -542,6 +641,22 @@ module Tryst
             arr = Array(TclArgValue).new
             value.each { |v| arr << v }
             hash[key] = arr
+          elsif value.is_a?(StyleRef)
+            # A StyleRef isn't a TclArgValue itself (it's a ui-layer type,
+            # core stays unaware of it) - style: (or any other option
+            # naming a style) unwraps to the raw ttk name it wraps.
+            hash[key] = value.ttk_name
+          elsif value.is_a?(NamedTuple(width: Bool, height: Bool))
+            # resizable: {width:, height:} - the same per-axis [width,
+            # height] Array form WindowType.resizable_pair already
+            # accepts, spelled without having to remember positional
+            # order.
+            hash[key] = [value[:width], value[:height]] of TclArgValue
+          elsif value.is_a?(Tuple(Int32, Int32))
+            # min_size:/max_size: {width, height} - wm minsize/maxsize
+            # take two positional values, so this collapses to the same
+            # Array(TclArgValue) shape every other list-valued option uses.
+            hash[key] = [value[0], value[1]] of TclArgValue
           else
             hash[key] = value
           end

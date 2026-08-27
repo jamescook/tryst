@@ -34,7 +34,7 @@ module Tryst::UI::WidgetDSL
   leaf_widget gauge
 end
 
-session = Tryst::UI.app(title: "Custom Widget Demo") do |builder|
+session = Tryst::UI.app(title: "Custom Widget Demo", resizable: false) do |builder|
   level = builder.var(50)
 
   builder.column(gap: 10, pad: 12) do |col|
@@ -42,8 +42,6 @@ session = Tryst::UI.app(title: "Custom Widget Demo") do |builder|
     col.gauge(:level_gauge, bind: level, maximum: 100, length: 240)
     col.slider(:level_slider, bind: level, from: 0, to: 100, length: 240)
   end
-
-  builder.raw(&.command(:wm, :resizable, ".", 0, 0))
 end
 
 session.run

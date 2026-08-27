@@ -22,6 +22,16 @@ module Tryst
           window.set_resizable(width, height)
         end
 
+        if min_size = opts[:min_size]?
+          width, height = WindowType.size_pair(min_size, "min_size")
+          window.set_minsize(width, height)
+        end
+
+        if max_size = opts[:max_size]?
+          width, height = WindowType.size_pair(max_size, "max_size")
+          window.set_maxsize(width, height)
+        end
+
         WindowType.share_macos_menu(app, path, parent_path) if Tryst.platform.darwin?
 
         # Transient is applied by Handle#show, not here. On Aqua a
@@ -61,6 +71,18 @@ module Tryst
         else
           raise ArgumentError.new("resizable: expects true/false or 1/0 (got #{value.inspect})")
         end
+      end
+
+      # min_size:/max_size: as a {width, height} Tuple (arrives here as a
+      # 2-element Array via WidgetDSL#to_opts_hash's Tuple->Array
+      # conversion). option_name names which option a bad value belongs
+      # to, so the error points at the actual mistake.
+      def self.size_pair(value : TclArgValue, option_name : String) : Tuple(Int32, Int32)
+        unless value.is_a?(Array) && value.size == 2 && value.all?(Int32)
+          raise ArgumentError.new("#{option_name}: expects {width, height} (got #{value.inspect})")
+        end
+
+        {value[0].as(Int32), value[1].as(Int32)}
       end
 
       # Every platform except macOS gives each window its own menu bar;

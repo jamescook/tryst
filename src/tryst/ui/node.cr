@@ -43,6 +43,15 @@ module Tryst
       end
     end
 
+    # One column or row's grid columnconfigure/rowconfigure options - the
+    # leftover-space weight: (WidgetDSL#stretch's flat 1, or an explicit
+    # value from #column/#row) and the minimum pixel size: (-minsize).
+    # Both nilable: nil means "say nothing for this option", matching
+    # CellPosition's own convention - a column/row can get a weight with
+    # no min_size, a min_size with no weight, or (via #column/#row) both
+    # at once.
+    record GridAxisConfig, weight : Int32? = nil, min_size : Int32? = nil
+
     # A single element of the retained-mode tree - a widget, layout
     # container, reactive var, or deferred build-time op (the categories
     # from the architecture doc; this class itself is generic across all of
@@ -134,10 +143,15 @@ module Tryst
       # real window once there is one.
       property close_handler : CloseHandler?
 
-      # Which columns/rows of this ui.grid absorb leftover space, from
-      # WidgetDSL#stretch. nil means the grid never said.
-      property stretch_columns : Array(Int32)?
-      property stretch_rows : Array(Int32)?
+      # Per-column/row grid configuration - weight (leftover-space share)
+      # and min_size (grid columnconfigure/rowconfigure -minsize), keyed
+      # by column/row index. Populated by WidgetDSL#stretch (weight: 1,
+      # plus an optional shared min_size: across every listed index) and
+      # by WidgetDSL#column/#row (precise per-index control). An index
+      # absent from the hash never had grid columnconfigure/rowconfigure
+      # called for it at all.
+      property column_configs = Hash(Int32, GridAxisConfig).new
+      property row_configs = Hash(Int32, GridAxisConfig).new
 
       # Spacing between this container's children, in pixels - the gap:
       # option on a flow container or a grid.

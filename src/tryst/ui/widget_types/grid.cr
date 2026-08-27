@@ -51,12 +51,30 @@ module Tryst
         realized_node = node.realized
         return unless realized_node
 
-        node.stretch_columns.try &.each do |col|
-          app.command(:grid, [:columnconfigure, realized_node.path, col] of TclArgValue, {"weight" => 1} of String => TclArgValue)
+        node.column_configs.each do |col, config|
+          GridType.apply_axis_config(app, :columnconfigure, realized_node.path, col, config)
         end
-        node.stretch_rows.try &.each do |row|
-          app.command(:grid, [:rowconfigure, realized_node.path, row] of TclArgValue, {"weight" => 1} of String => TclArgValue)
+        node.row_configs.each do |row, config|
+          GridType.apply_axis_config(app, :rowconfigure, realized_node.path, row, config)
         end
+      end
+
+      # Runs one grid columnconfigure/rowconfigure call for a single
+      # index, folding weight/min_size into the one command Tk itself
+      # accepts both options on - a no-op if neither is set (shouldn't
+      # happen: nothing populates an axis_configs entry without setting
+      # at least one).
+      def self.apply_axis_config(app : AppContract, subcommand : Symbol, path : String, index : Int32, config : GridAxisConfig) : Nil
+        kwargs = Hash(String, TclArgValue).new
+        if weight = config.weight
+          kwargs["weight"] = weight
+        end
+        if min_size = config.min_size
+          kwargs["minsize"] = min_size
+        end
+        return if kwargs.empty?
+
+        app.command(:grid, [subcommand, path, index] of TclArgValue, kwargs)
       end
     end
 

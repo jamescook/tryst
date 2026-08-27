@@ -772,14 +772,14 @@ describe Tryst::UI::WidgetDSL do
     expect_raises(ArgumentError, /grid/) { session.cell(row: 0, col: 0) { } }
   end
 
-  it "stretch sets stretch_columns/stretch_rows on the grid node" do
+  it "stretch sets column_configs/row_configs on the grid node" do
     session = WidgetDslHarness.new
 
     session.grid(:g, &.stretch(columns: [1], rows: [0]))
 
     node = session.document.root.children.first
-    node.stretch_columns.should eq([1])
-    node.stretch_rows.should eq([0])
+    node.column_configs.should eq({1 => Tryst::UI::GridAxisConfig.new(weight: 1)})
+    node.row_configs.should eq({0 => Tryst::UI::GridAxisConfig.new(weight: 1)})
   end
 
   # Naming only one axis leaves the other alone rather than clearing it.
@@ -792,8 +792,40 @@ describe Tryst::UI::WidgetDSL do
     end
 
     node = session.document.root.children.first
-    node.stretch_columns.should eq([1])
-    node.stretch_rows.should eq([0])
+    node.column_configs.should eq({1 => Tryst::UI::GridAxisConfig.new(weight: 1)})
+    node.row_configs.should eq({0 => Tryst::UI::GridAxisConfig.new(weight: 1)})
+  end
+
+  it "stretch min_size: applies the same floor to every listed column and row" do
+    session = WidgetDslHarness.new
+
+    session.grid(:g, &.stretch(columns: [0, 1], rows: [0], min_size: 60))
+
+    node = session.document.root.children.first
+    node.column_configs.should eq({
+      0 => Tryst::UI::GridAxisConfig.new(weight: 1, min_size: 60),
+      1 => Tryst::UI::GridAxisConfig.new(weight: 1, min_size: 60),
+    })
+    node.row_configs.should eq({0 => Tryst::UI::GridAxisConfig.new(weight: 1, min_size: 60)})
+  end
+
+  it "column/row set precise per-index weight/min_size" do
+    session = WidgetDslHarness.new
+
+    session.grid(:g) do |grid|
+      grid.column(0, weight: 2, min_size: 60)
+      grid.row(1, min_size: 24)
+    end
+
+    node = session.document.root.children.first
+    node.column_configs.should eq({0 => Tryst::UI::GridAxisConfig.new(weight: 2, min_size: 60)})
+    node.row_configs.should eq({1 => Tryst::UI::GridAxisConfig.new(min_size: 24)})
+  end
+
+  it "column outside a grid raises" do
+    session = WidgetDslHarness.new
+
+    expect_raises(ArgumentError, /grid/) { session.column(0) }
   end
 
   it "stretch outside a grid raises" do

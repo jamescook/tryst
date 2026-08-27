@@ -49,6 +49,8 @@ module Tryst
       abstract def title=(value : String)
       abstract def geometry=(value : String)
       abstract def set_resizable(width : Bool, height : Bool)
+      abstract def set_minsize(width : Int32, height : Int32)
+      abstract def set_maxsize(width : Int32, height : Int32)
       abstract def transient=(master)
       abstract def geometry
       abstract def withdraw

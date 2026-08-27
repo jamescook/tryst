@@ -27,6 +27,7 @@ module Tryst
       def self.call(node : Node, parent : Node?, document : Document, errors : Array(String)) : Nil
         check_missing_cell(node, errors)
         check_cell_collisions(node, errors)
+        check_axis_configs(node, errors)
       end
 
       private def self.check_missing_cell(node : Node, errors : Array(String)) : Nil
@@ -66,6 +67,38 @@ module Tryst
             errors << "#{WidgetValidators.describe(node)} has more than one widget at row #{row}, col #{col}: " \
                       "#{WidgetValidators.describe(first)}, #{WidgetValidators.describe(second)}"
           end
+        end
+      end
+
+      # A negative min_size (WidgetDSL#stretch/#column/#row) is a mistake
+      # to catch here rather than let become a confusing Tcl error later.
+      # An index carrying a min_size that no cell actually occupies is
+      # checked too, but ONLY for min_size - #stretch's plain weight-only
+      # form (no min_size:) has always been fine to point at an index with
+      # no cell yet (a grid built up incrementally, say), so that stays
+      # unvalidated to avoid retroactively breaking it.
+      private def self.check_axis_configs(node : Node, errors : Array(String)) : Nil
+        used_columns = Set(Int32).new
+        used_rows = Set(Int32).new
+        node.children.each do |child|
+          child.cell_position.try(&.each_occupied { |(row, col)| used_rows << row; used_columns << col })
+        end
+
+        check_axis_config_axis(node, node.column_configs, used_columns, "column", errors)
+        check_axis_config_axis(node, node.row_configs, used_rows, "row", errors)
+      end
+
+      private def self.check_axis_config_axis(node : Node, configs : Hash(Int32, GridAxisConfig),
+                                              used : Set(Int32), axis : String, errors : Array(String)) : Nil
+        configs.each do |index, config|
+          if (min_size = config.min_size) && min_size < 0
+            errors << "#{WidgetValidators.describe(node)} sets a negative min_size (#{min_size}) for #{axis} #{index}"
+          end
+
+          next unless config.min_size
+          next if used.includes?(index)
+
+          errors << "#{WidgetValidators.describe(node)} sets min_size for #{axis} #{index}, but no cell is placed there"
         end
       end
 

@@ -25,12 +25,17 @@ module Tryst
     # (forwarded verbatim to Tryst::App.new there) - Crystal needs a fixed
     # parameter list, and track_widgets is App.new's only other real
     # keyword arg.
-    # resizable: false fixes the root window at its content's size, the
-    # same option a ui.window takes.
+    # resizable: false fixes the root window at its content's size (or
+    # {width: false, height: true} for per-axis control); geometry:/
+    # min_size:/max_size: are the same options a ui.window takes, applied
+    # to the root window instead.
     def self.app(title : String? = nil, scroll : Bool? = nil, track_widgets : Bool = true,
-                 resizable : Bool? = nil, & : Session -> Nil) : Session
+                 resizable : (Bool | NamedTuple(width: Bool, height: Bool))? = nil,
+                 geometry : String? = nil,
+                 min_size : Tuple(Int32, Int32)? = nil, max_size : Tuple(Int32, Int32)? = nil,
+                 & : Session -> Nil) : Session
       session = Session.new(title: title, scroll: scroll, track_widgets: track_widgets,
-        resizable: resizable)
+        resizable: resizable, geometry: geometry, min_size: min_size, max_size: max_size)
       yield session
       session
     end
@@ -41,9 +46,11 @@ module Tryst
     # `@session.button(...)` statements is what lets a class hold its
     # widgets in non-nilable fields. The Session IS the builder either way.
     def self.app(title : String? = nil, scroll : Bool? = nil, track_widgets : Bool = true,
-                 resizable : Bool? = nil) : Session
+                 resizable : (Bool | NamedTuple(width: Bool, height: Bool))? = nil,
+                 geometry : String? = nil,
+                 min_size : Tuple(Int32, Int32)? = nil, max_size : Tuple(Int32, Int32)? = nil) : Session
       Session.new(title: title, scroll: scroll, track_widgets: track_widgets,
-        resizable: resizable)
+        resizable: resizable, geometry: geometry, min_size: min_size, max_size: max_size)
     end
   end
 end

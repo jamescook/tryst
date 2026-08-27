@@ -95,6 +95,19 @@ module Tryst
       @app.tcl_invoke("wm", "minsize", @path, width.to_s, height.to_s)
     end
 
+    # The largest size the window manager will let the user drag this
+    # window to, as {width, height} in pixels.
+    def maxsize : Tuple(Int32, Int32)
+      parts = @app.tcl_invoke("wm", "maxsize", @path).split
+      {parts[0].to_i, parts[1].to_i}
+    end
+
+    # Sets the maximum size. A very large value (Tk's own default) clears
+    # the constraint in practice.
+    def set_maxsize(width : Int32, height : Int32) : Nil
+      @app.tcl_invoke("wm", "maxsize", @path, width.to_s, height.to_s)
+    end
+
     # The width/height ratio range the window manager will hold this
     # window within, as {min_numer, min_denom, max_numer, max_denom}, or
     # nil when no aspect constraint is set.

@@ -28,48 +28,34 @@ KEYS = [
 ]
 
 service = CalculatorService.new
-keypad = nil.as(Tryst::UI::Handle?)
 
-session = Tryst::UI.app(title: "Calculator") do |builder|
+session = Tryst::UI.app(title: "Calculator", resizable: false) do |builder|
   display = builder.var(service.display_value)
   service.on_change.connect { |value| display.value = value }
 
-  keypad = builder.grid(gap: 2) do |grid|
+  # A larger button font, since the macOS aqua theme ignores vertical
+  # stretch - font size is what drives button height.
+  calc_button = builder.style(:button, "Calc", font: "{TkDefaultFont} 18")
+
+  builder.grid(gap: 2) do |grid|
     grid.cell(row: 0, col: 0, colspan: 4, sticky: :ew, ipady: 8) do
       grid.text_box(bind: display, justify: :right, state: :readonly, font: "{TkDefaultFont} 24")
     end
 
     KEYS.each do |(label, row, col, span)|
       grid.cell(row: row, col: col, colspan: span, sticky: :nsew) do
-        grid.button(text: label, style: "Calc.TButton").on_action { service.press(label) }
+        grid.button(text: label, style: calc_button).on_action { service.press(label) }
       end
     end
 
-    # Equal-width columns.
-    grid.stretch(columns: [0, 1, 2, 3])
+    # Equal-width columns, each floored at 60px.
+    grid.stretch(columns: [0, 1, 2, 3], min_size: 60)
   end
 
-  # The handful of things with no DSL spelling of their own. raw runs
-  # during realize, once there's a live interpreter - the DSL is sugar
-  # over tryst, not a wall around it. Note what the block is handed: an
-  # AppContract exposing structured #command, and deliberately no
-  # tcl_eval, so there's no string interpolation to get wrong.
-  builder.raw do |app|
-    app.command(:wm, :resizable, ".", 0, 0)
-
-    # A larger button font, since the macOS aqua theme ignores vertical
-    # stretch - font size is what drives button height.
-    app.command("ttk::style", "configure", "Calc.TButton", font: "{TkDefaultFont} 18")
-
-    if grid_path = keypad.try(&.path)
-      4.times { |column| app.command(:grid, "columnconfigure", grid_path, column, minsize: 60) }
-    end
-
-    # Nothing here about focus: #run brings the window to the front itself
-    # (App#bring_to_front), and unlike a bare `wm attributes -topmost 1` it
-    # releases the pin afterwards, so later windows - a native dialog, say
-    # - can still open above this one.
-  end
+  # Nothing here about focus: #run brings the window to the front itself
+  # (App#bring_to_front), and unlike a bare `wm attributes -topmost 1` it
+  # releases the pin afterwards, so later windows - a native dialog, say
+  # - can still open above this one.
 end
 
 session.run

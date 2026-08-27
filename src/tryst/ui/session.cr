@@ -59,7 +59,9 @@ module Tryst
       @toast_timer : AfterHandle?
 
       def initialize(@title : String? = nil, @scroll : Bool? = nil, @track_widgets : Bool = true,
-                     @resizable : Bool? = nil)
+                     @resizable : (Bool | NamedTuple(width: Bool, height: Bool))? = nil,
+                     @geometry : String? = nil,
+                     @min_size : Tuple(Int32, Int32)? = nil, @max_size : Tuple(Int32, Int32)? = nil)
         @document = Document.new
         @stack = [@document.root]
         @app = nil
@@ -101,13 +103,28 @@ module Tryst
         # and Handle#perform_destroy!'s own doc comment.
         app.on_widget_destroyed { |path| @document.node_destroyed(path) }
         # The root window's own properties, the counterpart to the title:
-        # already handled above and to the resizable: a ui.window takes.
-        #
-        # Tested against nil rather than for truthiness: `resizable: false`
-        # is the whole point of the option, and `if fixed = @resizable`
-        # would skip exactly that case.
-        fixed = @resizable
-        app.set_window_resizable(fixed, fixed) unless fixed.nil?
+        # already handled above and to the resizable:/geometry:/min_size:/
+        # max_size: a ui.window takes.
+        case fixed = @resizable
+        in Bool
+          # Tested against nil rather than for truthiness above: `resizable:
+          # false` is the whole point of the option, and `if fixed =
+          # @resizable` would skip exactly that case.
+          app.set_window_resizable(fixed, fixed)
+        in NamedTuple
+          app.set_window_resizable(fixed[:width], fixed[:height])
+        in Nil
+          nil
+        end
+        if geometry = @geometry
+          app.set_window_geometry(geometry)
+        end
+        if min_size = @min_size
+          app.set_window_min_size(min_size[0], min_size[1])
+        end
+        if max_size = @max_size
+          app.set_window_max_size(max_size[0], max_size[1])
+        end
         begin
           # Vars and images realize first, so a widget bound to one
           # (bind:) displays its initial value from the moment it's

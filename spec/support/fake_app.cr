@@ -19,6 +19,7 @@ class FakeWindow
 
   record ModalCall, global : Bool
   record ResizableCall, width : Bool, height : Bool
+  record SizeCall, width : Int32, height : Int32
 
   getter path : String
   getter modal_calls = [] of ModalCall
@@ -26,6 +27,8 @@ class FakeWindow
   getter titles = [] of String
   getter geometries = [] of String
   getter resizables = [] of ResizableCall
+  getter minsizes = [] of SizeCall
+  getter maxsizes = [] of SizeCall
   getter transients = [] of String
   getter withdrawals = 0
   getter deiconifies = 0
@@ -48,6 +51,14 @@ class FakeWindow
 
   def set_resizable(width : Bool, height : Bool) : Nil
     @resizables << ResizableCall.new(width, height)
+  end
+
+  def set_minsize(width : Int32, height : Int32) : Nil
+    @minsizes << SizeCall.new(width, height)
+  end
+
+  def set_maxsize(width : Int32, height : Int32) : Nil
+    @maxsizes << SizeCall.new(width, height)
   end
 
   def transient=(master) : Nil

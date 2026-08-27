@@ -26,7 +26,7 @@ IMAGE_FILETYPES = [
   {"All Files", "*"},
 ]
 
-session = Tryst::UI.app(title: "Dialog Wrappers Demo (UI DSL)") do |builder|
+session = Tryst::UI.app(title: "Dialog Wrappers Demo (UI DSL)", geometry: "520x420") do |builder|
   # Every dialog reports back through this one var, bound to the label at
   # the bottom - no widget reconfiguring by hand anywhere in this file.
   # Setting .value is the whole of "show the result".
@@ -108,7 +108,6 @@ session = Tryst::UI.app(title: "Dialog Wrappers Demo (UI DSL)") do |builder|
   # (App#bring_to_front), and does it WITHOUT leaving the window pinned
   # above everything - which is what used to make every dialog below open
   # behind this window.
-  builder.raw(&.command(:wm, :geometry, ".", "520x420"))
 end
 
 session.run
