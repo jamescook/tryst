@@ -417,18 +417,21 @@ module Tryst
     bytes = Slice.new(ptr.as(UInt8*), len.to_i32)
     return String.new(bytes) unless bytes.includes?(0xC0_u8)
 
-    io = IO::Memory.new(bytes.size)
-    i = 0
-    while i < bytes.size
-      if bytes[i] == 0xC0_u8 && bytes[i + 1]? == 0x80_u8
-        io.write_byte(0_u8)
-        i += 2
-      else
-        io.write_byte(bytes[i])
-        i += 1
+    String.new(bytes.size) do |buf|
+      i = 0
+      j = 0
+      while i < bytes.size
+        if bytes[i] == 0xC0_u8 && bytes[i + 1]? == 0x80_u8
+          buf[j] = 0_u8
+          i += 2
+        else
+          buf[j] = bytes[i]
+          i += 1
+        end
+        j += 1
       end
+      {j, 0}
     end
-    io.to_s
   end
 
   # errorinfo/errorcode mirror Tcl's own -errorinfo/-errorcode return
