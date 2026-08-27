@@ -364,6 +364,15 @@ module Tryst
         self
       end
 
+      # @api private - non-allocating check to avoid the dup in
+      # `Mixer#dispatch_stopped`.
+      def stop_pending? : Bool
+        return false if destroyed?
+        signal = @stop_signal
+        return false if signal.nil? || @on_stopped.nil?
+        signal.value.count != @stop_delivered
+      end
+
       # @api private - `Mixer#dispatch_stopped` calls this on the main
       # thread. Returns how many stops it delivered, which is more than
       # one when the track stopped several times since the last call.

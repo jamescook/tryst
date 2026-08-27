@@ -312,9 +312,10 @@ module Tryst
       # propagates and leaves the rest undelivered until the next call.
       def dispatch_stopped : Int32
         return 0 if @stop_watchers.empty?
+        return 0 unless @stop_watchers.any?(&.stop_pending?)
 
-        # Over a copy: a block is free to stop, destroy or register more
-        # tracks, and would otherwise mutate the array being walked.
+        # Over a copy, only once something's pending: a block is free to
+        # stop, destroy or register more tracks mid-walk.
         @stop_watchers.dup.sum do |track|
           track.destroyed? ? 0 : track.deliver_stopped
         end
