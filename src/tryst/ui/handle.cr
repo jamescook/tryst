@@ -8,6 +8,7 @@ require "./mouse_events"
 require "./keysyms"
 require "./canvas_item"
 require "./text_content"
+require "./option_error"
 
 module Tryst
   module UI
@@ -61,9 +62,13 @@ module Tryst
       # Mutate the live widget's options - delegated entirely to this
       # node type's addressing strategy, so Handle itself carries no
       # per-type knowledge of how to reach it.
-      # Raises NotRealizedError before realize.
+      # Raises NotRealizedError before realize; OptionError (not a bare
+      # TclError) for an unknown option - see option_error.cr.
       def configure(**opts) : String
         @addressing.configure(**opts)
+      rescue ex : TclError
+        tk_command = WidgetTypes.for_type(@node.type).try(&.tk_command) || @node.type.to_s
+        OptionErrorTranslation.translate!(ex, app, @node.type, @node.name, path, tk_command, creation: false)
       end
 
       # What Tk currently thinks this widget's options are right now,

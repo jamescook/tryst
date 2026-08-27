@@ -5,6 +5,7 @@ require "./realized_node"
 require "./app_contract"
 require "./overlay_anchors"
 require "./structural_types"
+require "./option_error"
 
 module Tryst
   module UI
@@ -125,6 +126,17 @@ module Tryst
         raise ArgumentError.new("no Tk command mapped for node type :#{type}")
       end
 
+      # Creates node's real Tk widget, translating an "unknown option"
+      # TclError into an OptionError naming the DSL widget and mistyped
+      # option rather than a bare Tcl path and -dashed flag - see
+      # option_error.cr. Every other TclError (or non-Tcl exception)
+      # passes through #translate! unchanged.
+      private def create_widget!(node : Node, tk_command : String, path : String) : Nil
+        @app.command(tk_command, [path] of TclArgValue, filtered_opts(node))
+      rescue ex : TclError
+        OptionErrorTranslation.translate!(ex, @app, node.type, node.name, path, tk_command, creation: true)
+      end
+
       private def create(node : Node, parent_path : String) : Nil
         registered = WidgetTypes.for_type(node.type)
         if registered && registered.custom_create?
@@ -150,7 +162,7 @@ module Tryst
             return
           end
 
-          @app.command(tk_command_for(node.type), [path] of TclArgValue, filtered_opts(node))
+          create_widget!(node, tk_command_for(node.type), path)
           node.realized = RealizedNode.new(app: @app, path: path)
           # After node.realized, so the hook can reach the live path
           # through a Handle if it needs to; before the children below,
@@ -226,7 +238,7 @@ module Tryst
         widget_path = "#{path}.widget"
 
         @app.command("ttk::frame", ([path] of TclArgValue), EMPTY_KWARGS)
-        @app.command(tk_command_for(node.type), [widget_path] of TclArgValue, filtered_opts(node))
+        create_widget!(node, tk_command_for(node.type), widget_path)
         node.realized = RealizedNode.new(app: @app, path: widget_path, arrange_path: path)
 
         wire_scrollbars(path, widget_path, x: scroll_axis?(node, :x, false), y: scroll_axis?(node, :y, true))
