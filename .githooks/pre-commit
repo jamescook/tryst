@@ -129,7 +129,7 @@ fi
 # vacuously since it was written. Verified the fix against every real id
 # from this session's own bd history before relying on it.
 if [ -n "$staged" ]; then
-  hits=$(git grep -n --cached -E 'ctk-[a-z0-9]{3}(\.[0-9]+)*' -- . ':!.githooks' ':!.claude' ':!.beads' 2>/dev/null || true)
+  hits=$(git grep -n --cached -E 'ctk-[a-z0-9]{3}(\.[0-9]+)*([^a-zA-Z]|$)' -- . ':!.githooks' ':!.claude' ':!.beads' 2>/dev/null || true)
   if [ -n "$hits" ]; then
     echo "pre-commit: refusing to commit bead/tracker id(s):" >&2
     printf '%s\n' "$hits" >&2

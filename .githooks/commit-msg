@@ -1,5 +1,8 @@
 #!/bin/sh
-# Block commit messages that embed a bead/tracker id (e.g. ctk-w16.5).
+# Block commit messages that embed a bead/tracker id (e.g. ctk-w16.5) or a
+# Co-Authored-By trailer. This repo sets core.hooksPath to .githooks
+# (see pre-commit's own header), which means the global ~/.git-hooks/
+# commit-msg never runs here - this hook has to do both jobs itself.
 #
 # Beads is internal to the workflow; git history is for humans, and a reader of the
 # log has no access to the tracker — the id is noise, and it leaks the internal
@@ -11,10 +14,16 @@
 
 msg_file="$1"
 
+if grep -qi '^co-authored-by:' "$msg_file"; then
+  echo "commit-msg: message contains a 'Co-Authored-By' trailer -- not allowed." >&2
+  echo "Remove it and commit again." >&2
+  exit 1
+fi
+
 # The real message, minus git's comment/scissor lines.
 body=$(grep -vE '^[[:space:]]*#' "$msg_file")
 
-ids=$(printf '%s\n' "$body" | grep -Eo 'ctk-[a-z0-9]+(\.[a-z0-9]+)*' | sort -u | tr '\n' ' ')
+ids=$(printf '%s\n' "$body" | grep -Eo 'ctk-[a-z0-9]{3}(\.[0-9]+)*([^a-zA-Z]|$)' | sort -u | tr '\n' ' ')
 
 if [ -n "$ids" ]; then
   echo "commit-msg: this message names a bead id: ${ids}" >&2
