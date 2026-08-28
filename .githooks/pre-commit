@@ -13,7 +13,6 @@ set -eu
 ameba_bin="lib/ameba/bin/ameba"
 if [ -x "$ameba_bin" ]; then
   if ! "$ameba_bin" src/ spec/ examples/ \
-    tryst-sdl/src/ tryst-sdl/spec/ tryst-sdl/examples/ \
     tryst-vector/src/ tryst-vector/spec/ tryst-vector/examples/ \
     tryst-value-slider/src/ tryst-value-slider/spec/ tryst-value-slider/examples/ \
     tryst-spinner/src/ tryst-spinner/spec/ tryst-spinner/examples/ \
@@ -57,9 +56,9 @@ fi
 
 # Each shard's examples are checked FROM ITS OWN DIRECTORY. A shard-name
 # require like `require "tryst/ui"` resolves against the lib/ of whatever
-# directory crystal runs in, and tryst-sdl has its own - checking its
-# examples from the repo root would look in the root's lib/ and fail to
-# find tryst at all. A shard with no examples/ directory at all (like
+# directory crystal runs in, and each sibling shard has its own - checking
+# its examples from the repo root would look in the root's lib/ and fail
+# to find tryst at all. A shard with no examples/ directory at all (like
 # tryst-vector, until it has a Surface API worth writing one against) is
 # skipped rather than treated as a failure - `find` on a missing dir
 # would otherwise abort the whole hook.
@@ -81,7 +80,6 @@ $out"
 }
 
 check_examples .
-check_examples tryst-sdl
 check_examples tryst-vector
 check_examples tryst-value-slider
 check_examples tryst-spinner
