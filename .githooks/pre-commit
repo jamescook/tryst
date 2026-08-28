@@ -13,11 +13,7 @@ set -eu
 ameba_bin="lib/ameba/bin/ameba"
 if [ -x "$ameba_bin" ]; then
   if ! "$ameba_bin" src/ spec/ examples/ \
-    tryst-value-slider/src/ tryst-value-slider/spec/ tryst-value-slider/examples/ \
-    tryst-spinner/src/ tryst-spinner/spec/ tryst-spinner/examples/ \
-    tryst-dnd/src/ tryst-dnd/spec/ tryst-dnd/examples/ \
-    tryst-segmented/src/ tryst-segmented/spec/ tryst-segmented/examples/ \
-    tryst-range-slider/src/ tryst-range-slider/spec/ tryst-range-slider/examples/; then
+    tryst-dnd/src/ tryst-dnd/spec/ tryst-dnd/examples/; then
     echo "pre-commit: ameba found issues (see above) - fix or run 'crystal tool format' first." >&2
     exit 1
   fi
@@ -77,11 +73,7 @@ $out"
 }
 
 check_examples .
-check_examples tryst-value-slider
-check_examples tryst-spinner
 check_examples tryst-dnd
-check_examples tryst-segmented
-check_examples tryst-range-slider
 
 if [ -n "$example_failures" ]; then
   echo "pre-commit: example(s) failed to compile:" >&2

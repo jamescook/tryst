@@ -93,7 +93,15 @@ After a release, bump the `version:` constraint in whichever
 
 ## What's published today
 
-Nothing yet - every shard here is still `path:`-only, monorepo-internal.
-This file and the script exist so that changes prompted by
-`shards install` reliability, and any future decision to make a
-specific shard externally installable, doesn't reinvent the mechanism.
+`tryst-sdl`, `tryst-vector`, `tryst-switch`, `tryst-segmented`,
+`tryst-value-slider`, `tryst-spinner`, and `tryst-range-slider` are all
+out as their own repos, each via a manual `git subtree split` (the same
+mechanism `scripts/release-shard.sh` automates - it just wasn't used for
+these). `tryst-dnd` is the only widget shard still monorepo-internal.
+
+None of them actually got the `shard.override.yml` step above - every
+released shard's own `shard.yml` just uses `github:` directly, no local
+`path:` override. That means editing `tryst` or `tryst-vector` locally
+doesn't affect an already-released shard until the edit is pushed and
+that shard's `shard.lock` is bumped. Fine for now (nobody's depending on
+these yet); revisit the override-file scheme if that stops being true.
