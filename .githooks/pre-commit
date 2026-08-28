@@ -16,7 +16,6 @@ if [ -x "$ameba_bin" ]; then
     tryst-value-slider/src/ tryst-value-slider/spec/ tryst-value-slider/examples/ \
     tryst-spinner/src/ tryst-spinner/spec/ tryst-spinner/examples/ \
     tryst-dnd/src/ tryst-dnd/spec/ tryst-dnd/examples/ \
-    tryst-switch/src/ tryst-switch/spec/ tryst-switch/examples/ \
     tryst-segmented/src/ tryst-segmented/spec/ tryst-segmented/examples/ \
     tryst-range-slider/src/ tryst-range-slider/spec/ tryst-range-slider/examples/; then
     echo "pre-commit: ameba found issues (see above) - fix or run 'crystal tool format' first." >&2
@@ -81,7 +80,6 @@ check_examples .
 check_examples tryst-value-slider
 check_examples tryst-spinner
 check_examples tryst-dnd
-check_examples tryst-switch
 check_examples tryst-segmented
 check_examples tryst-range-slider
 
