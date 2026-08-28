@@ -12,8 +12,7 @@ set -eu
 # dependencies.
 ameba_bin="lib/ameba/bin/ameba"
 if [ -x "$ameba_bin" ]; then
-  if ! "$ameba_bin" src/ spec/ examples/ \
-    tryst-dnd/src/ tryst-dnd/spec/ tryst-dnd/examples/; then
+  if ! "$ameba_bin" src/ spec/ examples/; then
     echo "pre-commit: ameba found issues (see above) - fix or run 'crystal tool format' first." >&2
     exit 1
   fi
@@ -73,7 +72,6 @@ $out"
 }
 
 check_examples .
-check_examples tryst-dnd
 
 if [ -n "$example_failures" ]; then
   echo "pre-commit: example(s) failed to compile:" >&2

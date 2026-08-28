@@ -12,7 +12,7 @@ system dependency.
 
 > [!WARNING]
 > **Early development. Alpha quality. Expect breaking changes.**
-> This is a monorepo of shards under active, early development. Things
+> This is under active, early development. Things
 > may change — including public APIs — commit-to-commit without notice.
 > No tagged version yet. It's developed and tested on macOS (Aqua) and
 > Linux (X11), with a full spec suite on Tcl/Tk 8.6 and 9.x, but nothing

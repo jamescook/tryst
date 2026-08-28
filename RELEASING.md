@@ -94,10 +94,11 @@ After a release, bump the `version:` constraint in whichever
 ## What's published today
 
 `tryst-sdl`, `tryst-vector`, `tryst-switch`, `tryst-segmented`,
-`tryst-value-slider`, `tryst-spinner`, and `tryst-range-slider` are all
-out as their own repos, each via a manual `git subtree split` (the same
-mechanism `scripts/release-shard.sh` automates - it just wasn't used for
-these). `tryst-dnd` is the only widget shard still monorepo-internal.
+`tryst-value-slider`, `tryst-spinner`, `tryst-range-slider`, and
+`tryst-dnd` are all out as their own repos, each via a manual
+`git subtree split` (the same mechanism `scripts/release-shard.sh`
+automates - it just wasn't used for these). No widget shards are left
+in this monorepo; only the core `tryst` library remains.
 
 None of them actually got the `shard.override.yml` step above - every
 released shard's own `shard.yml` just uses `github:` directly, no local
