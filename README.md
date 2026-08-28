@@ -169,12 +169,12 @@ Run any of them with `crystal run <path>`.
 
 ## tryst-sdl
 
-[tryst-sdl](tryst-sdl/) adds SDL3 audio, rendering and gamepad input as a
-separate shard in this repo, so tryst itself never grows an SDL
-dependency. See its own README -
-[`tryst-sdl/examples/yam/`](tryst-sdl/examples/yam/) (minesweeper, with
-sound effects) lives there rather than here, since it's the one example that
-needs it.
+[tryst-sdl](https://github.com/jamescook/tryst-sdl) adds SDL3 audio,
+rendering and gamepad input as its own shard/repo, depending on tryst via
+`github:` rather than living in this monorepo, so tryst itself never grows
+an SDL dependency. See its own README - its `examples/yam/` (minesweeper,
+with sound effects) lives there rather than here, since it's the one
+example that needs it.
 
 ## Tests
 
