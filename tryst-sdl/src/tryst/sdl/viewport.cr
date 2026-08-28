@@ -120,14 +120,17 @@ module Tryst
       # once the user switches to another application, another Space, or
       # another window of this one.
       #
-      # Deliberately a POLL rather than a Tk <Deactivate>/<Activate>
-      # binding, which is the obvious-looking alternative and does not
-      # work here: Tk only generates those from its own NSWindow
-      # notifications, and an app whose toplevel SDL has adopted does not
-      # reliably see them (verified directly - <Activate> arrives,
-      # <Deactivate> never does). SDL_GetWindowFlags reads window-manager
-      # state SDL already tracks, so this needs no event loop of its own,
-      # which an adopted window has never been part of anyway.
+      # A POLL rather than a Tk <Deactivate>/<Activate> binding, which is
+      # the obvious-looking alternative and does not work here: Tk only
+      # generates those from its own NSWindow notifications, and for a
+      # toplevel SDL has adopted <Activate> arrives while <Deactivate>
+      # never does. SDL_GetWindowFlags reads window-manager state SDL
+      # already tracks, so this needs no event loop of its own - which an
+      # adopted window has never been part of anyway.
+      #
+      # X11 gives SDL a child window of the frame rather than the
+      # toplevel, and a child never receives X input focus, so this is
+      # false there regardless of what the user is looking at.
       def input_focus? : Bool
         return false if @destroyed
 
