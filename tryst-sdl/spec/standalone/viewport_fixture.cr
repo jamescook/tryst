@@ -82,6 +82,14 @@ unless app.interp.wait_until { viewport.keys_down.empty? }
   raise "viewport: expected FocusOut to clear held keys, got #{viewport.keys_down.inspect}"
 end
 
+# Case 4c: input_focus? answers from window-manager state SDL already
+# tracks, which is why it works at all for a window that is not in SDL's
+# event loop. Its VALUE depends on there being a window manager - bare
+# Xvfb has none - so it is printed rather than asserted; what's asserted
+# is that it answers without raising, and (below, after destroy) that a
+# dead viewport is never focused.
+puts "viewport: input_focus? = #{viewport.input_focus?}"
+
 # --- Renderer -------------------------------------------------------
 #
 # Read back what was actually drawn. Without this the whole drawing API
@@ -498,6 +506,7 @@ end
 viewport.destroy
 app.update
 raise "viewport: expected destroyed? after destroy" unless viewport.destroyed?
+raise "viewport: expected a destroyed viewport to report no focus" if viewport.input_focus?
 raise "viewport: expected .vp_basic gone" if app.winfo.exists?(".vp_basic")
 raise "viewport: expected the app to survive" unless app.command(:winfo, :exists, ".") == "1"
 

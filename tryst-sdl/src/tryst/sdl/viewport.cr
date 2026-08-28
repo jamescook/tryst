@@ -116,6 +116,24 @@ module Tryst
         self
       end
 
+      # Whether this window has keyboard input focus right now - false
+      # once the user switches to another application, another Space, or
+      # another window of this one.
+      #
+      # Deliberately a POLL rather than a Tk <Deactivate>/<Activate>
+      # binding, which is the obvious-looking alternative and does not
+      # work here: Tk only generates those from its own NSWindow
+      # notifications, and an app whose toplevel SDL has adopted does not
+      # reliably see them (verified directly - <Activate> arrives,
+      # <Deactivate> never does). SDL_GetWindowFlags reads window-manager
+      # state SDL already tracks, so this needs no event loop of its own,
+      # which an adopted window has never been part of anyway.
+      def input_focus? : Bool
+        return false if @destroyed
+
+        LibSDL.get_window_flags(@window) & LibSDL::WINDOW_INPUT_FOCUS != 0
+      end
+
       # Which renderer backend SDL chose - "metal", "opengl", "direct3d11"
       # and so on. Worth logging when something draws wrong.
       def renderer_name : String

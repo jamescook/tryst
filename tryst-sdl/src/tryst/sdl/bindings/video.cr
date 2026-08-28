@@ -21,8 +21,17 @@ lib LibSDL
   PROP_WINDOW_CREATE_COCOA_WINDOW = "SDL.window.create.cocoa.window"
   PROP_WINDOW_CREATE_WIN32_HWND   = "SDL.window.create.win32.hwnd"
 
+  # SDL_WindowFlags is a Uint64 in SDL3 (it was Uint32 in SDL2), and
+  # SDL_WINDOW_INPUT_FOCUS is the only bit anything here reads: whether
+  # this window currently has keyboard focus. SDL_GetWindowFlags answers
+  # from the window-manager state it already tracks, without pumping an
+  # event loop - which matters, since an adopted window is not in SDL's
+  # own event loop at all (see Viewport).
+  WINDOW_INPUT_FOCUS = 0x0000000000000200_u64
+
   fun create_window_with_properties = SDL_CreateWindowWithProperties(props : PropertiesID) : Window*
   fun destroy_window = SDL_DestroyWindow(window : Window*)
+  fun get_window_flags = SDL_GetWindowFlags(window : Window*) : UInt64
   fun set_window_size = SDL_SetWindowSize(window : Window*, w : LibC::Int, h : LibC::Int) : Bool
   fun get_window_size = SDL_GetWindowSize(window : Window*, w : LibC::Int*, h : LibC::Int*) : Bool
 
