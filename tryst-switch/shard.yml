@@ -14,23 +14,16 @@ description: |
   a track color crossfade on toggle. Built on Tryst::OwnerDrawnWidget
   and rendered through tryst-vector.
 
-# Lives at the REPO ROOT, same depth as tryst-vector/tryst-sdl, even
-# though it's a widget rather than a rendering/platform shard -
-# `shards install` resolves a transitive path: dependency using the
-# SAME literal relative-path string the declaring shard itself used,
-# not a path re-anchored to whoever is installing it. tryst-vector's own
-# shard.yml depends on tryst via `path: ../` (relative to tryst-vector/
-# itself); at any OTHER depth, this shard's own `tryst: path:` would
-# need a different literal string to reach the same real directory, and
-# shards refuses that as "ambiguous sources" even though both resolve
-# to one real tryst. Same depth, same literal "../" both places, is
-# what actually resolves (confirmed directly by tryst-value-slider's
-# own shard.yml hitting exactly this error nested one level deeper).
+# tryst-vector is a repo of its own (github.com/jamescook/tryst-vector),
+# not a monorepo sibling, so it's a `github:` dependency. tryst must also
+# be `github:` here: shards treats a path source and a git source for the
+# same shard name as ambiguous even when they resolve to the same commit.
+# Local edits to tryst aren't visible here until they're pushed.
 dependencies:
   tryst:
-    path: ../
+    github: jamescook/tryst
   tryst-vector:
-    path: ../tryst-vector
+    github: jamescook/tryst-vector
 
 # Informational (shards does not install these) - see tryst-vector's own
 # shard.yml for the per-platform package names; this shard needs exactly

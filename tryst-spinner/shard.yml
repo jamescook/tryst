@@ -14,20 +14,16 @@ description: |
   thing Tk's own indeterminate ttk::progressbar has neither. Built on
   Tryst::OwnerDrawnWidget and rendered through tryst-vector.
 
-# Lives at the REPO ROOT, same depth as tryst-vector/tryst-value-slider,
-# for the same reason tryst-value-slider's own shard.yml documents in
-# detail: shards resolves a transitive path: dependency using the SAME
-# literal relative-path string the declaring shard itself used, not one
-# re-anchored to whoever is installing it. tryst-vector's own shard.yml
-# depends on tryst via `path: ../`; this shard needs that same literal
-# "../" to reach the same real tryst directory, which only lines up at
-# this depth. See RELEASING.md for how a widget shard eventually leaves
-# this monorepo instead of living here forever.
+# tryst-vector is a repo of its own (github.com/jamescook/tryst-vector),
+# not a monorepo sibling, so it's a `github:` dependency. tryst must also
+# be `github:` here: shards treats a path source and a git source for the
+# same shard name as ambiguous even when they resolve to the same commit.
+# Local edits to tryst aren't visible here until they're pushed.
 dependencies:
   tryst:
-    path: ../
+    github: jamescook/tryst
   tryst-vector:
-    path: ../tryst-vector
+    github: jamescook/tryst-vector
 
 # Informational (shards does not install these) - see tryst-vector's own
 # shard.yml for the per-platform package names; this shard needs exactly

@@ -14,15 +14,16 @@ description: |
   between them. Built on Tryst::OwnerDrawnWidget and rendered through
   tryst-vector.
 
-# Lives at the REPO ROOT, same depth as tryst-vector/tryst-sdl - see
-# tryst-value-slider's own shard.yml for the full reasoning (a
-# transitive path: dependency has to match the literal relative-path
-# string its declaring shard used; one level deeper breaks it).
+# tryst-vector is a repo of its own (github.com/jamescook/tryst-vector),
+# not a monorepo sibling, so it's a `github:` dependency. tryst must also
+# be `github:` here: shards treats a path source and a git source for the
+# same shard name as ambiguous even when they resolve to the same commit.
+# Local edits to tryst aren't visible here until they're pushed.
 dependencies:
   tryst:
-    path: ../
+    github: jamescook/tryst
   tryst-vector:
-    path: ../tryst-vector
+    github: jamescook/tryst-vector
 
 # Informational (shards does not install these) - see tryst-vector's own
 # shard.yml for the per-platform package names; this shard needs exactly
