@@ -619,7 +619,7 @@ module Tryst
       # tryst_crystal_callback_dispatch so it can reach @callbacks. Kept
       # alive for as long as the caller holds this Interp (same lifetime
       # assumption #eval/#invoke already make - there's no separate
-      # registry pinning it beyond that, unlike ruby-tryst's live_instances).
+      # registry pinning it beyond that, unlike ruby-teek's live_instances).
       LibTcl.create_obj_command(@ptr, "crystal_callback",
         ->tryst_crystal_callback_dispatch, Box.box(self), nil)
 

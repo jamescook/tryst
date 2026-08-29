@@ -89,6 +89,7 @@ module Tryst
 
     @photo : Photo?
     @photo_item : String?
+    @finalize_task : Proc(Nil)
 
     def initialize(@app : App, width : Int32 = 100, height : Int32 = 100, parent = nil)
       @theme = Theme.new(@app)
@@ -102,6 +103,12 @@ module Tryst
       # theme instead so it doesn't stand out against its parent.
       @canvas = @app.create_widget("canvas", parent: parent, width: width, height: height,
         highlightthickness: 0, takefocus: 1, background: @theme.background_name)
+
+      # Built once, here, rather than in #finalize - see .destroy_task.
+      # Before #wire_state_bindings/the #configure bind below: both
+      # implicitly use self (calling #redraw), and every ivar must be
+      # assigned before self is used at all.
+      @finalize_task = OwnerDrawnWidget.destroy_task(@tweens, @canvas)
 
       wire_state_bindings
       @canvas.bind(:configure, subs: [:width, :height]) do |_values, _signal|
@@ -249,8 +256,45 @@ module Tryst
       @canvas.destroy
     end
 
+    # :nodoc: called by the GC. Enqueues @finalize_task rather than doing
+    # any of #destroy's own work here directly - this method must not
+    # allocate or touch Tcl (Boehm finalizers run from inside GC_malloc,
+    # possibly on a thread other than the one the interpreter owns), same
+    # contract and same reasoning as Photo#finalize. Confirmed directly:
+    # this used to just call #destroy, and a from-source reproduction
+    # crashed inside Crystal's own Hash internals with the fault
+    # traceable to a finalizer running Tcl calls and Hash mutations
+    # (App#destroy's own recursive `<Destroy>` cascade, among others)
+    # from inside a collection.
+    #
+    # Doesn't enqueue anything for @photo/@animate_payloads: neither is
+    # required for correctness here. @photo has its own equally-safe
+    # finalizer (see Photo#finalize) that reclaims it independently, on
+    # its own future collection, once nothing (including this widget)
+    # references it anymore; @animate_payloads needs no explicit
+    # clearing once this whole object is garbage.
     def finalize
-      destroy
+      return if @destroyed
+      @destroyed = true
+      @app.interp.queue_for_main_from_finalizer(@finalize_task)
+    end
+
+    # @api private - see @finalize_task's assignment in #initialize for
+    # why this is split out and built exactly once, up front, rather than
+    # from inside #finalize itself. Captures tweens/canvas as plain
+    # locals, not self/@tweens/@canvas: closing over self would keep this
+    # widget permanently reachable from its own finalizer, so it could
+    # never be collected in the first place (same trap Photo.delete_task
+    # documents). tweens is captured by reference to the SAME Array
+    # #initialize built (never reassigned afterward, only mutated via
+    # #animate/#prune_finished_tweens), so this sees whatever it holds at
+    # whatever point the finalizer actually runs, not a stale snapshot.
+    def self.destroy_task(tweens : Array(Tween), canvas : Widget) : Proc(Nil)
+      -> do
+        tweens.each(&.cancel)
+        canvas.destroy
+        nil
+      end
     end
 
     private def raise_if_destroyed! : Nil
