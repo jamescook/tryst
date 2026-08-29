@@ -402,54 +402,6 @@ module Tryst
   # @api private - called by Interp#dispatch_callback only.
   def self.exit_callback : Nil
     @@callback_depth -= 1
-    flush_deferred_actions if @@callback_depth == 0
-  end
-
-  # Actions #defer_unless_idle queued while some #dispatch_callback frame
-  # was on the stack - run once the OUTERMOST one finishes (see
-  # #exit_callback above). Plain, unsynchronized - same reasoning as
-  # @@callback_depth itself: only ever touched from the interpreter's own
-  # owning thread.
-  @@deferred_actions = [] of Proc(Nil)
-
-  # Runs block right now if #in_callback? is false, or queues it to run
-  # once the OUTERMOST #dispatch_callback frame returns if it's true.
-  #
-  # Tk's own widget destruction is recursive - destroying a window
-  # synchronously destroys its children FIRST, and each one's own
-  # <Destroy> re-enters #dispatch_callback before an ancestor's own
-  # <Destroy> handler has returned. Any code in that shared handler
-  # (App#setup_destroy_cleanup's `bind all <Destroy>`, and everything it
-  # calls - CallbackRegistry#forget_all_for_path, Document#node_destroyed,
-  # ...) that mutates a Hash/Array/Set directly is exposed to running
-  # re-entrantly, nested inside an ENCLOSING invocation of itself that
-  # still holds a live reference into the same collection - confirmed
-  # directly: a from-source reproduction crashed inside Hash#delete_impl
-  # and, separately, Hash#[]?, both reached through this exact recursive
-  # Tk_DestroyWindow -> Tk_HandleEvent -> dispatch_callback chain, in two
-  # DIFFERENT Hashes (Interp#@callbacks and Document#@used_segments) -
-  # this isn't one bug in one collection, it's a hazard belonging to
-  # every mutation inside this kind of handler. #defer_unless_idle is the
-  # general fix: since nothing outside this handler observes ITS
-  # bookkeeping running synchronously with Tk's own C-level teardown
-  # (only the RELATIVE order between different paths' cleanup is ever
-  # meaningful, and a plain FIFO queue preserves that), deferring the
-  # whole thing until no #dispatch_callback frame remains on the stack
-  # makes every such mutation run with the collection guaranteed idle -
-  # never nested inside another live access to the same one.
-  def self.defer_unless_idle(&block : -> Nil) : Nil
-    if in_callback?
-      @@deferred_actions << block
-    else
-      block.call
-    end
-  end
-
-  private def self.flush_deferred_actions : Nil
-    return if @@deferred_actions.empty?
-    actions = @@deferred_actions
-    @@deferred_actions = [] of Proc(Nil)
-    actions.each(&.call)
   end
 
   # Tcl's internal string representation never contains a raw NUL byte -
@@ -568,24 +520,14 @@ module Tryst
     @callbacks = {} of String => CallbackEntry
     @next_callback_id = 1
 
-    # #unregister_callback ids that arrived while Tryst.in_callback? was
-    # true - deleted for real only once the OUTERMOST #dispatch_callback
-    # frame returns (see #unregister_callback and #dispatch_callback's own
-    # ensure). Tk's own widget destruction is recursive: destroying a
-    # parent synchronously destroys its children first, and each one's own
-    # <Destroy> re-enters #dispatch_callback before the parent's call has
-    # returned - and this project's single `bind all <Destroy>` handler
-    # (see #setup_destroy_cleanup) calls #unregister_callback for every
-    # path in that cascade. Deleting from @callbacks immediately used to
-    # mutate it while an ENCLOSING #dispatch_callback frame was still
-    # live inside its own `entry = @callbacks[id]?`/`entry.proc.call`,
-    # corrupting the Hash - confirmed directly: a from-source reproduction
-    # crashed inside Hash#delete_impl's own key comparison, called from
-    # here, called from a nested Tk_DestroyWindow -> Tk_HandleEvent ->
-    # dispatch_callback chain. Deferring the actual delete until no
-    # #dispatch_callback frame is still on the stack makes every mutation
-    # happen between dispatches, never during one.
-    @pending_unregister = Set(String).new
+    # Callback ids with a #dispatch_callback frame currently on the
+    # stack, and any (id, args) pairs that arrived for one of THOSE ids
+    # while it was already active - see #dispatch_callback's own comment
+    # for why self-re-entrant dispatch has to be deferred rather than run
+    # inline, and #callback_ids for the one place @callbacks' contents
+    # get inspected without going through dispatch.
+    @active_callback_ids = Set(String).new
+    @deferred_self_dispatch = Hash(String, Array(Array(String))).new
     @main_queue = Channel(Proc(Nil)).new(64)
 
     # Set by #delete, checked by #ptr - guards every FFI call after
@@ -838,33 +780,15 @@ module Tryst
     # Removes a previously registered callback by its id. Mirrors
     # ruby-tryst's Interp#unregister_callback. Safe to call on an id that's
     # already gone (a no-op) - callers like CallbackRegistry rely on this.
-    #
-    # Called from INSIDE a live #dispatch_callback (Tryst.in_callback?
-    # true - routine: Tk's own recursive widget destruction re-enters
-    # dispatch_callback for a child's <Destroy> before a parent's own
-    # <Destroy> handler has returned, and both call this), the actual
-    # @callbacks mutation is deferred rather than applied immediately -
-    # see @pending_unregister's own comment for why: mutating @callbacks
-    # while an enclosing dispatch_callback frame still holds a live
-    # reference into it is what corrupted the Hash.
     def unregister_callback(id : String) : Nil
-      if Tryst.in_callback?
-        @pending_unregister << id
-      else
-        @callbacks.delete(id)
-      end
+      @callbacks.delete(id)
     end
 
     # Currently registered callback id strings - test/introspection use:
     # asserting exactly which ids survive a release, not just how many.
-    # Mirrors ruby-tryst's Interp#callback_ids. Excludes ids
-    # #unregister_callback has already committed to removing but hasn't
-    # physically deleted yet (see @pending_unregister) - "survives a
-    # release" should answer as of the release, not as of whichever
-    # @callbacks mutation happened to run first.
+    # Mirrors ruby-tryst's Interp#callback_ids.
     def callback_ids : Array(String)
-      return @callbacks.keys if @pending_unregister.empty?
-      @callbacks.keys.reject { |id| @pending_unregister.includes?(id) }
+      @callbacks.keys
     end
 
     # Binds a Tcl event (e.g. "<Key-a>", "<Button-1>") on a widget/path to
@@ -884,31 +808,69 @@ module Tryst
     # code is TCL_ERROR). A callback that calls signal.break! stops Tk from
     # running any other bindings for this event (TCL_BREAK) instead of a
     # plain success; an unhandled exception still becomes TCL_ERROR.
+    #
+    # SELF-re-entrant dispatch (id already has a frame active on the
+    # stack) is queued rather than run inline - see #run_dispatch's own
+    # comment for why. A DIFFERENT id nested inside an active one still
+    # runs immediately, same as always; only a callback re-entering
+    # ITSELF is deferred.
     def dispatch_callback(id : String, args : Array(String)) : {LibC::Int, String?}
+      return {LibTcl::TCL_ERROR, "unknown callback id: #{id}"} unless @callbacks.has_key?(id)
+
+      if @active_callback_ids.includes?(id)
+        (@deferred_self_dispatch[id] ||= [] of Array(String)) << args
+        return {TCL_OK, nil}
+      end
+
+      result = run_dispatch(id, args)
+      drain_deferred_self_dispatch(id)
+      result
+    end
+
+    # Runs one callback invocation for real - the only place that calls
+    # entry.proc.call. Tracks id as active for the duration so a
+    # RE-ENTRANT #dispatch_callback call for this SAME id (Tk's own
+    # widget destruction and widget-creation tracing are both recursive:
+    # a parent's <Destroy>/creation trace can still be on the stack when
+    # a child's fires, through the SAME shared handler/id) queues instead
+    # of running nested inside this call - confirmed directly: running
+    # nested here, mutating a Hash/Array this proc closes over while THIS
+    # frame's own `entry.proc.call` was still live on the stack, is what
+    # corrupted it (crashed inside Hash#delete_impl and, separately,
+    # Hash#[]?, in two different Hashes reached this way).
+    private def run_dispatch(id : String, args : Array(String)) : {LibC::Int, String?}
       entry = @callbacks[id]?
       return {LibTcl::TCL_ERROR, "unknown callback id: #{id}"} unless entry
+
       signal = CallbackSignal.new
+      @active_callback_ids << id
       Tryst.enter_callback
       begin
         entry.proc.call(args, signal)
       ensure
         Tryst.exit_callback
-        flush_pending_unregister unless Tryst.in_callback?
+        @active_callback_ids.delete(id)
       end
       (signal.break? && entry.relay_break) ? {LibTcl::TCL_BREAK, nil} : {TCL_OK, nil}
     rescue ex
       {LibTcl::TCL_ERROR, "#{ex.class}: #{ex.message}"}
     end
 
-    # Actually deletes every id #unregister_callback deferred while a
-    # dispatch_callback was in progress - see @pending_unregister's own
-    # comment. Called only once #dispatch_callback's OUTERMOST frame is
-    # unwinding (Tryst.in_callback? already false again), so every delete
-    # here happens with no #dispatch_callback frame anywhere on the stack.
-    private def flush_pending_unregister : Nil
-      return if @pending_unregister.empty?
-      @pending_unregister.each { |id| @callbacks.delete(id) }
-      @pending_unregister.clear
+    # Runs every (id, args) #dispatch_callback queued while id was active
+    # - a plain queue-drain loop, not recursion, so re-entrant dispatch
+    # arriving DURING this very drain (a grandchild's <Destroy>, say)
+    # still gets picked up by the `while` re-checking the queue, however
+    # deep the real Tk nesting goes. Each drained call's own TCL_BREAK/
+    # TCL_ERROR result has nobody left to report it to (the Tcl call that
+    # originally asked for THAT invocation already returned, moved on
+    # with whatever this method's caller answered instead) - it's
+    # discarded, matching the very reason it was deferred in the first
+    # place.
+    private def drain_deferred_self_dispatch(id : String) : Nil
+      while (queued = @deferred_self_dispatch[id]?) && !queued.empty?
+        run_dispatch(id, queued.shift)
+      end
+      @deferred_self_dispatch.delete(id)
     end
 
     def main_windows : Int32
