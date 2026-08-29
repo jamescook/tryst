@@ -4,6 +4,43 @@ module Tryst
   private record OffThreadValue(T), value : T
   private record OffThreadError, exception : Exception
 
+  # @api private - App#off_thread's in-callback path. Its result has to
+  # cross to a fiber that can't safely suspend itself waiting (see
+  # Interp#guarded_entry), so it can't use a Channel#receive the way the
+  # top-level path does. @done is an Atomic(Bool): its release/acquire
+  # ordering is what makes @value/@exception - written on the worker
+  # thread before #mark_done, read here only after #done? is true - safe
+  # to read without their own lock.
+  private class OffThreadSlot(T)
+    @value : T? = nil
+    @exception : Exception? = nil
+    @done = Atomic(Bool).new(false)
+
+    def value=(value : T) : Nil
+      @value = value
+    end
+
+    def value : T
+      @value.as(T)
+    end
+
+    def exception=(exception : Exception) : Nil
+      @exception = exception
+    end
+
+    def exception : Exception?
+      @exception
+    end
+
+    def mark_done : Nil
+      @done.set(true)
+    end
+
+    def done? : Bool
+      @done.get
+    end
+  end
+
   # @api private - the persistent worker App#off_thread's default
   # (new_thread: false) path dispatches to. One real OS thread for the
   # whole process, started lazily on first use and never torn down -

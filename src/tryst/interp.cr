@@ -92,6 +92,18 @@ require "./tcltk_version_probe"
     {% end %}
   {% end %}
 {% end %}
+
+# Crystal's own top-level abort(msg) is exit(1) - no core dump, no signal,
+# at_exit handlers still run. Interp#guarded_entry needs a real abort()
+# instead: the fiber-interleaving invariant it enforces can't be violated
+# without Tcl/Tk's internal state already being wrong, so continuing
+# (an exception, a logged warning) would just corrupt it silently
+# somewhere else. Not in Crystal's own LibC bindings on this platform,
+# hence reopening the lib here.
+lib LibC
+  fun abort : NoReturn
+end
+
 lib LibTcl
   alias Interp = Void
   # Tcl_Obj is a public/documented struct (its first field, refCount, is
@@ -193,6 +205,14 @@ lib LibTcl
   # it already fired. See Interp#delete, which uses this to stop the
   # keepalive timer from outliving the interpreter it was armed for.
   fun delete_timer_handler = Tcl_DeleteTimerHandler(token : Void*)
+
+  # Stable public API in both 8.6 and 9.x (tcl.decls:939/993).
+  # Tcl_ThreadAlert wakes a thread blocked in Tcl_DoOneEvent - see
+  # Interp#spin_until, which App#off_thread uses to wait on a background
+  # job's result without blocking that thread's own event loop.
+  alias ThreadId = Void*
+  fun get_current_thread = Tcl_GetCurrentThread : ThreadId
+  fun thread_alert = Tcl_ThreadAlert(thread_id : ThreadId) : Void
 
   # From tcl.h: TCL_DONT_WAIT (1<<1), TCL_ALL_EVENTS (~TCL_DONT_WAIT). Not
   # stub-table entries (plain #defines), so there's nothing to link against
@@ -655,14 +675,49 @@ module Tryst
         "route that call through App#off_thread instead.")
     end
 
+    # #check_thread_affinity! only catches a call from the wrong OS
+    # THREAD. A second hazard exists on the RIGHT thread: Tcl/Tk's
+    # per-interp state (numLevels, the NR callback chain, Tk's binding
+    # pendingList) is only safe to re-enter strictly LIFO - one eval
+    # finishes before an outer one resumes. That holds automatically for
+    # nested calls on a single fiber's own C stack (that's how
+    # #tcl_eval("update")/vwait work), but breaks if a fiber suspends
+    # itself WHILE inside a Tcl/Tk call (e.g. a Channel#receive or sleep
+    # reached from inside a Tk callback) and Crystal's scheduler resumes
+    # a different fiber that re-enters the same interp: whichever fiber
+    # finishes second pops/releases state that still belongs to the one
+    # still parked, and later writes through those now-stale pointers
+    # land wherever the heap has since put something else. This guard
+    # makes that an immediate, attributable abort - see App#off_thread
+    # for the actual fix (never suspend the fiber while inside a
+    # callback; #spin_until blocks the C stack in place instead).
+    @eval_fiber : Fiber? = nil
+    @eval_depth = 0
+
+    private def guarded_entry(& : -> T) : T forall T
+      if @eval_depth > 0 && !@eval_fiber.same?(Fiber.current)
+        Crystal::System.print_error "TCL RE-ENTERED FROM %s WHILE %s IS PARKED INSIDE AN EVAL\n",
+          Fiber.current.name, @eval_fiber.try(&.name)
+        caller.each { |frame| Crystal::System.print_error "  %s\n", frame }
+        LibC.abort
+      end
+      @eval_fiber = Fiber.current if @eval_depth == 0
+      @eval_depth += 1
+      yield
+    ensure
+      @eval_depth -= 1
+    end
+
     # Evaluates a full Tcl script string. Fine for static scripts, but
     # don't build one out of untrusted/dynamic pieces via interpolation -
     # use #tcl_invoke instead, which quotes each argument as a distinct
     # Tcl_Obj rather than relying on Tcl's string-quoting rules.
     def tcl_eval(script : String) : String
       check_thread_affinity!
-      raise_unless_ok("Tcl_Eval(#{script.inspect})") { LibTcl.eval(ptr, script, -1, 0) }
-      result
+      guarded_entry do
+        raise_unless_ok("Tcl_Eval(#{script.inspect})") { LibTcl.eval(ptr, script, -1, 0) }
+        result
+      end
     end
 
     # Invokes a single command with each argument passed as its own Tcl_Obj
@@ -671,14 +726,18 @@ module Tryst
     # creep in. Mirrors ruby-tryst's Interp#tcl_invoke.
     def tcl_invoke(*args : String) : String
       check_thread_affinity!
-      objv = Array(LibTcl::Obj*).new(args.size) { |i| new_owned_obj(args[i]) }
-      invoke_objv(objv)
+      guarded_entry do
+        objv = Array(LibTcl::Obj*).new(args.size) { |i| new_owned_obj(args[i]) }
+        invoke_objv(objv)
+      end
     end
 
     def tcl_invoke(args : Enumerable(String)) : String
       check_thread_affinity!
-      objv = args.map { |arg| new_owned_obj(arg) }
-      invoke_objv(objv)
+      guarded_entry do
+        objv = args.map { |arg| new_owned_obj(arg) }
+        invoke_objv(objv)
+      end
     end
 
     private def new_owned_obj(arg : String) : LibTcl::Obj*
@@ -944,8 +1003,33 @@ module Tryst
     # need to observe a #queue_for_main effect without waiting for a
     # window to close (which is the only thing that ends #mainloop).
     def pump_once : Nil
-      LibTcl.do_one_event(LibTcl::TCL_DONT_WAIT)
+      check_thread_affinity!
+      guarded_entry { LibTcl.do_one_event(LibTcl::TCL_DONT_WAIT) }
       drain_main_queue
+    end
+
+    # App#off_thread's in-callback path: blocks (this C stack, not the
+    # fiber) until the block returns true, servicing Tk's event loop
+    # meanwhile - the same vwait/update semantics Tk itself uses for a
+    # nested wait. Wrapped in #guarded_entry so this counts as the
+    # already-parked fiber re-entering (allowed), not a second one.
+    def spin_until(& : -> Bool) : Nil
+      check_thread_affinity!
+      until yield
+        guarded_entry { LibTcl.do_one_event(LibTcl::TCL_ALL_EVENTS) }
+        drain_main_queue
+      end
+    end
+
+    # Tcl_GetCurrentThread/Tcl_ThreadAlert wrapped here rather than
+    # exposed as raw LibTcl calls, so App#off_thread doesn't need its own
+    # LibTcl require - see #spin_until, the only other half of this.
+    def self.current_thread_id : LibTcl::ThreadId
+      LibTcl.get_current_thread
+    end
+
+    def self.alert_thread(id : LibTcl::ThreadId) : Nil
+      LibTcl.thread_alert(id)
     end
 
     # Synthesizes a real Tk event (e.g. "<Key-a>", "<Button-1>") on a

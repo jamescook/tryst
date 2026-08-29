@@ -493,6 +493,48 @@ module Tryst
     # @example
     #   content = app.off_thread { File.read(path) }
     def off_thread(new_thread : Bool = false, &block : -> T) : T forall T
+      return off_thread_parked(new_thread, &block) unless Tryst.in_callback?
+
+      # Called from inside a Tk callback, so the calling fiber's C stack
+      # is Tcl_EvalObjv/Tk_BindEvent/... mid-eval. #off_thread_parked's
+      # Channel#receive would suspend that FIBER there, letting Crystal's
+      # scheduler resume some other fiber that re-enters the same interp
+      # non-LIFO - see Interp#guarded_entry for why that corrupts Tcl/Tk's
+      # internal state. So this path never yields the fiber: it blocks
+      # the C stack in place, servicing Tk's own event loop meanwhile
+      # (Interp#spin_until) - the same semantics as Tk's own
+      # `update`/`vwait`.
+      slot = OffThreadSlot(T).new
+      tk_thread = Interp.current_thread_id
+
+      job = Proc(Nil).new do
+        begin
+          slot.value = block.call
+        rescue ex
+          slot.exception = ex
+        end
+        slot.mark_done
+        Interp.alert_thread(tk_thread)
+      end
+
+      if new_thread
+        Fiber::ExecutionContext::Isolated.new("Tryst::off_thread") { job.call }
+      else
+        Tryst::OffThreadWorker.enqueue(job)
+      end
+
+      @interp.spin_until { slot.done? }
+      if ex = slot.exception
+        raise ex
+      end
+      slot.value
+    end
+
+    # The default path: off #off_thread when NOT called from inside a Tk
+    # callback, where suspending the calling fiber on Channel#receive is
+    # safe (nothing depends on this fiber's C stack staying intact while
+    # it waits).
+    private def off_thread_parked(new_thread : Bool, &block : -> T) : T forall T
       reply = Channel(OffThreadValue(T) | OffThreadError).new(1)
 
       job = Proc(Nil).new do
