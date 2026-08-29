@@ -20,8 +20,11 @@ module Tryst
       @value = value
     end
 
+    # not_nil!, not .as(T): when T is NoReturn (a block that only
+    # raises), @value is plain Nil, and Nil#not_nil! is typed NoReturn -
+    # .as(T) would be a `can't cast Nil to NoReturn` compile error there.
     def value : T
-      @value.as(T)
+      @value.not_nil! # ameba:disable Lint/NotNil
     end
 
     def exception=(exception : Exception) : Nil

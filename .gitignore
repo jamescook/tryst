@@ -17,11 +17,6 @@ desktop.ini
 *.log
 *.tmp
 
-# Beads / Dolt files (added by bd init)
-.dolt/
-*.db
-.beads-credential-key
-
 # Crystal (matches `crystal init`'s own template, which also skips
 # shard.lock for libraries - dependency locking is for the applications
 # that consume a shard, not the shard itself; ruby-tryst does the same
