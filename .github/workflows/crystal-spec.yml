@@ -1,67 +1,31 @@
 name: crystal spec (docker)
 
-# Manual only - no `on: push`/`on: pull_request`. The Docker build (fresh
-# Crystal toolchain pull + apt packages) plus the full suite under Xvfb
-# is slow, and running it on every push/PR would burn Actions minutes
-# fast for what's still a single-maintainer, pre-release repo. Trigger it
-# by hand from the Actions tab (or `gh workflow run crystal-spec.yml`)
-# when you actually want the Linux/Xvfb lane checked.
+# Self-hosted only, gated to jamescook: this repo is public, and a
+# self-hosted runner executes workflow code directly on that machine, so
+# a future collaborator with write access must not be able to trigger a
+# run here even via workflow_dispatch. Manual trigger only (no
+# push/pull_request) - see the runner setup notes for how to start it.
 #
 # Root project only for now (this repo's own Dockerfile, plain `crystal
 # spec`, 8.6 image) - no widget shards (tryst-sdl, tryst-vector, ...) and
 # no Tcl 9.x lane (Dockerfile.tcl9) yet.
+#
+# No Docker layer-cache plumbing here (unlike a GitHub-hosted runner):
+# this machine's Docker daemon persists between runs, so ordinary layer
+# caching already covers what actions/cache + buildkit-cache-dance +
+# type=gha existed to work around on ephemeral hosted runners.
 on:
   workflow_dispatch:
 
 jobs:
   spec:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macOS, jamescook-local]
+    if: github.actor == 'jamescook'
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        id: buildx
-        uses: docker/setup-buildx-action@v3
-
-      # The Dockerfile's own apt-get RUN uses --mount=type=cache, which
-      # BuildKit keeps in the local daemon's cache - gone by default on
-      # the next run, since GitHub Actions runners are ephemeral. This
-      # restores/saves that cache mount via actions/cache instead, the
-      # same pattern ~/open_source/teek's own CI uses (see its
-      # .github/workflows/test.yml) - a rerun doesn't re-download
-      # tcl-dev/tk-dev/xvfb from scratch every time.
-      - name: Restore apt build cache
-        uses: actions/cache@v4
-        with:
-          path: cache-mount
-          key: docker-cache-${{ hashFiles('Dockerfile') }}
-          restore-keys: |
-            docker-cache-
-
-      - name: Inject/extract Docker cache mounts
-        uses: reproducible-containers/buildkit-cache-dance@v3
-        with:
-          cache-map: |
-            {
-              "cache-mount/var-cache-apt": "/var/cache/apt",
-              "cache-mount/var-lib-apt": "/var/lib/apt"
-            }
-          builder: ${{ steps.buildx.outputs.name }}
-
-      # cache-from/cache-to: type=gha additionally caches the built
-      # image's own layers (not just apt's package cache) via GitHub's
-      # Actions cache backend - so an unchanged Dockerfile skips the
-      # whole apt-get layer outright instead of only skipping the
-      # re-download.
       - name: Build image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          builder: ${{ steps.buildx.outputs.name }}
-          load: true
-          tags: crystal-tryst-test:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+        run: docker build -t crystal-tryst-test:latest -f Dockerfile .
 
       - name: Run crystal spec
         run: docker run --rm --init -t crystal-tryst-test:latest
