@@ -12,7 +12,13 @@ module Tryst
   # thread before #mark_done, read here only after #done? is true - safe
   # to read without their own lock.
   private class OffThreadSlot(T)
-    @value : T? = nil
+    # uninitialized, not T? - a T? can't tell "never set" apart from "the
+    # block legitimately returned nil" (e.g. off_thread { @config.save! }),
+    # and #value read back via a nil check or .not_nil! would raise on
+    # every such call. #value is only ever read after #done? is true,
+    # by which point #value= has always run (either with the block's
+    # real result, or not at all if it raised - see #exception first).
+    @value = uninitialized T
     @exception : Exception? = nil
     @done = Atomic(Bool).new(false)
 
@@ -20,11 +26,8 @@ module Tryst
       @value = value
     end
 
-    # not_nil!, not .as(T): when T is NoReturn (a block that only
-    # raises), @value is plain Nil, and Nil#not_nil! is typed NoReturn -
-    # .as(T) would be a `can't cast Nil to NoReturn` compile error there.
     def value : T
-      @value.not_nil! # ameba:disable Lint/NotNil
+      @value
     end
 
     def exception=(exception : Exception) : Nil
