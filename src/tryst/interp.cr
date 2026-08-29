@@ -1076,14 +1076,9 @@ module Tryst
     # rather than a registered Crystal callback - there's nothing here that
     # needs Crystal to run.
     #
-    # Wrapped in `catch`: the window this idle script targets may already
-    # be destroyed by the time it fires (a caller that shows a window and
-    # tears it down again within one event-loop turn, e.g. many specs).
-    # An `after`-scheduled script with no error handling that raises goes
-    # through Tcl's own uncaught-error path (bgerror/tkerror - a modal
-    # dialog on a real display, an abrupt process exit under Xvfb with
-    # none), for an outcome ("nothing to un-topmost, the window's gone")
-    # that was always fine.
+    # Wrapped in `catch` because the window may be destroyed by the time
+    # the idle script fires (e.g. specs that tear it down within one
+    # event-loop turn).
     def bring_to_front(path : String = ".") : Nil
       tcl_invoke("wm", "deiconify", path)
       tcl_invoke("wm", "attributes", path, "-topmost", "1")
