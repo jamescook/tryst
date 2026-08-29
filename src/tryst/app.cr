@@ -1180,7 +1180,12 @@ module Tryst
         path = args[0]
         cls = args[1]
         next if path.starts_with?(".tryst_debug")
-        @widgets[path] = WidgetInfo.new(class_name: cls, parent: parent_path(path))
+        # Deferred, not written directly - see Tryst.defer_unless_idle's
+        # own comment (a mega-widget's own construction script issuing a
+        # nested widget-creation command before this trace's outer
+        # invocation returns re-enters this same callback, same hazard
+        # as #setup_destroy_cleanup's recursive <Destroy> case).
+        Tryst.defer_unless_idle { @widgets[path] = WidgetInfo.new(class_name: cls, parent: parent_path(path)) }
       end
 
       tcl_eval(<<-TCL)
@@ -1244,23 +1249,50 @@ module Tryst
     private def setup_destroy_cleanup : Nil
       destroy_cb_id = register_callback do |args, _signal|
         path = args[0]
-        callback_registry.forget_all_for_path(path)
-        @destroy_observers.each(&.call(path))
-        # Notify first (a still-live owner may care about THIS destroy),
-        # then sweep - not the other way round, or an owner whose only
-        # remaining reference was this notification's own call frame
-        # could be swept before ever hearing about it.
-        @weak_destroy_observers.each(&.notify(path))
-        @weak_destroy_observers.reject! { |observer| !observer.alive? }
-        # Unconditional, unlike @widgets below - #record_widget_type writes
-        # this one unconditionally too (not gated by track_widgets:), so a
-        # user who opted out of widget tracking still pays for the write
-        # and needs the matching delete.
-        @widget_types_by_path.delete(path)
-        next if path.starts_with?(".tryst_debug")
-        @widgets.delete(path) if @track_widgets
+        # Deferred, not run inline - see Tryst.defer_unless_idle's own
+        # comment. Tk's own widget destruction is recursive (destroying a
+        # window destroys its children FIRST, each with its own real
+        # <Destroy>), so THIS handler - the single `bind all <Destroy>` -
+        # re-enters itself before an ancestor's own invocation has
+        # returned. #run_destroy_cleanup mutates several Hashes/Arrays
+        # (CallbackRegistry's, Document's, @widget_types_by_path,
+        # @widgets); running that re-entrantly, nested inside an
+        # enclosing invocation still holding a live reference into the
+        # same collections, is what corrupted them - confirmed directly
+        # against two DIFFERENT Hashes in two DIFFERENT classes via a
+        # from-source reproduction. #defer_unless_idle always defers here
+        # (Tryst.in_callback? is always true - #dispatch_callback's
+        # own #enter_callback already ran before this block started),
+        # every path destroyed in one recursive cascade queues up and
+        # runs as a batch, in the same relative order, right after the
+        # OUTERMOST dispatch_callback frame returns - by which point
+        # Tk's own C-level teardown for the whole cascade is done and no
+        # collection this touches can possibly have another live access
+        # nested inside it.
+        Tryst.defer_unless_idle { run_destroy_cleanup(path) }
       end
       tcl_eval("bind all <Destroy> {crystal_callback #{destroy_cb_id} %W}")
+    end
+
+    # The actual body of the shared <Destroy> handler - see
+    # #setup_destroy_cleanup for why this always runs deferred, never
+    # inline from inside the Tcl callback itself.
+    private def run_destroy_cleanup(path : String) : Nil
+      callback_registry.forget_all_for_path(path)
+      @destroy_observers.each(&.call(path))
+      # Notify first (a still-live owner may care about THIS destroy),
+      # then sweep - not the other way round, or an owner whose only
+      # remaining reference was this notification's own call frame
+      # could be swept before ever hearing about it.
+      @weak_destroy_observers.each(&.notify(path))
+      @weak_destroy_observers.reject! { |observer| !observer.alive? }
+      # Unconditional, unlike @widgets below - #record_widget_type writes
+      # this one unconditionally too (not gated by track_widgets:), so a
+      # user who opted out of widget tracking still pays for the write
+      # and needs the matching delete.
+      @widget_types_by_path.delete(path)
+      return if path.starts_with?(".tryst_debug")
+      @widgets.delete(path) if @track_widgets
     end
 
     # Tk paths are "."-joined, not "/"-joined, so the parent of ".f.b1" is
