@@ -198,6 +198,9 @@ REASON: (if WARN) point to the specific comment block(s) that are bloated, one s
         echo "" >&2
         echo "pre-commit: comment review (WARN only, not blocking):" >&2
         printf '%s\n' "$review_result" >&2
+        echo "If you're an agent acting on this: fix the comment and AMEND the" >&2
+        echo "commit that just succeeded, don't add a separate follow-up commit" >&2
+        echo "just to fix its own comment." >&2
         echo "" >&2
         ;;
     esac
