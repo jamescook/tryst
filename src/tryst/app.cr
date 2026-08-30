@@ -493,17 +493,28 @@ module Tryst
     # @example
     #   content = app.off_thread { File.read(path) }
     def off_thread(new_thread : Bool = false, &block : -> T) : T forall T
-      return off_thread_parked(new_thread, &block) unless Tryst.in_callback?
+      return off_thread_parked(new_thread, &block) unless Tryst.in_callback_on_this_fiber?
 
-      # Called from inside a Tk callback, so the calling fiber's C stack
-      # is Tcl_EvalObjv/Tk_BindEvent/... mid-eval. #off_thread_parked's
-      # Channel#receive would suspend that FIBER there, letting Crystal's
-      # scheduler resume some other fiber that re-enters the same interp
-      # non-LIFO - see Interp#guarded_entry for why that corrupts Tcl/Tk's
-      # internal state. So this path never yields the fiber: it blocks
-      # the C stack in place, servicing Tk's own event loop meanwhile
+      # Called from inside a Tk callback ON THIS FIBER, so the calling
+      # fiber's C stack is Tcl_EvalObjv/Tk_BindEvent/... mid-eval.
+      # #off_thread_parked's Channel#receive would suspend that FIBER
+      # there, letting Crystal's scheduler resume some other fiber that
+      # re-enters the same interp non-LIFO - see Interp#guarded_entry for
+      # why that corrupts Tcl/Tk's internal state. So this path keeps
+      # the C stack in place and services Tk's own event loop meanwhile
       # (Interp#spin_until) - the same semantics as Tk's own
-      # `update`/`vwait`.
+      # `update`/`vwait`. (The fiber itself does still get suspended in
+      # there - the notifier's wait is a Crystal #sleep - but with its
+      # Tcl frames intact beneath it, which is what matters; any other
+      # fiber that wants Tcl in the meantime waits, see #guarded_entry.)
+      #
+      # The per-fiber check matters: a fiber spawned from inside a
+      # callback is scheduled during exactly that suspension, while the
+      # callback is still open, so the plain Tryst.in_callback? reads
+      # true on it - but its own stack is inside no Tcl call, and the
+      # parked path is the right one for it. Driving Tk's event loop
+      # from a second fiber's stack here is what used to trip the
+      # guard's abort.
       slot = OffThreadSlot(T).new
       tk_thread = Interp.current_thread_id
 

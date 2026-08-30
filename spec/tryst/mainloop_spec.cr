@@ -20,6 +20,13 @@ describe "Interp#mainloop" do
     assert_tk_subprocess("spec/standalone/mainloop_pending_exception_fixture.cr")
   end
 
+  # Own subprocess for one more reason than the others: the pre-fix
+  # failure was Interp#guarded_entry's LibC.abort, which would have taken
+  # the shared tk_worker down with it.
+  it "lets a fiber spawned inside a callback use off_thread and Tcl while main is parked in its own off_thread" do
+    assert_tk_subprocess("spec/standalone/off_thread_fiber_fixture.cr")
+  end
+
   # ruby-tryst's test_mainloop_blocking_mode_lets_background_threads_run
   # sets thread_timer_ms = 0 (disabling the keepalive timer entirely) to
   # prove a real Ruby thread isn't starved while the main thread blocks

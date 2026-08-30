@@ -410,18 +410,35 @@ module Tryst
   # writer to guard against here.
   @@callback_depth = 0
 
+  # The fiber the outermost open callback is running on - nil outside
+  # any. Process-wide like the depth, and for the same reason.
+  @@callback_fiber : Fiber? = nil
+
   def self.in_callback? : Bool
     @@callback_depth > 0
   end
 
+  # Whether THIS fiber is the one running the open callback - the
+  # question App#off_thread actually needs answered, and a different one
+  # from .in_callback?: a fiber spawned from inside a callback is
+  # scheduled while that callback is still open (the moment the
+  # callback's own fiber suspends - see Interp#spin_until), so
+  # .in_callback? reads true on it too, but its C stack is inside no
+  # Tcl call at all and it must not act as if it were.
+  def self.in_callback_on_this_fiber? : Bool
+    @@callback_depth > 0 && @@callback_fiber.same?(Fiber.current)
+  end
+
   # @api private - called by Interp#dispatch_callback only.
   def self.enter_callback : Nil
+    @@callback_fiber = Fiber.current if @@callback_depth == 0
     @@callback_depth += 1
   end
 
   # @api private - called by Interp#dispatch_callback only.
   def self.exit_callback : Nil
     @@callback_depth -= 1
+    @@callback_fiber = nil if @@callback_depth == 0
   end
 
   # Tcl's internal string representation never contains a raw NUL byte -
@@ -687,25 +704,60 @@ module Tryst
     # a different fiber that re-enters the same interp: whichever fiber
     # finishes second pops/releases state that still belongs to the one
     # still parked, and later writes through those now-stale pointers
-    # land wherever the heap has since put something else. This guard
-    # makes that an immediate, attributable abort - see App#off_thread
-    # for the actual fix (never suspend the fiber while inside a
-    # callback; #spin_until blocks the C stack in place instead).
+    # land wherever the heap has since put something else.
+    #
+    # A fiber DOES get parked inside an eval, routinely: #spin_until's
+    # Tcl_DoOneEvent reaches the notifier's wait, and that wait is a
+    # Crystal #sleep on macOS and Linux both (NotifierMacOS/Notifier's
+    # POLL_INTERVAL) - the whole point of those notifiers is that the
+    # rest of the program keeps running while Tcl "blocks". So any
+    # other fiber can find itself here while the eval's owner is parked.
+    # The safe thing for it to do is WAIT: the owner is parked in a
+    # sleep, not blocked on this fiber, so yielding lets it wake, pump,
+    # and eventually leave its eval, at which point this fiber's call
+    # proceeds as an ordinary top-level one. A nested entry is only
+    # ever unsafe when both fibers end up parked inside Tcl at once,
+    # and waiting here is exactly what prevents a second one from
+    # getting in. (Before this was a hard abort with a "TCL RE-ENTERED"
+    # trace - correct about the hazard, wrong that reaching it was a
+    # bug in the caller: a fiber spawned from a callback and later
+    # updating the UI is entirely ordinary.) See App#off_thread for the
+    # other half: a fiber that isn't the callback's own never spins
+    # the event loop from its own stack in the first place.
     @eval_fiber : Fiber? = nil
     @eval_depth = 0
 
     private def guarded_entry(& : -> T) : T forall T
-      if @eval_depth > 0 && !@eval_fiber.same?(Fiber.current)
-        Crystal::System.print_error "TCL RE-ENTERED FROM %s WHILE %s IS PARKED INSIDE AN EVAL\n",
-          Fiber.current.name, @eval_fiber.try(&.name)
-        caller.each { |frame| Crystal::System.print_error "  %s\n", frame }
-        LibC.abort
-      end
+      wait_for_eval_owner
       @eval_fiber = Fiber.current if @eval_depth == 0
       @eval_depth += 1
       yield
     ensure
       @eval_depth -= 1
+      wake_eval_waiters if @eval_depth == 0
+    end
+
+    # #guarded_entry's wait, for a fiber that isn't the one parked
+    # inside the current eval. A handoff, not a poll: the owner wakes
+    # every waiter the moment its outermost eval closes (see
+    # #wake_eval_waiters), and each one re-checks on waking since
+    # another waiter may have taken the interp first - in which case it
+    # queues up again behind that one.
+    @eval_waiters = [] of Channel(Nil)
+
+    private def wait_for_eval_owner : Nil
+      while @eval_depth > 0 && !@eval_fiber.same?(Fiber.current)
+        wakeup = Channel(Nil).new(1)
+        @eval_waiters << wakeup
+        wakeup.receive
+      end
+    end
+
+    private def wake_eval_waiters : Nil
+      return if @eval_waiters.empty?
+      waiting = @eval_waiters
+      @eval_waiters = [] of Channel(Nil)
+      waiting.each(&.send(nil))
     end
 
     # Evaluates a full Tcl script string. Fine for static scripts, but
