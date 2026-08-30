@@ -232,6 +232,21 @@
         @@states_lock.synchronize { @@states.delete(thread) }
       end
 
+      # See NotifierMacOS.known_state?/.abort_unknown_state - the same
+      # check, for tryst_notifier_alert.
+      def self.known_state?(pointer : Void*) : Bool
+        @@states_lock.synchronize { @@states.each_value.any? { |state| state.as(Void*) == pointer } }
+      end
+
+      def self.abort_unknown_state(pointer : Void*) : NoReturn
+        STDERR.puts "[Tryst] FATAL: Tcl_ThreadAlert reached tryst's notifier with data it never created (#{pointer}).\n" \
+                    "That thread's notifier was initialized by Tcl before tryst's was installed - some Tcl call " \
+                    "(Tryst.make_list/split_list, a Font#to_tcl, ...) ran ahead of Interp.ensure_notifier_installed.\n" \
+                    "See Interp.ensure_notifier_installed."
+        STDERR.flush
+        LibC.abort
+      end
+
       # One raw poll(2) syscall covering every registered fd plus the alert
       # fd, timeout=0 (never blocks the OS thread itself - WaitForEvent's own
       # loop is what waits, via #sleep between attempts). Returns true if an
@@ -365,6 +380,8 @@
   # call across threads with no extra synchronization; Crystal's own IO
   # objects aren't guaranteed to be).
   fun tryst_notifier_alert(client_data : Void*) : Nil
+    # See tryst_notifier_macos_alert's own comment on this check.
+    Tryst::Notifier.abort_unknown_state(client_data) unless Tryst::Notifier.known_state?(client_data)
     state = Box(Tryst::Notifier::ThreadState).unbox(client_data)
     byte = 1_u8
     LibC.write(state.alert_write.fd, pointerof(byte).as(Void*), LibC::SizeT.new(1))

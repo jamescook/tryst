@@ -239,6 +239,22 @@
         @@states_lock.synchronize { @@states.delete(thread) }
       end
 
+      # Whether pointer is a ThreadState this notifier handed to Tcl - see
+      # tryst_notifier_macos_alert. A lock and a scan per alert is fine:
+      # alerts happen per off_thread completion, not per event.
+      def self.known_state?(pointer : Void*) : Bool
+        @@states_lock.synchronize { @@states.each_value.any? { |state| state.as(Void*) == pointer } }
+      end
+
+      def self.abort_unknown_state(pointer : Void*) : NoReturn
+        STDERR.puts "[Tryst] FATAL: Tcl_ThreadAlert reached tryst's notifier with data it never created (#{pointer}).\n" \
+                    "That thread's notifier was initialized by Tcl before tryst's was installed - some Tcl call " \
+                    "(Tryst.make_list/split_list, a Font#to_tcl, ...) ran ahead of Interp.ensure_notifier_installed.\n" \
+                    "See Interp.ensure_notifier_installed."
+        STDERR.flush
+        LibC.abort
+      end
+
       # One raw poll(2) syscall covering every registered fd, timeout=0 -
       # same shape as notifier.cr's own #poll_once (see there for why
       # poll(2), not Crystal's own IO readiness tracking). The alert fd
@@ -360,6 +376,13 @@
   # waiting out its own timeout - CFRunLoopWakeUp is documented safe to
   # call across threads, same as the write() below.
   fun tryst_notifier_macos_alert(client_data : Void*) : Nil
+    # client_data is whatever InitNotifier returned for the target thread
+    # - ours only if OUR InitNotifier ran there. If Tcl initialized that
+    # thread's notifier before Interp.ensure_notifier_installed swapped
+    # the procs in, this is Tcl's own private data and unboxing it reads
+    # garbage; stop here with a diagnosis instead of a segfault three
+    # frames later. Same "fail loudly" stance as Interp#guarded_entry.
+    Tryst::NotifierMacOS.abort_unknown_state(client_data) unless Tryst::NotifierMacOS.known_state?(client_data)
     state = Box(Tryst::NotifierMacOS::ThreadState).unbox(client_data)
     byte = 1_u8
     LibC.write(state.alert_write.fd, pointerof(byte).as(Void*), LibC::SizeT.new(1))

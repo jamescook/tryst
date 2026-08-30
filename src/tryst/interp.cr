@@ -613,22 +613,41 @@ module Tryst
     # #check_thread_affinity!.
     @owning_thread : Thread = Thread.current
 
-    def initialize
-      # Must run before the very first Tcl_CreateInterp call below (which
-      # triggers Tcl_InitNotifier internally). Notifier.install_once
-      # (Linux) and NotifierMacOS.install_once (Darwin) both replace
-      # Tcl's own default notifier - see notifier.cr's header comment for
-      # why on Linux, and notifier_macos.cr's for why on Darwin (Tcl's
-      # own default there spawns a raw-pthread background thread Boehm
-      # GC's stop-the-world can't safely handle). Windows still falls
-      # back to the plain poll+sleep loop in #mainloop below - neither
-      # notifier has ever been ported there (see each file's own header
-      # comment on why).
+    # Replaces Tcl's own default notifier with tryst's, once per process.
+    # Notifier.install_once (Linux) and NotifierMacOS.install_once
+    # (Darwin) - see notifier.cr's header comment for why on Linux, and
+    # notifier_macos.cr's for why on Darwin (Tcl's own default there
+    # spawns a raw-pthread background thread Boehm GC's stop-the-world
+    # can't safely handle). Windows still falls back to the plain
+    # poll+sleep loop in #mainloop below - neither notifier has ever been
+    # ported there (see each file's own header comment on why).
+    #
+    # MUST run before this process's very first Tcl_FindExecutable /
+    # Tcl_CreateInterp, whichever comes first: either one runs
+    # Tcl_InitSubsystems, which initializes the calling thread's notifier
+    # exactly once, with whatever notifier is installed at that moment,
+    # and Tcl_SetNotifier afterwards swaps only the procs, never that
+    # thread's already-created notifier data. So a later install leaves
+    # the main thread on Tcl's default notifier for the life of the
+    # process, with tryst's procs being handed Tcl's own private data:
+    # WaitForEvent finds no ThreadState and returns at once (Tk's event
+    # loop busy-spins instead of waiting), and the first cross-thread
+    # Tcl_ThreadAlert - every App#off_thread completion - unboxes that
+    # data as a ThreadState and reads garbage. Seen live: gemba, where a
+    # DSL Font's #to_tcl reached Values.utility_interp before any
+    # Interp existed, then segfaulted in the alert proc once a boxart
+    # fetch finished after the spec's App was destroyed. Hence one entry
+    # point, called from both places that can be first.
+    def self.ensure_notifier_installed : Nil
       {% if flag?(:linux) %}
         Tryst::Notifier.install_once
       {% elsif flag?(:darwin) %}
         Tryst::NotifierMacOS.install_once
       {% end %}
+    end
+
+    def initialize
+      self.class.ensure_notifier_installed
 
       LibTcl.find_executable("crystal_tryst")
 

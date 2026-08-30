@@ -30,6 +30,12 @@ module Tryst
   private def self.utility_interp : LibTcl::Interp*
     return @@utility_interp unless @@utility_interp.null?
 
+    # This can be the process's first Tcl call of all, ahead of any
+    # Interp - a DSL Font#to_tcl at declaration time reaches here - and
+    # Tcl_FindExecutable creates this thread's notifier with whatever is
+    # installed right now, once and for all. See
+    # Interp.ensure_notifier_installed for what going second costs.
+    Interp.ensure_notifier_installed
     LibTcl.find_executable("crystal_tryst")
     ptr = LibTcl.create_interp
     raise TclError.new("Tcl_CreateInterp returned NULL (utility interp)") if ptr.null?
