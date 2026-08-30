@@ -137,5 +137,24 @@ end
 app.update
 raise "add: expected .form.name_field" unless app.winfo.exists?(".form.name_field")
 
+# Case 12: two separate #add calls against the same parent, each opening
+# its own #component, can reuse a widget name - the shape a settings
+# window takes when every tab class builds itself into one shared
+# notebook and names its own :reset button. Without the component
+# wrapper the second add is a duplicate-name ArgumentError; with it both
+# realize, at disambiguated paths, and neither name is visible from the
+# top level afterwards.
+reset_handles = [] of Tryst::UI::Handle
+2.times do |index|
+  session.add(:list) do |builder|
+    builder.component(:tab) { |comp| reset_handles << comp.button(:reset, text: "Reset #{index}") }
+  end
+end
+app.update
+paths = reset_handles.map(&.path)
+raise "add: expected two distinct :reset paths, got #{paths}" unless paths == [".list.reset", ".list.reset#2"]
+paths.each { |path| raise "add: expected #{path} in Tk" unless app.winfo.exists?(path) }
+raise "add: a component's :reset must not resolve at top level" if session.document.find(:reset)
+
 app.destroy
 puts "OK"

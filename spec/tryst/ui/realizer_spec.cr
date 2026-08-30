@@ -11,8 +11,7 @@ require "../../../src/tryst/ui/realizer"
 # separately via a tk_test case in spec/support/tk_cases.cr instead.
 #
 # Reduced from ruby-tryst's tryst-ui/test/test_realizer.rb, which tests
-# entirely through Session/Tryst::UI.app and also covers #component
-# (Scope isolation, a later phase not ported) - built directly against
+# entirely through Session/Tryst::UI.app - built directly against
 # Realizer.new(app, document) here instead (WidgetDslHarness stands in
 # for Session, same as widget_dsl_spec.cr - a real Session works too,
 # but this keeps these specs headless), scoped to what create/link/
@@ -505,5 +504,25 @@ describe Tryst::UI::Realizer do
     Tryst::UI::Realizer.new(app, session.document).realize
 
     app.calls.any? { |call| call.cmd == "." }.should be_false
+  end
+
+  # The realize side of WidgetDSL#component: a scope is a naming
+  # boundary only, so two components requesting the same key under one
+  # parent still both realize - Document#claim_path_segment gives the
+  # second a disambiguated Tk path instead of a collision.
+  it "two components reusing a name under one parent realize to distinct paths" do
+    session = WidgetDslHarness.new
+    session.panel(:host) do |panel|
+      panel.component(:first, &.button(:ok, text: "1"))
+      panel.component(:second, &.button(:ok, text: "2"))
+    end
+
+    app = FakeApp.new
+    Tryst::UI::Realizer.new(app, session.document).realize
+
+    buttons = app.calls.select { |call| call.cmd == "ttk::button" }
+    buttons.map(&.args.map(&.to_s)).should eq([[".host.ok"], [".host.ok#2"]])
+    session.document.root.children.first.children.map { |node| node.realized.try(&.path) }
+      .should eq([".host.ok", ".host.ok#2"])
   end
 end

@@ -11,8 +11,7 @@ require "../../../src/tryst/ui/realizer"
 # overlay - are covered in their own unit tests in grid_validator_spec.cr/
 # overlay_validator_spec.cr instead); still not covered here: tab/pane
 # (not-yet-ported WidgetValidators-registered types - see validator.cr's
-# own doc comment for what's deferred and why) or #component (Scope
-# isolation, a later phase). Also folds in the two Validator-dispatch
+# own doc comment for what's deferred and why). Also folds in the two Validator-dispatch
 # integration cases from ruby's test_widget_validators.rb (a custom
 # registered validator actually running during #validate!, and its
 # errors surfacing through
@@ -71,6 +70,56 @@ describe Tryst::UI::Validator do
     error = expect_raises(Tryst::UI::ValidationError) { Tryst::UI::Validator.validate!(session.document, strict: true) }
     error.message.try(&.includes?("nope")).should be_true
     error.message.try(&.includes?("lost")).should be_true
+  end
+
+  # An event target: resolves in the SOURCE node's own scope, exactly
+  # like #[] does during build - so a component's button can target its
+  # own sibling, but a name one scope up (the top level's) is dangling
+  # from inside a component just as a nonexistent one is. No lexical
+  # fallback, deliberately - see WidgetDSL#component.
+  describe "event targets and #component" do
+    # Attaches a <Button-1> binding aimed at target to the root's child
+    # named source - the same shape the dangling-target cases above use,
+    # since target: is set on the binding rather than through Handle.
+    target_from = ->(document : Tryst::UI::Document, source : Symbol, target : Symbol) do
+      node = document.root.children.find! { |child| child.name == source }
+      node.events << Tryst::UI::EventBinding.new(
+        event: "<Button-1>",
+        handler: Proc(Array(String), Tryst::CallbackSignal, Nil).new { |_v, _s| },
+        target: target
+      )
+    end
+
+    it "a target inside the same component resolves" do
+      session = WidgetDslHarness.new
+      session.component(:card) do |comp|
+        comp.text_box(:field)
+        comp.button(:go, text: "Go")
+      end
+      target_from.call(session.document, :go, :field)
+
+      Tryst::UI::Validator.validate!(session.document)
+    end
+
+    it "a top-level name targeted from inside a component is dangling" do
+      session = WidgetDslHarness.new
+      session.text_box(:field)
+      session.component(:card, &.button(:go, text: "Go"))
+      target_from.call(session.document, :go, :field)
+
+      error = expect_raises(Tryst::UI::ValidationError) { Tryst::UI::Validator.validate!(session.document) }
+      error.message.try(&.includes?("go")).should be_true
+      error.message.try(&.includes?("field")).should be_true
+    end
+
+    it "a component's name targeted from the top level is dangling" do
+      session = WidgetDslHarness.new
+      session.component(:card, &.text_box(:field))
+      session.button(:go, text: "Go")
+      target_from.call(session.document, :go, :field)
+
+      expect_raises(Tryst::UI::ValidationError, /field/) { Tryst::UI::Validator.validate!(session.document) }
+    end
   end
 
   it "a grid's missing-cell and a stray cell elsewhere both appear in one raised error" do

@@ -29,10 +29,10 @@ module Tryst
     # @vars and @images default to empty arrays here (like @stack below),
     # so Session needs no separate initialization for them -
     # Session#realize reads both directly to realize every declared Var
-    # and Image before the widget tree itself realizes. One piece of
-    # ruby-tryst's state contract still isn't ported: @scope_stack (Scope
-    # isolation - #component, a later phase; current_scope below always
-    # returns Scope::TOP_LEVEL until it exists).
+    # and Image before the widget tree itself realizes. @scope_stack is
+    # the naming-scope stack #component pushes and pops (seeded with
+    # Scope::TOP_LEVEL, so a build that never calls #component is one
+    # flat namespace) - see #component and #current_scope.
     #
     # Only the generic leaf/container append machinery and the widget
     # types built up across the tryst-ui epic's phases are ported here -
@@ -49,6 +49,7 @@ module Tryst
       @stack = [] of Node
       @vars = [] of Var
       @images = [] of Image
+      @scope_stack = [Scope::TOP_LEVEL]
 
       abstract def build_open? : Bool
 
@@ -592,6 +593,45 @@ module Tryst
         node.try { |found| Handle.new(found) }
       end
 
+      # Opens an isolated naming scope for the duration of the block, so
+      # a reusable subtree (a card, a settings tab, a row template) can
+      # name its own widgets freely without colliding with another copy
+      # of itself, or with anything else in the document:
+      #
+      #     ui.component(:gamepad) { |comp| comp.button(:reset, text: "Reset") }
+      #     ui.component(:achievements) { |comp| comp.button(:reset, text: "Reset") }
+      #
+      # Purely a naming boundary - no node of its own. Whatever the block
+      # declares attaches to the enclosing container exactly as it would
+      # without the wrapper, and realizes to the same Tk paths (two mounts
+      # requesting the same path segment under one parent get
+      # disambiguated - see Document#claim_path_segment). Every call opens
+      # a genuinely fresh Scope, even with the same label: label is for
+      # error messages and debugging, never identity.
+      #
+      # Names are exactly as visible as the scope they were declared in.
+      # Inside the block, #[]/#[]? and an event's target: see only names
+      # declared inside this same component - NOT the enclosing scope's
+      # or the top level's, there is no lexical fallback up the chain -
+      # and from outside, a component's names are invisible. Handles are
+      # the way across the boundary: every ui.<widget> call still returns
+      # one, and a component's caller keeps whichever it needs, same as
+      # any other build.
+      #
+      # Ordinary containers (row/column/panel/tab/...) never scope - a
+      # name declared inside a plain row is addressable from outside it.
+      # Only this method opens a scope, deliberately: the flat namespace
+      # stays the default for any build that doesn't ask for more.
+      def component(label : (Symbol | String)? = nil, & : self -> Nil) : Nil
+        @scope_stack.push(Scope.new(label, parent: current_scope))
+        begin
+          yield self
+        ensure
+          @scope_stack.pop
+        end
+        nil
+      end
+
       # The build-time escape hatch. A widget has no Tk path yet during
       # build, so acting on it directly mid-build can't work - #raw
       # defers the block instead, running it at realize with the live
@@ -839,11 +879,12 @@ module Tryst
         node
       end
 
-      # Not yet scope-aware - see this module's own doc comment.
-      # Always Scope::TOP_LEVEL until @scope_stack (#component, a later
-      # phase) exists.
+      # The scope every name declared or looked up right now belongs to -
+      # the innermost open #component, or Scope::TOP_LEVEL outside any.
+      # Session#add runs with no component open, so a runtime add
+      # resolves its parent_name at top level.
       private def current_scope : Scope
-        Scope::TOP_LEVEL
+        @scope_stack.last
       end
 
       # The options this DSL reads itself rather than handing to Tk (see

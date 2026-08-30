@@ -437,6 +437,162 @@ describe Tryst::UI::WidgetDSL do
     executed.should be_false
   end
 
+  # Scope isolation. The Document side ({Scope, name} index, exact-scope
+  # lookup, per-scope unregister) is spec'd in document_spec.cr; these
+  # cover the DSL side - that #component really drives that index, and
+  # exactly what is and isn't visible across its boundary. Mirrors the
+  # #component cases of ruby-tryst's test_widget_dsl.rb.
+  describe "#component" do
+    it "lets two components reuse the same name without colliding" do
+      session = WidgetDslHarness.new
+      first = nil
+      second = nil
+
+      session.component(:gamepad) { |comp| first = comp.button(:reset, text: "Reset") }
+      session.component(:achievements) { |comp| second = comp.button(:reset, text: "Reset") }
+
+      first.should_not be_nil
+      second.should_not be_nil
+      first.should_not be(second)
+      session.document.root.children.size.should eq(2)
+    end
+
+    it "gives every call a fresh scope, even with the same label" do
+      session = WidgetDslHarness.new
+
+      session.component(:card, &.button(:ok))
+      session.component(:card, &.button(:ok))
+
+      scopes = session.document.root.children.map(&.scope)
+      scopes[0].should_not be(scopes[1])
+      scopes.map(&.label).should eq([:card, :card])
+    end
+
+    it "stamps each node with the component's scope, parented to the enclosing one" do
+      session = WidgetDslHarness.new
+
+      session.component(:outer) do |outer|
+        outer.button(:a)
+        outer.component(:inner, &.button(:b))
+      end
+
+      a, b = session.document.root.children
+      a.scope.label.should eq(:outer)
+      a.scope.parent.should be(Tryst::UI::Scope::TOP_LEVEL)
+      b.scope.label.should eq(:inner)
+      b.scope.parent.should be(a.scope)
+    end
+
+    it "is a naming boundary only - children attach to the enclosing container" do
+      session = WidgetDslHarness.new
+
+      session.panel(:host) do |panel|
+        panel.component(:card, &.button(:ok))
+      end
+
+      host = session.document.root.children.first
+      host.type.should eq(:panel)
+      host.children.map(&.type).should eq([:button])
+    end
+
+    it "does not need a label" do
+      session = WidgetDslHarness.new
+
+      session.component(&.button(:ok))
+
+      session.document.root.children.first.scope.label.should be_nil
+    end
+
+    it "[] inside a component finds that component's own names" do
+      session = WidgetDslHarness.new
+      found = nil
+
+      session.component(:card) do |comp|
+        comp.button(:ok)
+        found = comp[:ok]
+      end
+
+      found.try(&.name).should eq(:ok)
+    end
+
+    it "a component's names are invisible from outside it" do
+      session = WidgetDslHarness.new
+
+      session.component(:card, &.button(:ok))
+
+      session[:ok]?.should be_nil
+      expect_raises(KeyError, /ok/) { session[:ok] }
+    end
+
+    it "an enclosing scope's names are invisible inside a component - no lexical fallback" do
+      session = WidgetDslHarness.new
+      session.button(:top)
+      seen_inside = :unset
+
+      session.component(:card) { |comp| seen_inside = comp[:top]? }
+
+      seen_inside.should be_nil
+    end
+
+    it "the same name at top level and inside a component are distinct nodes" do
+      session = WidgetDslHarness.new
+      inner = nil
+
+      outer = session.button(:save)
+      session.component(:card) { |comp| inner = comp.button(:save) }
+
+      inner.should_not be_nil
+      session[:save].name.should eq(outer.name)
+      session.document.find(:save).should be(session.document.root.children.first)
+    end
+
+    it "the same name twice inside one component still collides" do
+      session = WidgetDslHarness.new
+
+      expect_raises(ArgumentError, /save.*same component/) do
+        session.component(:card) do |comp|
+          comp.button(:save)
+          comp.button(:save)
+        end
+      end
+    end
+
+    it "restores the enclosing scope when the block ends" do
+      session = WidgetDslHarness.new
+
+      session.component(:card, &.button(:save))
+      session.button(:save)
+
+      # Back at top level: a second top-level :save is a real collision,
+      # proving the lookup scope really is TOP_LEVEL again rather than
+      # some scope left over from the component.
+      expect_raises(ArgumentError, /save/) { session.button(:save) }
+    end
+
+    it "restores the enclosing scope when the block raises" do
+      session = WidgetDslHarness.new
+      session.button(:top)
+
+      expect_raises(Exception, "boom") do
+        session.component(:card) { |_comp| raise "boom" }
+      end
+
+      session[:top]?.should_not be_nil
+    end
+
+    it "a Handle keeps working across the boundary" do
+      session = WidgetDslHarness.new
+      handle = nil
+
+      session.component(:card) { |comp| handle = comp.button(:ok, text: "OK") }
+
+      # Names don't cross, handles do - the way a component hands its
+      # widgets to whoever mounted it.
+      handle.try(&.name).should eq(:ok)
+      handle.try(&.type).should eq(:button)
+    end
+  end
+
   # #widget is what makes WidgetTypes.register a usable extension point:
   # every built-in type has a hand-written method, so without this a shard
   # could register a type and never declare one.

@@ -14,8 +14,8 @@ require "../../src/tryst/ui"
 # bindings hazard (that file's first case) is adapted to a plain
 # panel/button here instead of ui.window, since the hazard itself isn't
 # window-specific. Every widget name is scenario-unique (:box_a,
-# :box_b, ...) - #component (scope isolation) isn't ported yet, so
-# every name in this one build shares a single flat top-level namespace.
+# :box_b, ...) - one flat top-level namespace, since nothing here opens
+# a #component scope.
 
 handles = {} of Symbol => Tryst::UI::Handle
 
