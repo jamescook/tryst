@@ -26,6 +26,20 @@ module Tryst
       def top_level? : Bool
         same?(TOP_LEVEL)
       end
+
+      # How an error message names this scope - "the top level",
+      # "component :gamepad", or "an unlabeled component". The one place
+      # label is read: two components sharing a label still describe the
+      # same, which is fine for a message (the reader knows which call
+      # raised) and is why label never doubles as identity.
+      def describe : String
+        return "the top level" if top_level?
+        if named = @label
+          "component #{named.inspect}"
+        else
+          "an unlabeled component"
+        end
+      end
     end
   end
 end

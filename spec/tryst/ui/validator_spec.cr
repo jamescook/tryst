@@ -108,8 +108,10 @@ describe Tryst::UI::Validator do
       target_from.call(session.document, :go, :field)
 
       error = expect_raises(Tryst::UI::ValidationError) { Tryst::UI::Validator.validate!(session.document) }
-      error.message.try(&.includes?("go")).should be_true
-      error.message.try(&.includes?("field")).should be_true
+      message = error.message.to_s
+      message.should contain("go")
+      message.should contain("no widget with that name exists in component :card")
+      message.should contain("it is declared in the top level, and names never cross a component boundary")
     end
 
     it "a component's name targeted from the top level is dangling" do
@@ -118,7 +120,19 @@ describe Tryst::UI::Validator do
       session.button(:go, text: "Go")
       target_from.call(session.document, :go, :field)
 
-      expect_raises(Tryst::UI::ValidationError, /field/) { Tryst::UI::Validator.validate!(session.document) }
+      error = expect_raises(Tryst::UI::ValidationError) { Tryst::UI::Validator.validate!(session.document) }
+      message = error.message.to_s
+      message.should contain("no widget with that name exists in the top level")
+      message.should contain("it is declared in component :card")
+    end
+
+    it "a name that exists nowhere gets no hint" do
+      session = WidgetDslHarness.new
+      session.button(:go, text: "Go")
+      target_from.call(session.document, :go, :nope)
+
+      error = expect_raises(Tryst::UI::ValidationError) { Tryst::UI::Validator.validate!(session.document) }
+      error.message.to_s.should_not contain("declared in")
     end
   end
 

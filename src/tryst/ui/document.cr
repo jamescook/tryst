@@ -224,10 +224,28 @@ module Tryst
         @index.delete({node.scope, name})
       end
 
+      # Every scope with a node registered under name - for a "not found"
+      # message to point out that the name DOES exist, just somewhere the
+      # lookup deliberately can't see. Only ever consulted after an exact
+      # #find has already missed, never as a fallback lookup.
+      def scopes_declaring(name : Symbol) : Array(Scope)
+        @index.compact_map { |(scope, indexed), _node| scope if indexed == name }
+      end
+
+      # A one-line hint for a lookup of name in scope that missed: where
+      # the name is declared instead, if anywhere. Empty when it exists
+      # nowhere, so a message reads the same as before in that case.
+      def elsewhere_hint(name : Symbol, scope : Scope) : String
+        others = scopes_declaring(name).reject(&.same?(scope))
+        return "" if others.empty?
+
+        " - it is declared in #{others.map(&.describe).join(" and ")}, and names never cross a component boundary"
+      end
+
       private def register(scope : Scope, name : Symbol, node : Node) : Nil
         key = {scope, name}
         if existing = @index[key]?
-          suffix = scope.top_level? ? "" : " in the same component"
+          suffix = scope.top_level? ? "" : " in #{scope.describe}"
           raise ArgumentError.new("duplicate widget name :#{node.name} - already used by a #{existing.type} node#{suffix}")
         end
 

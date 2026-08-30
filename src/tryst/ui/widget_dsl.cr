@@ -583,7 +583,7 @@ module Tryst
       # a class can hold its widgets without a nil check per field. Reach
       # for #[]? when a name legitimately might not be there.
       def [](name : Symbol) : Handle
-        self[name]? || raise KeyError.new("no widget named :#{name} in this scope")
+        self[name]? || raise KeyError.new("no widget named :#{name} in #{current_scope.describe}#{@document.elsewhere_hint(name, current_scope)}")
       end
 
       # Look up a named widget declared in the current scope. nil if

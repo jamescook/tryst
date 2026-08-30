@@ -370,7 +370,9 @@ module Tryst
       def add(parent_name : Symbol, &) : Nil
         raise_unless_realized!
         parent_node = @document.find(parent_name, scope: current_scope)
-        raise ArgumentError.new("no widget named :#{parent_name} in this build") unless parent_node
+        unless parent_node
+          raise ArgumentError.new("no widget named :#{parent_name} in this build#{@document.elsewhere_hint(parent_name, current_scope)}")
+        end
 
         add_into(parent_node) { |session| yield session }
       end

@@ -193,7 +193,7 @@ begin
   session.add(body, &.button(:title))
   raise "add(Handle): expected a collision with the component's own :title"
 rescue ex : ArgumentError
-  raise "add(Handle): expected the component collision message, got #{ex.message.inspect}" unless ex.message.to_s.includes?("same component")
+  raise "add(Handle): expected the component collision message, got #{ex.message.inspect}" unless ex.message.to_s.includes?("component :card")
 end
 raise "add(Handle): a failed add must not leave :extra gone" unless app.winfo.exists?(extra_path)
 

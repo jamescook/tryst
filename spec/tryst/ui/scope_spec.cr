@@ -35,4 +35,19 @@ describe Tryst::UI::Scope do
 
     scope.label.should eq(:sidebar)
   end
+
+  describe "#describe" do
+    it "names the top level" do
+      Tryst::UI::Scope::TOP_LEVEL.describe.should eq("the top level")
+    end
+
+    it "names a labeled component by its label" do
+      Tryst::UI::Scope.new(:gamepad).describe.should eq("component :gamepad")
+      Tryst::UI::Scope.new("card").describe.should eq(%(component "card"))
+    end
+
+    it "says so for an unlabeled component" do
+      Tryst::UI::Scope.new.describe.should eq("an unlabeled component")
+    end
+  end
 end

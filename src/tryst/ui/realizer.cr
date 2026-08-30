@@ -525,7 +525,8 @@ module Tryst
       private def wire_event(node : Node, binding : EventBinding) : Nil
         target_node =
           if target = binding.target
-            @document.find(target, scope: node.scope) || raise ArgumentError.new("event target :#{target} not found in the document")
+            @document.find(target, scope: node.scope) ||
+              raise ArgumentError.new("event target :#{target} not found in #{node.scope.describe}#{@document.elsewhere_hint(target, node.scope)}")
           else
             node
           end

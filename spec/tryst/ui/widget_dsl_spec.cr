@@ -521,7 +521,18 @@ describe Tryst::UI::WidgetDSL do
       session.component(:card, &.button(:ok))
 
       session[:ok]?.should be_nil
-      expect_raises(KeyError, /ok/) { session[:ok] }
+      error = expect_raises(KeyError) { session[:ok] }
+      error.message.should eq("no widget named :ok in the top level - it is declared in component :card, and names never cross a component boundary")
+    end
+
+    it "[] inside a component says which component, and where the name really lives" do
+      session = WidgetDslHarness.new
+      session.button(:top)
+      error = nil
+
+      session.component(:card) { |comp| error = expect_raises(KeyError) { comp[:top] } }
+
+      error.try(&.message).should eq("no widget named :top in component :card - it is declared in the top level, and names never cross a component boundary")
     end
 
     it "an enclosing scope's names are invisible inside a component - no lexical fallback" do
@@ -549,7 +560,7 @@ describe Tryst::UI::WidgetDSL do
     it "the same name twice inside one component still collides" do
       session = WidgetDslHarness.new
 
-      expect_raises(ArgumentError, /save.*same component/) do
+      expect_raises(ArgumentError, /save.*component :card/) do
         session.component(:card) do |comp|
           comp.button(:save)
           comp.button(:save)

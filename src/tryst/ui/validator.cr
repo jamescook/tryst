@@ -105,7 +105,8 @@ module Tryst
           next if @document.find(target, scope: node.scope)
 
           @errors << "#{WidgetValidators.describe(node)}'s event binding targets :#{target}, " \
-                     "but no widget with that name exists"
+                     "but no widget with that name exists in #{node.scope.describe}" \
+                     "#{@document.elsewhere_hint(target, node.scope)}"
         end
       end
 

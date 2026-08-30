@@ -183,6 +183,57 @@ describe Tryst::UI::Document do
     document.find(:save, scope: second).should be(b)
   end
 
+  describe "scope-aware messages" do
+    it "a collision inside a component names that component" do
+      document = Tryst::UI::Document.new
+      scope = Tryst::UI::Scope.new(:gamepad)
+      document.create(type: :button, name: :reset, scope: scope)
+
+      error = expect_raises(ArgumentError) { document.create(type: :label, name: :reset, scope: scope) }
+      error.message.should eq("duplicate widget name :reset - already used by a button node in component :gamepad")
+    end
+
+    it "a top-level collision reads as it always has" do
+      document = Tryst::UI::Document.new
+      document.create(type: :button, name: :reset)
+
+      error = expect_raises(ArgumentError) { document.create(type: :label, name: :reset) }
+      error.message.should eq("duplicate widget name :reset - already used by a button node")
+    end
+
+    it "scopes_declaring lists every scope holding the name, and nothing for an unknown one" do
+      document = Tryst::UI::Document.new
+      a = Tryst::UI::Scope.new(:a)
+      b = Tryst::UI::Scope.new(:b)
+      document.create(type: :button, name: :save)
+      document.create(type: :button, name: :save, scope: a)
+      document.create(type: :button, name: :other, scope: b)
+
+      document.scopes_declaring(:save).should eq([Tryst::UI::Scope::TOP_LEVEL, a])
+      document.scopes_declaring(:nope).should be_empty
+    end
+
+    it "elsewhere_hint points at the other scopes, excluding the one looked up in" do
+      document = Tryst::UI::Document.new
+      a = Tryst::UI::Scope.new(:a)
+      document.create(type: :button, name: :save)
+      document.create(type: :button, name: :save, scope: a)
+
+      document.elsewhere_hint(:save, Tryst::UI::Scope.new(:c))
+        .should eq(" - it is declared in the top level and component :a, and names never cross a component boundary")
+      document.elsewhere_hint(:save, a).should eq(" - it is declared in the top level, and names never cross a component boundary")
+    end
+
+    it "elsewhere_hint is empty when the name exists nowhere else" do
+      document = Tryst::UI::Document.new
+      a = Tryst::UI::Scope.new(:a)
+      document.create(type: :button, name: :save, scope: a)
+
+      document.elsewhere_hint(:save, a).should eq("")
+      document.elsewhere_hint(:nope, Tryst::UI::Scope::TOP_LEVEL).should eq("")
+    end
+  end
+
   it "each_node traverses the whole tree from root" do
     document = Tryst::UI::Document.new
     a = document.create(type: :button, name: :a)
