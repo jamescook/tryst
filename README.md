@@ -201,14 +201,42 @@ type. See [CUSTOM_WIDGETS.md](CUSTOM_WIDGETS.md) for the guide.
 
 Run any of them with `crystal run <path>`.
 
-## tryst-sdl
+## Related shards
 
-[tryst-sdl](https://github.com/jamescook/tryst-sdl) adds SDL3 audio,
-rendering and gamepad input as its own shard/repo, depending on tryst via
-`github:` rather than living in this monorepo, so tryst itself never grows
-an SDL dependency. See its own README - its `examples/yam/` (minesweeper,
-with sound effects) lives there rather than here, since it's the one
-example that needs it.
+Everything below is its own shard and repo, depending on tryst via
+`github:` rather than living here — so tryst itself never grows an SDL,
+ThorVG or platform-specific dependency, and each one carries its own
+examples and test suite.
+
+- [tryst-sdl](https://github.com/jamescook/tryst-sdl) — SDL3 rendering
+  surface inside a Tk window, audio, and gamepad input. Its
+  `examples/yam/` (minesweeper, with sound effects) is the one example
+  that needs it, so it lives there.
+- [tryst-vector](https://github.com/jamescook/tryst-vector) — CPU vector
+  rasterization via ThorVG: antialiased curves, gradients and shadows
+  blitted into a Tk Photo. Tk's own canvas has no gradient fill and, on
+  X11, no antialiasing.
+- [tryst-dnd](https://github.com/jamescook/tryst-dnd) — native OS file
+  drag-and-drop: a real drag from Finder or a file manager onto a widget
+  fires the `<<DropFile>>` event core tryst's `App#register_drop_target`
+  documents.
+- [tryst-switch](https://github.com/jamescook/tryst-switch) — an
+  animated iOS/Bootstrap-style on/off switch.
+- [tryst-segmented](https://github.com/jamescook/tryst-segmented) — a
+  segmented control: a rounded pill of mutually exclusive options with a
+  sliding highlight, in place of a row of radio buttons.
+- [tryst-value-slider](https://github.com/jamescook/tryst-value-slider)
+  — a single-thumb slider with a filled track, optional tick marks and a
+  value bubble that follows the thumb.
+- [tryst-range-slider](https://github.com/jamescook/tryst-range-slider)
+  — a dual-thumb slider bounding a `[low, high]` range on one track.
+- [tryst-spinner](https://github.com/jamescook/tryst-spinner) — an
+  antialiased indeterminate activity ring and determinate progress ring;
+  Tk's own indeterminate `ttk::progressbar` has neither.
+
+The widgets are all built on `Tryst::OwnerDrawnWidget` and rendered
+through tryst-vector — see [CUSTOM_WIDGETS.md](CUSTOM_WIDGETS.md) for
+how a shard registers a type of its own.
 
 ## Tests
 
