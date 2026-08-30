@@ -148,11 +148,15 @@ module Tryst
       # step, and bind: a Var to read or set the value.
       leaf_widget number_box
 
+      # A plain frame. Stacks its children top to bottom exactly as
+      # #column does - the same gap:/pad:/align: apply, and a child's
+      # grow: takes the leftover height - so it needs no column inside
+      # for the common case; put a row/grid inside for any other shape.
       container_widget panel
 
       # A titled container: a panel with a caption drawn into its border,
-      # passed as text:. Stacks its children like #panel does - put a
-      # column/row/grid inside to arrange them.
+      # passed as text:. Stacks its children like #panel does, with the
+      # same spacing options.
       container_widget group
 
       # A separate toplevel window. Configure it with title:, geometry:
@@ -275,6 +279,15 @@ module Tryst
       # With x: false, content is held at the visible width rather than
       # its natural one, so it never ends up narrower than the region.
       container_widget scrollable
+
+      # Stack children top to bottom (#column) or left to right (#row).
+      # gap: is the pixels between children, pad: the pixels between the
+      # container's edge and its content, align: where each child sits
+      # on the cross axis (:start/:center/:end, or :stretch to fill it);
+      # a child declared grow: true takes the leftover space on the main
+      # axis. #panel/#group/#tab/#pane/#window stack like a column and
+      # take the same options; anywhere else these are rejected at
+      # validation - see LayoutIntentValidator for what honours what.
       container_widget column
       container_widget row
 
@@ -969,7 +982,9 @@ module Tryst
         lazy : Bool = false,
         gap : Int32 = 0,
         pad : Int32 = 0,
-        align : FlowAlign = FlowAlign::Start
+        align : FlowAlign = FlowAlign::Start,
+        # The layout keys that were actually given - see Node#declared_layout.
+        declared : Array(Symbol) = [] of Symbol
 
       # Splits a declaration's opts into the Tk options that go on to a
       # widget-creation call, and the DSL intents that don't: grow? (this
@@ -977,20 +992,27 @@ module Tryst
       # (the realizer's tree walk skips the subtree until Handle#realize!),
       # and the flow/grid spacing trio gap:/pad:/align?. A leaf gets the
       # same treatment even though only a container has anywhere to put
-      # most of them.
+      # most of them - which keys were actually given is recorded too
+      # (declared), so LayoutIntentValidator can reject the ones nothing
+      # will honour instead of letting them vanish at realize.
       private def extract_dsl_opts(opts : Hash(Symbol, TclArgValue)) : {Hash(Symbol, TclArgValue), DslIntents}
         intents = DslIntents.new(
           grow: bool_opt(opts, :grow),
           lazy: bool_opt(opts, :lazy),
           gap: pixel_opt(opts, :gap),
           pad: pixel_opt(opts, :pad),
-          align: align_opt(opts)
+          align: align_opt(opts),
+          declared: LAYOUT_INTENT_KEYS.select { |key| opts.has_key?(key) }
         )
         cleaned = opts.reject { |key, _| DSL_INTENT_KEYS.includes?(key) }
         {cleaned, intents}
       end
 
       private DSL_INTENT_KEYS = {:grow, :lazy, :gap, :pad, :align}
+
+      # The subset that is about layout, and so has a container it needs
+      # to be honoured by (lazy: is about realize timing, not placement).
+      private LAYOUT_INTENT_KEYS = [:grow, :gap, :pad, :align]
 
       # gap:/pad: are pixel counts. Absent means zero.
       private def pixel_opt(opts : Hash(Symbol, TclArgValue), key : Symbol) : Int32
@@ -1109,6 +1131,7 @@ module Tryst
         node.gap = intents.gap
         node.pad = intents.pad
         node.align = intents.align
+        node.declared_layout = intents.declared
       end
     end
   end

@@ -101,9 +101,13 @@ module Tryst
     end
 
     # A toplevel: placed by the window manager, never pack/gridded into
-    # its nominal parent - hence arranged: false.
+    # its nominal parent - hence arranged: false. Its own children stack
+    # with the column flow, so a window's body can be laid out directly
+    # (pad:/gap:/align: on the window, grow: on the child that should
+    # take the rest) without a wrapper column.
     WidgetTypes.register(
-      WindowType.new(type: :window, tk_command: "toplevel", leaf: false, arranged: false, hosts_menu_bar: true)
+      WindowType.new(type: :window, tk_command: "toplevel", leaf: false, arranged: false, hosts_menu_bar: true,
+        flow: FlowConfig::STACK)
     )
   end
 end

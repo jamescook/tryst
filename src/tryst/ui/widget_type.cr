@@ -27,6 +27,22 @@ module Tryst
       # instead of anchoring, so it never reaches a lookup here.
       anchor : Hash(FlowAlign, String)
 
+    struct FlowConfig
+      # Top-to-bottom stacking: what ui.column is, and what every
+      # container that "just stacks its children" (panel, group, tab,
+      # pane, window) shares with it, so gap:/pad:/align: and a child's
+      # grow: mean the same thing on all of them.
+      STACK = new(
+        side: "top", main_pad: :pady, cross_pad: :padx,
+        main_fill: "y", cross_fill: "x",
+        anchor: {
+          FlowAlign::Start  => "w",
+          FlowAlign::Center => "center",
+          FlowAlign::End    => "e",
+        }
+      )
+    end
+
     # Forward declaration, so #arrange/#custom_children/#custom_create
     # below can name it. The real definition is realizer.cr, which
     # requires this file rather than the other way round - and an alias

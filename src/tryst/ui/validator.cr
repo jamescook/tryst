@@ -3,6 +3,7 @@ require "./widget_validators"
 require "./document"
 require "./grid_validator"
 require "./overlay_validator"
+require "./layout_intent_validator"
 
 module Tryst
   module UI
@@ -92,6 +93,7 @@ module Tryst
 
         GridValidator.check_stray_cell(node, parent, @errors)
         OverlayValidator.check_stray_overlay(node, parent, @errors)
+        LayoutIntentValidator.call(node, parent, @errors)
         WidgetValidators.for_type(node.type).each(&.call(node, parent, @document, @errors))
         check_dangling_event_targets(node)
 

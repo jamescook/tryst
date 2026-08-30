@@ -117,6 +117,13 @@ module Tryst
       # container's main axis - the grow: option, and what ui.spacer is.
       property? grow = false
 
+      # Which of grow:/gap:/pad:/align: the declaration actually spelled
+      # out, as opposed to the defaults every node carries in #grow?/
+      # #gap/#pad/#align regardless. What LayoutIntentValidator checks
+      # against the container - an intent given where nothing honours it
+      # is an error, not a silent no-op.
+      property declared_layout = [] of Symbol
+
       # WidgetDSL#raw's deferred block, for a :raw_op node only - run by
       # Realizer#run_raw_op with the live app once realized. Ruby stuffs
       # this into node.opts[:block] instead (opts is a bare Hash there);

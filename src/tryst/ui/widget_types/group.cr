@@ -5,10 +5,10 @@ module Tryst
     # A titled container - a ttk::frame with a caption drawn into its
     # border. Identical to :panel apart from the Tk command and that
     # caption, which arrives as an ordinary text: option; like :panel it
-    # has no arrange strategy of its own, so its children just stack (use
-    # a column/row/grid inside for real control).
+    # stacks its children with the column flow, so gap:/pad:/align: and a
+    # child's grow: apply (use a row/grid inside for any other shape).
     WidgetTypes.register(
-      WidgetType.new(type: :group, tk_command: "ttk::labelframe", leaf: false)
+      WidgetType.new(type: :group, tk_command: "ttk::labelframe", leaf: false, flow: FlowConfig::STACK)
     )
   end
 end

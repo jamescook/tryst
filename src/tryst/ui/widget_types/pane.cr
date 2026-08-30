@@ -23,9 +23,11 @@ module Tryst
     # Reached only through the hand-written WidgetDSL#pane, which takes
     # weight: as its own parameter and checks it's being declared inside a
     # ui.split.
+    # As with :tab, arranged: false covers the pane's own placement only -
+    # its children stack with the column flow.
     WidgetTypes.register(
       PaneType.new(
-        type: :pane, tk_command: "ttk::frame", leaf: false, arranged: false,
+        type: :pane, tk_command: "ttk::frame", leaf: false, arranged: false, flow: FlowConfig::STACK,
         validator: ValidatorProc.new { |node, parent, document, errors| PaneValidator.call(node, parent, document, errors) }
       )
     )
