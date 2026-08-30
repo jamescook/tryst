@@ -223,3 +223,24 @@ describe "WidgetType hook overrides" do
     app.calls.first.args.should eq(["."] of Tryst::TclArgValue)
   end
 end
+
+describe "Realizer#pack_plain" do
+  it "gives a grow: child of a plain-packed container the whole leftover space" do
+    session = WidgetDslHarness.new
+    session.widget(:__test_arrange_plain__, :box) do |dsl|
+      dsl.button(:a, text: "A")
+      dsl.column(:body, grow: true, &.label(text: "body"))
+    end
+
+    app = FakeApp.new
+    Tryst::UI::Realizer.new(app, session.document).realize
+
+    plain = app.calls.find { |call| call.cmd == "pack" && call.args == [".box.a"] of Tryst::TclArgValue }
+    grown = app.calls.find { |call| call.cmd == "pack" && call.args == [".box.body"] of Tryst::TclArgValue }
+    fail("expected pack calls for both children, got #{app.calls.map(&.cmd)}") unless plain && grown
+
+    plain.kwargs.should be_empty
+    grown.kwargs["fill"].should eq "both"
+    grown.kwargs["expand"].should be_true
+  end
+end

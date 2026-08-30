@@ -449,10 +449,21 @@ module Tryst
       # (:root) gets, and also WidgetType#arrange's own default body for
       # a type with no #flow and nothing else overridden. Public for the
       # same reason #create_children is.
+      #
+      # grow: still means what it does in a flow: the child takes all the
+      # leftover space. That's what a window's single body column wants
+      # (a toplevel is plain-packed, having no flow of its own), and with
+      # nothing honoring it here no DSL-built window could ever resize
+      # its content.
       def pack_plain(children : Array(Node)) : Nil
         children.each do |child|
           next unless realized = child.realized
-          @app.command(:pack, [realized.arrange_path] of TclArgValue, {} of String => TclArgValue)
+          opts = Hash(String, TclArgValue).new
+          if child.grow?
+            opts["fill"] = "both"
+            opts["expand"] = true
+          end
+          @app.command(:pack, [realized.arrange_path] of TclArgValue, opts)
         end
       end
 
