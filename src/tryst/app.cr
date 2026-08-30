@@ -469,18 +469,17 @@ module Tryst
     # whatever exception block raised instead - same contract as calling
     # block synchronously would have, just relocated.
     #
-    # Route File I/O, DNS, and TLS calls through this rather than
-    # calling them directly, because on macOS those are exactly the
-    # calls Crystal's SYSMON thread can migrate onto a different OS
-    # thread mid-call - and if that continuation goes on to touch Tk,
-    # it silently corrupts Tcl/Tk's internal state (Tcl requires every
-    # call into a given interpreter to come from the one OS thread that
-    # created it, forever). A race against a periodic scheduler sample,
-    # not a "the call was slow" threshold, so a call that's fine 99
-    # times can still corrupt state on the 100th - see
-    # syscall_guard.cr's header comment for the full mechanism and its
-    # own debug-time warning, and Interp#check_thread_affinity! for the
-    # hard-error backstop if this rule gets missed anyway.
+    # Route slow File I/O, DNS, and TLS calls through this rather than
+    # calling them directly: on Tk's thread those calls run bare, with
+    # the thread pinned (see syscall_guard.cr - Crystal's SYSMON would
+    # otherwise migrate the fiber onto a different OS thread mid-call,
+    # and Tcl requires every call into a given interpreter to come from
+    # the one OS thread that created it, forever), so Tk's event loop
+    # and every other fiber on it stall for as long as the call takes.
+    # A sub-millisecond settings read is harmless there; a network
+    # fetch is a frozen UI. Interp#check_thread_affinity! is the
+    # hard-error backstop should anything still reach Tk from the wrong
+    # thread.
     #
     # new_thread: false (default) dispatches to Tryst::OffThreadWorker's
     # single persistent, lazily-started thread - shared across every

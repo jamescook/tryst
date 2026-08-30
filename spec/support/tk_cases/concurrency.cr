@@ -438,3 +438,31 @@ tk_test "a widget callback can spawn an Isolated context" do |app|
 
   raise "expected 'from_callback', got #{callback_thread_result.inspect}" unless callback_thread_result == "from_callback"
 end
+
+# The pin in syscall_guard.cr. Without it, a File.open that blocks Tk's
+# thread for longer than SYSMON's 10ms tick comes back on a different OS
+# thread - deterministically, not as a race, since a 60ms wait guarantees
+# the tick lands inside the syscall window. A FIFO with no writer yet is
+# the simplest blocking open there is; the writer arrives from an
+# isolated thread so nothing on Tk's side has to cooperate.
+tk_test "a blocking File.open on Tk's thread comes back on the same thread" do |_app|
+  dir = File.tempname("tryst_fifo")
+  Dir.mkdir(dir)
+  fifo = File.join(dir, "pipe")
+  begin
+    raise "mkfifo failed: #{Errno.value}" unless LibC.mkfifo(fifo, 0o600) == 0
+    before = Thread.current
+
+    Fiber::ExecutionContext::Isolated.new("tryst_fifo_writer") do
+      sleep 60.milliseconds
+      File.open(fifo, "w", &.puts("ping"))
+    end
+
+    line = File.open(fifo, "r", &.gets)
+    raise "expected the writer's line, got #{line.inspect}" unless line == "ping"
+    raise "the blocking open migrated Tk's thread" unless Thread.current.same?(before)
+  ensure
+    File.delete?(fifo)
+    Dir.delete(dir)
+  end
+end
