@@ -602,6 +602,13 @@ module Tryst
 
     # Destroy a widget and all its children. widget accepts a Widget, a
     # path String, :root, or the default (the root window).
+    #
+    # Destroying the root also deletes the interpreter (see
+    # #setup_destroy_cleanup) - once this returns, or once the callback
+    # it was called from has returned, every further Tcl call on this
+    # App raises TclError as already-deleted. There is nothing useful
+    # left to call by then anyway: Tk itself refuses every widget
+    # command after the root is gone.
     def destroy(widget = :root) : Nil
       tcl_invoke("destroy", Tryst.resolve_widget_target(widget))
     end
@@ -1310,6 +1317,17 @@ module Tryst
         # user who opted out of widget tracking still pays for the write
         # and needs the matching delete.
         @widget_types_by_path.delete(path)
+        # The root going is the end of this interpreter's useful life -
+        # Tk answers every widget command with "application has been
+        # destroyed" from here on - but not, by itself, the end of the
+        # interpreter: its keepalive timer and every `after` script still
+        # scheduled would keep firing into Crystal for as long as the
+        # process lives, through pointers nothing pins (see Interp's
+        # @@live). Deleting it here is what stops that. Deferred by
+        # Interp#delete itself until this callback's own Tcl frames have
+        # unwound, so the rest of this cascade - and whatever destroyed
+        # the root - still runs against a live interpreter.
+        @interp.delete if path == "."
         next if path.starts_with?(".tryst_debug")
         @widgets.delete(path) if @track_widgets
       end

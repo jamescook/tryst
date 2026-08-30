@@ -9,4 +9,8 @@ describe "Interp#delete" do
   it "leaves every later FFI call raising a clear TclError instead of touching freed memory, and is idempotent" do
     assert_tk_subprocess("spec/standalone/interp_delete_fixture.cr")
   end
+
+  it "happens on its own when the root window is destroyed, from inside a callback or not, silencing the App's timers for good" do
+    assert_tk_subprocess("spec/standalone/root_destroy_deletes_interp_fixture.cr")
+  end
 end

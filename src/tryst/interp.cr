@@ -661,6 +661,7 @@ module Tryst
         ->tryst_crystal_callback_dispatch, Box.box(self), nil)
 
       arm_keepalive_timer
+      Interp.pin(self)
     end
 
     # Tcl requires every call into this interpreter to come from the exact
@@ -731,10 +732,34 @@ module Tryst
       wait_for_eval_owner
       @eval_fiber = Fiber.current if @eval_depth == 0
       @eval_depth += 1
-      yield
+      in_tcl_frame { yield }
     ensure
       @eval_depth -= 1
       wake_eval_waiters if @eval_depth == 0
+    end
+
+    # How many calls into Tcl/Tk C code that can run scripts against
+    # this interpreter are on the stack right now, across every fiber:
+    # every #guarded_entry, plus #mainloop's own Tcl_DoOneEvent, which
+    # deliberately isn't a #guarded_entry (see there). Distinct from
+    # @eval_depth, which only tracks the re-entrancy guard's owner
+    # fiber. Read by #delete: Tcl_DeleteInterp is only safe once this
+    # is zero, so a #delete requested from inside a callback (the root
+    # window's own <Destroy> is the usual one) is held until the
+    # outermost frame returns - see #leave_tcl_frame.
+    @tcl_frames = 0
+    @delete_pending = false
+
+    private def in_tcl_frame(& : -> T) : T forall T
+      @tcl_frames += 1
+      yield
+    ensure
+      leave_tcl_frame
+    end
+
+    private def leave_tcl_frame : Nil
+      @tcl_frames -= 1
+      finish_pending_delete if @tcl_frames == 0
     end
 
     # #guarded_entry's wait, for a fiber that isn't the one parked
@@ -1032,17 +1057,23 @@ module Tryst
     # _pending_exception from this same blocking path App#update does, since
     # this loop (unlike #update) never returns on its own for App#mainloop's
     # caller to check between calls.
+    # Stops as soon as this interpreter has been deleted, too - the root
+    # window's <Destroy> requests exactly that (see App's destroy
+    # cleanup), and it takes effect the moment the Tcl_DoOneEvent it
+    # fired inside returns, so there's nothing left to drain or tick.
     def mainloop(on_tick : (-> Nil)? = nil) : Nil
       {% if flag?(:darwin) || flag?(:windows) %}
-        while main_windows > 0
-          LibTcl.do_one_event(LibTcl::TCL_DONT_WAIT)
+        while !@deleted && main_windows > 0
+          in_tcl_frame { LibTcl.do_one_event(LibTcl::TCL_DONT_WAIT) }
+          break if @deleted
           drain_main_queue
           on_tick.try &.call
           sleep 1.millisecond
         end
       {% else %}
-        while main_windows > 0
-          LibTcl.do_one_event(LibTcl::TCL_ALL_EVENTS)
+        while !@deleted && main_windows > 0
+          in_tcl_frame { LibTcl.do_one_event(LibTcl::TCL_ALL_EVENTS) }
+          break if @deleted
           drain_main_queue
           on_tick.try &.call
         end
@@ -1184,7 +1215,12 @@ module Tryst
       end
     end
 
+    # A no-op once deleted: what's queued is work for an interpreter
+    # that no longer exists (a Photo's finalizer reclaiming its image,
+    # say), and running it would only raise as already-deleted.
     private def drain_main_queue : Nil
+      return if @deleted
+
       loop do
         select
         when block = @main_queue.receive
@@ -1237,12 +1273,66 @@ module Tryst
       ptr.as(Void*)
     end
 
+    # Every Interp that hasn't been deleted yet. Tcl holds raw pointers
+    # to each one - Box(self) as the clientData of its crystal_callback
+    # command and of its keepalive timer - that Boehm can't see, so an
+    # Interp whose last Crystal reference is dropped without #delete
+    # would be collected while Tcl still fires into it: the keepalive
+    # re-arms itself every 16ms forever, and every `after` script the
+    # interp still has scheduled (App#every's timers, say) re-enters
+    # #dispatch_callback, each one writing counters and tokens through
+    # what that memory has since become. Confirmed directly in a
+    # downstream spec suite that creates and destroys hundreds of Apps
+    # per process: heap corruption surfacing as segfaults at unrelated
+    # sites (a String read out of a Hash entry on another thread, among
+    # others), gone with GC disabled. Pinning here turns that into a
+    # plain leak for an App that is dropped without ever being
+    # destroyed; the ordinary path - the root window going away - runs
+    # #delete, which unpins. Ruby-teek's live_instances, by another name.
+    @@live = [] of Interp
+    @@live_lock = Mutex.new
+
+    # :nodoc:
+    def self.pin(interp : Interp) : Nil
+      @@live_lock.synchronize { @@live << interp }
+    end
+
+    # :nodoc:
+    def self.unpin(interp : Interp) : Nil
+      @@live_lock.synchronize { @@live.delete(interp) }
+    end
+
     # Safe to call more than once. Tcl_DeleteInterp releases the
     # Tcl_Interp struct outright - every method below guards against that
     # via #ptr instead of touching @ptr directly.
+    #
+    # Safe to call from inside a callback as well - the root window's
+    # <Destroy> is where App requests it - but only takes effect once
+    # no Tcl frame of this interpreter is left on the stack: Tcl itself
+    # would cope (Tcl_DeleteInterp on an interpreter that is mid-eval
+    # only marks it and frees it on release), but every FFI call this
+    # class makes between the request and the outermost frame's return
+    # would then raise as already-deleted, from inside code that was
+    # still legitimately running. So it's deferred to #leave_tcl_frame's
+    # last pop instead, which is a plain ordinary return from Tcl.
     def delete : Nil
       return if @deleted
 
+      if @tcl_frames > 0
+        @delete_pending = true
+        return
+      end
+
+      delete_now
+    end
+
+    private def finish_pending_delete : Nil
+      return unless @delete_pending
+      @delete_pending = false
+      delete_now
+    end
+
+    private def delete_now : Nil
       # Event sources belong to the THREAD's notifier, not to this
       # interpreter, so deleting the interp would leave any still
       # registered - and Tcl would go on calling them against state
@@ -1260,6 +1350,7 @@ module Tryst
 
       LibTcl.delete_interp(@ptr)
       @deleted = true
+      Interp.unpin(self)
     end
 
     # Registers a callback Tcl will run on every pass of its event loop,
