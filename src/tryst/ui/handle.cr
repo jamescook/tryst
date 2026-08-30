@@ -48,6 +48,14 @@ module Tryst
         @node.name
       end
 
+      # @api private - the node this handle wraps, for Session#add(Handle)
+      # to build under. Protected rather than public on purpose: a Handle
+      # is the whole API a caller gets for a widget, and the Node behind
+      # it stays the library's own.
+      protected def node : Node
+        @node
+      end
+
       # This node's live address - the real Tk widget path.
       # Raises NotRealizedError before realize.
       def path : String

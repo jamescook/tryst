@@ -362,18 +362,53 @@ module Tryst
       # Raises NotRealizedError if the session (or the named parent)
       # isn't realized, ArgumentError if no widget is declared under
       # parent_name.
+      #
+      # parent_name resolves at the top level, since no #component is
+      # open at runtime - a container declared INSIDE a component has no
+      # top-level name to give here. Pass its Handle to the overload
+      # below instead.
       def add(parent_name : Symbol, &) : Nil
         raise_unless_realized!
-        live_app = app
-
         parent_node = @document.find(parent_name, scope: current_scope)
         raise ArgumentError.new("no widget named :#{parent_name} in this build") unless parent_node
-        raise NotRealizedError.new("##{parent_name} is not realized yet") unless parent_node.realized
+
+        add_into(parent_node) { |session| yield session }
+      end
+
+      # The same, with the parent given as the Handle its own declaration
+      # returned rather than by name - the way to grow a container that
+      # lives inside a #component, whose name isn't visible from out here.
+      #
+      # The block builds in the parent's OWN scope, as if it had been
+      # part of the parent's original declaration: #[] inside it sees the
+      # parent's component's names, a new name collides with that
+      # component's, and none of it becomes visible at the top level.
+      # (For a top-level parent that's the top level, so the Symbol form
+      # above behaves exactly as it always has.)
+      #
+      # Raises NotRealizedError if the session or the parent isn't
+      # realized, ArgumentError for a Handle from some other Session's
+      # build.
+      def add(parent : Handle, &) : Nil
+        raise_unless_realized!
+        parent_node = parent.node
+        unless parent_node.document.same?(@document)
+          raise ArgumentError.new("#{WidgetValidators.describe(parent_node)} belongs to a different session's build")
+        end
+
+        add_into(parent_node) { |session| yield session }
+      end
+
+      # The shared body of both #add overloads, from a resolved parent on.
+      private def add_into(parent_node : Node, &) : Nil
+        live_app = app
+        raise NotRealizedError.new("#{WidgetValidators.describe(parent_node)} is not realized yet") unless parent_node.realized
 
         before = parent_node.children.size
         vars_before = @vars.size
         images_before = @images.size
         push_stack(parent_node)
+        @scope_stack.push(parent_node.scope)
         @in_add = true
         begin
           yield self
@@ -394,6 +429,7 @@ module Tryst
           raise ex
         ensure
           @in_add = false
+          @scope_stack.pop
           pop_stack
         end
 

@@ -85,6 +85,13 @@ describe Tryst::UI::Session do
       expect_raises(Tryst::UI::NotRealizedError) { session.choose_dir }
       expect_raises(Tryst::UI::NotRealizedError) { session.add(:whatever) { } }
     end
+
+    it "add(Handle) raises NotRealizedError before realize too" do
+      handle = nil
+      session = Tryst::UI.app { |builder| handle = builder.panel(:host) }
+
+      expect_raises(Tryst::UI::NotRealizedError) { session.add(handle.as(Tryst::UI::Handle)) { } }
+    end
   end
 
   # #every/#after queue when called before realize (same queue-then-wire

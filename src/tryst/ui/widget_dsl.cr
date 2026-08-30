@@ -881,8 +881,10 @@ module Tryst
 
       # The scope every name declared or looked up right now belongs to -
       # the innermost open #component, or Scope::TOP_LEVEL outside any.
-      # Session#add runs with no component open, so a runtime add
-      # resolves its parent_name at top level.
+      # No component is open at runtime, so Session#add resolves a
+      # parent_name at top level - and then re-opens the parent's own
+      # scope for its block, so what's added builds as if declared in
+      # place (see Session#add).
       private def current_scope : Scope
         @scope_stack.last
       end

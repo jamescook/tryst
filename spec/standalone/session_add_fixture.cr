@@ -156,5 +156,57 @@ raise "add: expected two distinct :reset paths, got #{paths}" unless paths == ["
 paths.each { |path| raise "add: expected #{path} in Tk" unless app.winfo.exists?(path) }
 raise "add: a component's :reset must not resolve at top level" if session.document.find(:reset)
 
+# Case 13: growing a container that lives INSIDE a component. Its name
+# isn't visible at top level, so add(:name) can't reach it - add(Handle)
+# is the way in, and the block builds in the component's own scope:
+# it sees the component's names, its new names stay invisible at top
+# level, and it collides with the component's names rather than the top
+# level's.
+body_handle = nil
+session.add(:list) do |builder|
+  builder.component(:card) do |comp|
+    comp.label(:title, text: "Card")
+    body_handle = comp.column(:body)
+  end
+end
+app.update
+body = body_handle.as(Tryst::UI::Handle)
+begin
+  session.add(:body, &.button(:extra))
+  raise "add: expected ArgumentError for a component-internal name at top level"
+rescue ex : ArgumentError
+  raise "add: expected :body in the message, got #{ex.message.inspect}" unless ex.message.to_s.includes?("body")
+end
+saw_title = nil
+extra_handle = nil
+session.add(body) do |builder|
+  saw_title = builder[:title]?
+  extra_handle = builder.button(:extra, text: "Extra")
+end
+app.update
+raise "add(Handle): expected the block to see the component's own :title" unless saw_title
+extra_path = extra_handle.as(Tryst::UI::Handle).path
+raise "add(Handle): expected .list.body.extra, got #{extra_path}" unless extra_path == ".list.body.extra"
+raise "add(Handle): expected #{extra_path} in Tk" unless app.winfo.exists?(extra_path)
+raise "add(Handle): an added name must stay inside the component's scope" if session.document.find(:extra)
+begin
+  session.add(body, &.button(:title))
+  raise "add(Handle): expected a collision with the component's own :title"
+rescue ex : ArgumentError
+  raise "add(Handle): expected the component collision message, got #{ex.message.inspect}" unless ex.message.to_s.includes?("same component")
+end
+raise "add(Handle): a failed add must not leave :extra gone" unless app.winfo.exists?(extra_path)
+
+# Case 14: a Handle from a different session's build is refused before
+# anything is touched.
+foreign_handle = nil
+Tryst::UI.app { |builder| foreign_handle = builder.panel(:foreign) }
+begin
+  session.add(foreign_handle.as(Tryst::UI::Handle)) { |builder| builder.button(:nope) }
+  raise "add(Handle): expected ArgumentError for another session's handle"
+rescue ex : ArgumentError
+  raise "add(Handle): expected 'different session' in the message, got #{ex.message.inspect}" unless ex.message.to_s.includes?("different session")
+end
+
 app.destroy
 puts "OK"
