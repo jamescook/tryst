@@ -118,13 +118,47 @@ ui[:save].on(:enter) { ui[:save].configure(cursor: "hand2") }
 ui[:save].on([:control, :s]) { save }
 ```
 
+Names live in one flat namespace for the whole build by default, and
+declaring the same name twice is an `ArgumentError` the moment it
+happens — nesting a widget inside a `row` or a `tab` doesn't make its
+name any more local. That's the right default for an app that names a
+handful of load-bearing widgets, and the wrong one for a reusable piece
+(a card, a settings tab) that wants to name its own parts and be
+mounted more than once. `component` opens an isolated namespace for
+exactly that:
+
+```crystal
+ui.tabs do
+  ui.component(:gamepad) do |c|
+    c.tab("Gamepad") { c.button(:reset, text: "Reset") }
+  end
+  ui.component(:achievements) do |c|
+    c.tab("Achievements") { c.button(:reset, text: "Reset") }
+  end
+end
+```
+
+Both `:reset` buttons coexist. A component is a naming boundary and
+nothing more — no widget of its own, and its children land in the
+enclosing container as if the wrapper weren't there. Names are exactly
+as visible as the scope they were declared in: `ui[:reset]` outside
+either component finds nothing, `c[:reset]` inside one finds its own,
+and neither can see the other's or the top level's — there's no fallback
+up the chain, for `[]` and for an event's `target:` alike. A message for
+a name that exists in some other scope says so. Handles are how a
+component hands its widgets to whoever mounted it: every widget method
+still returns one, so keep the handles you need and pass them out.
+
 ### Timers, dialogs, and the rest
 
 The session carries the app-level conveniences: `every(ms)` and
 `after(ms)` timers (declarable right inside the build block), native file
 open/save dialogs, `message`, `choose_color`, `choose_dir`, a `toast` for
 transient feedback, a `busy` cursor block, and clipboard access. UIs that
-grow at runtime append validated subtrees with `add`.
+grow at runtime append validated subtrees with `add(:name)` — or
+`add(handle)`, which is the way into a container that lives inside a
+component (its name isn't visible from outside) and builds in that
+component's own scope.
 
 ### Concurrency
 
