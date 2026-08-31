@@ -446,7 +446,7 @@ module Tryst
           unregister_callback(cb_id)
         end
       end
-      tcl_id = tcl_eval("after #{ms.to_i} {crystal_callback #{cb_id}}")
+      tcl_id = tcl_eval("after #{ms.to_i} {crystal_callback #{cb_id}}") # tcl-eval: vetted
       AfterHandle.new(tcl_id, cb_id)
     end
 
@@ -461,7 +461,7 @@ module Tryst
           unregister_callback(cb_id)
         end
       end
-      tcl_id = tcl_eval("after idle {crystal_callback #{cb_id}}")
+      tcl_id = tcl_eval("after idle {crystal_callback #{cb_id}}") # tcl-eval: vetted
       AfterHandle.new(tcl_id, cb_id)
     end
 
@@ -590,7 +590,7 @@ module Tryst
 
     # Cancel a pending #after or #after_idle timer.
     def after_cancel(after_id : AfterHandle) : AfterHandle
-      tcl_eval("after cancel #{after_id.tcl_id}")
+      tcl_eval("after cancel #{after_id.tcl_id}") # tcl-eval: vetted
       if cb_id = after_id.cb_id
         # Cancelling the same handle twice is harmless: unregistering an
         # id that is already gone is a no-op.
@@ -1242,7 +1242,7 @@ module Tryst
         @widgets[path] = WidgetInfo.new(class_name: cls, parent: parent_path(path))
       end
 
-      tcl_eval(<<-TCL)
+      tcl_eval(<<-TCL) # tcl-eval: vetted
         proc ::tryst_track_create {cmd_string code result op} {
           set path [lindex $cmd_string 1]
           if {$code == 0 && [winfo exists $path]} {
@@ -1253,7 +1253,7 @@ module Tryst
         TCL
 
       WIDGET_COMMANDS.each do |cmd|
-        tcl_eval("catch {trace add execution #{cmd} leave ::tryst_track_create}")
+        tcl_eval("catch {trace add execution #{cmd} leave ::tryst_track_create}") # tcl-eval: vetted
       end
     end
 
@@ -1330,7 +1330,7 @@ module Tryst
         next if path.starts_with?(".tryst_debug")
         @widgets.delete(path) if @track_widgets
       end
-      tcl_eval("bind all <Destroy> {crystal_callback #{destroy_cb_id} %W}")
+      tcl_eval("bind all <Destroy> {crystal_callback #{destroy_cb_id} %W}") # tcl-eval: vetted
     end
 
     # Tk paths are "."-joined, not "/"-joined, so the parent of ".f.b1" is

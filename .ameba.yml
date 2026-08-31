@@ -17,3 +17,13 @@ Lint/SpecFilename:
     - spec/data/**
     - spec/**/spec_helper.cr
     - spec/standalone/**
+
+# Advisory-only, run by .githooks/pre-commit as a separate --only pass
+# that never blocks the commit (the rule cannot reliably tell a wrong
+# interpolation from a vetted one - see the rule's own doc comment in
+# tools/ameba_rules/tcl_eval_interpolation.cr). Disabled here so the
+# BLOCKING ameba pass above it in the hook ignores it; --only re-enables
+# it for the advisory pass. Only exists in the custom binary built by
+# tools/ameba_rules/ameba.cr - the stock ameba binary doesn't know it.
+Lint/TclEvalInterpolation:
+  Enabled: false

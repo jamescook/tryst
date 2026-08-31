@@ -21,6 +21,24 @@ else
   exit 1
 fi
 
+# --- 1b. ADVISORY: interpolated tcl_eval scripts ----------------------
+# A warning, never a blocker: Lint/TclEvalInterpolation cannot reliably
+# tell a wrong interpolation (a runtime value re-parsed as Tcl syntax)
+# from a vetted one (a constant fragment, an internal id), so it prints
+# and the commit proceeds either way. The rule is disabled in .ameba.yml
+# (so pass 1 above ignores it) and re-enabled here via --only; it only
+# exists in the CUSTOM ameba binary
+# (`crystal build tools/ameba_rules/ameba.cr -o lib/ameba/bin/ameba`) -
+# with the stock binary this pass reports an unknown rule, which the
+# message below covers, and still doesn't block. src/ only: specs and
+# examples build throwaway scripts where raw eval is the point.
+if ! "$ameba_bin" --only Lint/TclEvalInterpolation src/ >/tmp/tryst-tcl-eval-advisory.$$ 2>&1; then
+  echo "pre-commit ADVISORY (not blocking): new interpolated tcl_eval script(s) - prefer tcl_invoke's pre-split argv, or annotate a vetted site with 'ameba:disable Lint/TclEvalInterpolation':" >&2
+  cat /tmp/tryst-tcl-eval-advisory.$$ >&2
+  echo "pre-commit ADVISORY: (if the output above says the rule is unknown, rebuild the custom binary: crystal build tools/ameba_rules/ameba.cr -o lib/ameba/bin/ameba)" >&2
+fi
+rm -f /tmp/tryst-tcl-eval-advisory.$$
+
 # --- 2. Typecheck every example ---------------------------------------
 # Nothing else does: `crystal spec` never touches examples/, and ameba
 # above only lints it - so an example could stop COMPILING and nothing
