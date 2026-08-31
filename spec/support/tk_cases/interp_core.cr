@@ -107,6 +107,119 @@ tk_test "event generate simulates a mouse click via bind" do |app|
   raise "expected the <Button-1> binding to fire" unless interp.wait_until { clicked }
 end
 
+# Tk's own `event generate` rejects a Double/Triple/Quadruple pattern
+# ("Double, Triple, or Quadruple modifier not allowed"), so simulate_event
+# expands one into the repeated press/release pairs Tk counts. The single
+# click matters as much as the double: a real double click fires
+# <Button-1> once (for the first click) and then <Double-Button-1>, and
+# an expansion that fired the plain binding twice wouldn't be one.
+tk_test "event generate expands <Double-Button-1> into a real double click" do |app|
+  interp = app.interp
+  interp.create_widget("frame", ".dbl", width: 100, height: 100)
+  interp.pack(".dbl")
+
+  doubles = 0
+  singles = 0
+  interp.bind(".dbl", "<Double-Button-1>") { doubles += 1 }
+  interp.bind(".dbl", "<Button-1>") { singles += 1 }
+
+  interp.simulate_event(".dbl", "<Double-Button-1>", x: 10, y: 10)
+
+  raise "expected the <Double-Button-1> binding to fire" unless interp.wait_until { doubles == 1 }
+  raise "expected exactly one plain <Button-1>, got #{singles}" unless singles == 1
+end
+
+# The guard against Tk's click counting running the two bursts together:
+# clicks 3 and 4 arriving inside the same 500ms window as clicks 1 and 2
+# would be a Triple then a Quadruple, not a second Double. Nothing about
+# the expansion itself catches this - only the spacing between calls does.
+tk_test "consecutive simulated double clicks each fire Double, not Triple" do |app|
+  interp = app.interp
+  interp.create_widget("frame", ".dbl2", width: 100, height: 100)
+  interp.pack(".dbl2")
+
+  doubles = 0
+  triples = 0
+  interp.bind(".dbl2", "<Double-Button-1>") { doubles += 1 }
+  interp.bind(".dbl2", "<Triple-Button-1>") { triples += 1 }
+
+  2.times do
+    interp.simulate_event(".dbl2", "<Double-Button-1>", x: 10, y: 10)
+  end
+
+  raise "expected two double clicks, got #{doubles}" unless interp.wait_until { doubles == 2 }
+  raise "a second double click was counted as a triple" unless triples == 0
+end
+
+tk_test "event generate expands <Triple-Button-1> too" do |app|
+  interp = app.interp
+  interp.create_widget("frame", ".trp", width: 100, height: 100)
+  interp.pack(".trp")
+
+  triples = 0
+  interp.bind(".trp", "<Triple-Button-1>") { triples += 1 }
+
+  interp.simulate_event(".trp", "<Triple-Button-1>", x: 10, y: 10)
+
+  raise "expected the <Triple-Button-1> binding to fire" unless interp.wait_until { triples == 1 }
+end
+
+# Tk's bare-detail form, which is how a Treeview double-click binding is
+# usually written - there's no type token in it to rewrite, so the
+# expansion has to insert one.
+tk_test "event generate expands the bare-detail <Double-1> form" do |app|
+  interp = app.interp
+  interp.create_widget("frame", ".dbl3", width: 100, height: 100)
+  interp.pack(".dbl3")
+
+  doubles = 0
+  interp.bind(".dbl3", "<Double-1>") { doubles += 1 }
+
+  interp.simulate_event(".dbl3", "<Double-1>", x: 10, y: 10)
+
+  raise "expected the <Double-1> binding to fire" unless interp.wait_until { doubles == 1 }
+end
+
+# An unviewable target is the one case where `event generate` reports
+# success and delivers nothing at all - not to the widget, not to anything
+# further up its bindtag chain. Left unchecked it reads exactly like a
+# binding that didn't work.
+tk_test "simulate_event raises on a widget no geometry manager is showing" do |app|
+  interp = app.interp
+  interp.create_widget("frame", ".unviewable", width: 100, height: 100)
+
+  fired = false
+  interp.bind(".unviewable", "<Button-1>") { fired = true }
+
+  begin
+    interp.simulate_event(".unviewable", "<Button-1>", x: 10, y: 10)
+    raise "expected a NotViewableError for an unmanaged widget"
+  rescue error : Tryst::NotViewableError
+    raise "error should name the widget: #{error.message}" unless error.message.to_s.includes?(".unviewable")
+  end
+
+  raise "the binding should not have fired" if fired
+end
+
+# The shape this actually bites in: the widget itself IS packed, but its
+# parent was never attached to anything, so the whole subtree is
+# unviewable. `winfo ismapped` on the child alone wouldn't be enough to
+# tell - which is why the check asks `winfo viewable`.
+tk_test "simulate_event raises when only an ancestor is unmanaged" do |app|
+  interp = app.interp
+  interp.create_widget("frame", ".orphan", width: 100, height: 100)
+  interp.create_widget("frame", ".orphan.child", width: 50, height: 50)
+  interp.pack(".orphan.child")
+
+  interp.bind(".orphan.child", "<Button-1>") { }
+
+  begin
+    interp.simulate_event(".orphan.child", "<Button-1>", x: 10, y: 10)
+    raise "expected a NotViewableError for a widget under an unmanaged parent"
+  rescue Tryst::NotViewableError
+  end
+end
+
 # Widget-instance bindtags fire before class bindtags in Tk's bindtag chain
 # ([widget, class, toplevel, all]) - signal.break! should stop the
 # class-level binding from running at all, not just finish normally.

@@ -497,6 +497,15 @@ module Tryst
   class WrongThreadError < Exception
   end
 
+  # Raised by Interp#simulate_event when its target window isn't viewable,
+  # which Tk's `event generate` answers by silently delivering nothing at
+  # all. Not a TclError, for the same reason WrongThreadError isn't: this
+  # is a precondition checked before Tcl is asked to do anything, not an
+  # error Tcl reported - Tcl reports no error here, which is the whole
+  # problem. See Interp#ensure_viewable!.
+  class NotViewableError < Exception
+  end
+
   # Passed as the second block argument to #register_callback/#bind so a
   # callback can tell Tk to stop running any other bindings for the same
   # event (e.g. to override a widget's default key handling), without
@@ -539,6 +548,27 @@ module Tryst
     TCL_OK                    =  0
     DEFAULT_TIMER_INTERVAL_MS = 16 # ~60fps, matches ruby-tryst's default
 
+    # Repeat modifiers Tk counts consecutive clicks for, and the event
+    # type tokens whose press/release pair those counts are derived from -
+    # see #simulate_event's #generate_repeated_event.
+    REPEAT_MODIFIERS = {"Double" => 2, "Triple" => 3, "Quadruple" => 4}
+
+    BUTTON_EVENT_TYPES = {"Button", "ButtonPress", "ButtonRelease"}
+    KEY_EVENT_TYPES    = {"Key", "KeyPress", "KeyRelease"}
+
+    # Spacing of a synthesized repeat burst, in the milliseconds
+    # `event generate -time` speaks. Tk counts two clicks as a double when
+    # they land within 500ms of each other (NEARBY_MS in its own tkBind.c),
+    # so CLICK_INTERVAL_MS has to sit comfortably under that and
+    # REPEAT_GAP_MS comfortably over it.
+    CLICK_INTERVAL_MS =  100
+    PRESS_HOLD_MS     =   10
+    REPEAT_GAP_MS     = 1000
+
+    # `event generate -time` takes a 32-bit value (X's own Time), so the
+    # synthetic clock wraps well inside that rather than growing forever.
+    SYNTHETIC_TIME_LIMIT = 1_000_000_000
+
     # Fixed capacity for @finalizer_queue - see #queue_for_main_from_finalizer.
     # Generous enough that a realistic burst of simultaneously-collected
     # Photos (or anything else routed through it) never gets near it; a
@@ -566,6 +596,12 @@ module Tryst
     @active_callback_ids = Set(String).new
     @deferred_self_dispatch = Hash(String, Array(Array(String))).new
     @main_queue = Channel(Proc(Nil)).new(64)
+
+    # Where the next synthesized repeat burst (#generate_repeated_event)
+    # starts its -time numbering. Per-interpreter and monotonic within it,
+    # so consecutive simulated double-clicks stay far enough apart that Tk
+    # counts each as its own double rather than one long run of clicks.
+    @synthetic_event_time = 0
 
     # Set by #delete, checked by #ptr - guards every FFI call after
     # deletion against reaching @ptr directly, which Tcl_DeleteInterp has
@@ -1146,6 +1182,13 @@ module Tryst
     # shortcut around real event delivery for a bind. Options become
     # "-key value" pairs (e.g. x: 10, y: 10 for a mouse event's
     # coordinates).
+    #
+    # A "<Double-...>"/"<Triple-...>"/"<Quadruple-...>" pattern is expanded
+    # into repeated press/release pairs rather than passed through - see
+    # #generate_repeated_event for why that expansion is the only way to
+    # fire such a binding at all.
+    #
+    # The target must be VIEWABLE, hence #ensure_viewable! - see there.
     def simulate_event(path : String, event : String, **options) : Nil
       toplevel = tcl_invoke("winfo", "toplevel", path)
       tcl_invoke("wm", "deiconify", toplevel)
@@ -1153,12 +1196,151 @@ module Tryst
       tcl_invoke("focus", "-force", path)
       tcl_eval("update")
 
-      args = ["event", "generate", path, event]
+      ensure_viewable!(path, event)
+
+      option_args = [] of String
       options.each do |key, value|
-        args << "-#{key}"
-        args << value.to_s
+        option_args << "-#{key}"
+        option_args << value.to_s
       end
-      tcl_invoke(args)
+
+      count, base_event = Interp.split_repeat_modifier(event)
+      if count == 1
+        tcl_invoke(["event", "generate", path, event] + option_args)
+      else
+        generate_repeated_event(path, base_event, count, option_args)
+      end
+    end
+
+    # Tk's `event generate` silently DROPS an event aimed at a window that
+    # isn't viewable - no error, no delivery, and not just to that window's
+    # own bindings: nothing on the bindtag chain runs, up to and including
+    # the toplevel's and "all"'s. A widget is unviewable when it (or any
+    # ancestor) has no geometry manager - created but never packed/gridded/
+    # placed - which is easy to do in a test that builds a widget subtree
+    # and never attaches it to anything.
+    #
+    # So the check is `winfo viewable`, not `winfo ismapped` or anything
+    # about the toplevel: an unmanaged ANCESTOR makes a packed child
+    # unviewable too, and that's the shape this actually bites in.
+    # Verified identically on Tk 8.6.14 (X11/Xvfb) and 9.0.3 (Aqua): the
+    # same widget goes from silently-nothing to firing the moment it's
+    # managed, and `place` works as well as `pack` - it is viewability
+    # that matters, not any particular manager.
+    #
+    # It runs AFTER the deiconify/focus preamble above, so a merely
+    # withdrawn toplevel (the normal between-tests state) is already
+    # un-withdrawn by then and never reported here.
+    #
+    # Not a TclError: like WrongThreadError this is a precondition caught
+    # before Tcl is ever asked to do the thing, not something Tcl reported.
+    private def ensure_viewable!(path : String, event : String) : Nil
+      return if tcl_invoke("winfo", "viewable", path) == "1"
+
+      raise NotViewableError.new(
+        "cannot deliver #{event} to #{path}: the widget is not viewable - " \
+        "Tk's `event generate` silently drops events for a window that isn't " \
+        "managed by pack/grid/place (or whose ancestor isn't). Manage it and " \
+        "`update` before simulating an event on it."
+      )
+    end
+
+    # Tk refuses a repeat modifier outright ("Double, Triple, or Quadruple
+    # modifier not allowed") - and rightly so: a repeat count isn't a
+    # property an event can carry, it's something Tk's own click-counting
+    # DERIVES from consecutive events at the same spot within its 500ms
+    # window. So the only way to fire a <Double-Button-1> binding is to do
+    # what a real double click does - deliver the underlying press/release
+    # pair N times - and let Tk count them.
+    #
+    # Explicit -time values, not Tk's own timestamps: an event generated
+    # with no -time is stamped with the display's LAST event time, which
+    # doesn't advance on its own, so the pairs happen to land inside the
+    # window today by accident rather than by design. Numbering them makes
+    # it deliberate, and immune to a slow first-click binding.
+    #
+    # @synthetic_event_time then jumps a full REPEAT_GAP_MS past the burst
+    # so the NEXT call starts outside Tk's counting window. Without that,
+    # a second simulated double-click would be counted as clicks 3 and 4 of
+    # the first one and fire <Triple>/<Quadruple> instead. The counter
+    # stays well inside 32 bits, which is all `event generate -time`
+    # accepts (a wall-clock ms value is rejected: "integer value too large
+    # to represent").
+    private def generate_repeated_event(path : String, base_event : String,
+                                        count : Int32, option_args : Array(String)) : Nil
+      press, release = Interp.press_release_patterns(base_event)
+
+      # A caller-supplied time: becomes the base the burst counts up from
+      # (and is dropped from the pass-through options, since every
+      # generated event gets its own). Tk's non-integer forms - "current" -
+      # can't be counted from, so they fall back to the internal counter.
+      time_index = option_args.index("-time")
+      base_time = time_index.try { |index| option_args[index + 1].to_i? } || @synthetic_event_time
+      timeless = time_index ? option_args[0...time_index] + option_args[(time_index + 2)..] : option_args
+
+      count.times do |click|
+        click_time = base_time + click * CLICK_INTERVAL_MS
+        tcl_invoke(["event", "generate", path, press] + timeless + ["-time", click_time.to_s])
+        tcl_invoke(["event", "generate", path, release] + timeless + ["-time", (click_time + PRESS_HOLD_MS).to_s])
+      end
+
+      @synthetic_event_time = base_time + count * CLICK_INTERVAL_MS + REPEAT_GAP_MS
+      @synthetic_event_time = 0 if @synthetic_event_time > SYNTHETIC_TIME_LIMIT
+    end
+
+    # Splits a leading repeat count off an event pattern: "<Double-Button-1>"
+    # becomes {2, "<Button-1>"}. Anything without one comes back as
+    # {1, event} untouched, so the common path is unaffected.
+    #
+    # The modifier is matched anywhere in the pattern, not just first: Tk
+    # accepts modifiers in any order, so "<Shift-Double-1>" is as valid as
+    # "<Double-Shift-1>" and both have to lose the same token.
+    def self.split_repeat_modifier(event : String) : {Int32, String}
+      return {1, event} unless event.starts_with?('<') && event.ends_with?('>')
+
+      tokens = event[1...-1].split('-')
+      index = tokens.index { |token| REPEAT_MODIFIERS.has_key?(token) }
+      return {1, event} unless index
+
+      count = REPEAT_MODIFIERS[tokens[index]]
+      tokens.delete_at(index)
+      {count, "<#{tokens.join('-')}>"}
+    end
+
+    # The press/release patterns whose repetition Tk counts for a given
+    # base event: "<Button-1>" -> {"<ButtonPress-1>", "<ButtonRelease-1>"}.
+    # Modifiers are carried through untouched ("<Shift-Button-1>" keeps its
+    # Shift), and Tk's bare-detail button form ("<Double-1>", what a
+    # Treeview binding is usually written as) is recognized too - there's
+    # no type token to rewrite there, so the type is inserted.
+    #
+    # A ButtonRelease/KeyRelease base yields the same pair as its press
+    # counterpart: it's the same physical repetition either way, only the
+    # member of the pair Tk matches the binding against differs.
+    def self.press_release_patterns(base_event : String) : {String, String}
+      tokens = base_event[1...-1].split('-')
+
+      if index = tokens.index { |token| BUTTON_EVENT_TYPES.includes?(token) || KEY_EVENT_TYPES.includes?(token) }
+        press, release = BUTTON_EVENT_TYPES.includes?(tokens[index]) ? {"ButtonPress", "ButtonRelease"} : {"KeyPress", "KeyRelease"}
+        {pattern_with(tokens, index, press), pattern_with(tokens, index, release)}
+      elsif tokens.last?.try(&.to_i?).try { |detail| 1 <= detail <= 5 }
+        {pattern_inserting(tokens, "ButtonPress"), pattern_inserting(tokens, "ButtonRelease")}
+      else
+        raise ArgumentError.new(
+          "cannot simulate a repeated #{base_event}: only button and key events " \
+          "have a press/release pair for Tk to count repeats of"
+        )
+      end
+    end
+
+    private def self.pattern_with(tokens : Array(String), index : Int32, type : String) : String
+      rewritten = tokens.dup
+      rewritten[index] = type
+      "<#{rewritten.join('-')}>"
+    end
+
+    private def self.pattern_inserting(tokens : Array(String), type : String) : String
+      "<#{(tokens[0..-2] + [type, tokens[-1]]).join('-')}>"
     end
 
     # Show a toplevel and put it in front with the keyboard focus - what
