@@ -945,8 +945,17 @@ module Tryst
     # stashed via #_pending_exception= (see there for why it can't just
     # raise directly from the tick).
     def update : Nil
-      tcl_eval("update")
+      # Tcl's own `update` pumps the loop without going through any of
+      # Interp's do_one_event wrappers, so this is the one pump that has
+      # to declare itself - see Interp#pumping_events.
+      @interp.pumping_events { tcl_eval("update") }
       drain_pending_exception
+    end
+
+    # True while any event loop is actively servicing events - see
+    # Interp#event_loop_running?. @api private (RepeatingTimer).
+    def event_loop_running? : Bool
+      @interp.event_loop_running?
     end
 
     private def drain_pending_exception : Nil

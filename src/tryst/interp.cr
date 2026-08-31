@@ -584,6 +584,9 @@ module Tryst
     # ruby-tryst's register_callback(relay_break_continue:).
     private record CallbackEntry, proc : Proc(Array(String), CallbackSignal, Nil), relay_break : Bool
 
+    # How many event-pumping calls are on the stack - see #pumping_events.
+    @event_loop_depth = 0
+
     @callbacks = {} of String => CallbackEntry
     @next_callback_id = 1
 
@@ -1117,22 +1120,51 @@ module Tryst
     # cleanup), and it takes effect the moment the Tcl_DoOneEvent it
     # fired inside returns, so there's nothing left to drain or tick.
     def mainloop(on_tick : (-> Nil)? = nil) : Nil
-      {% if flag?(:darwin) || flag?(:windows) %}
-        while !@deleted && main_windows > 0
-          in_tcl_frame { LibTcl.do_one_event(LibTcl::TCL_DONT_WAIT) }
-          break if @deleted
-          drain_main_queue
-          on_tick.try &.call
-          sleep 1.millisecond
-        end
-      {% else %}
-        while !@deleted && main_windows > 0
-          in_tcl_frame { LibTcl.do_one_event(LibTcl::TCL_ALL_EVENTS) }
-          break if @deleted
-          drain_main_queue
-          on_tick.try &.call
-        end
-      {% end %}
+      pumping_events do
+        {% if flag?(:darwin) || flag?(:windows) %}
+          while !@deleted && main_windows > 0
+            in_tcl_frame { LibTcl.do_one_event(LibTcl::TCL_DONT_WAIT) }
+            break if @deleted
+            drain_main_queue
+            on_tick.try &.call
+            sleep 1.millisecond
+          end
+        {% else %}
+          while !@deleted && main_windows > 0
+            in_tcl_frame { LibTcl.do_one_event(LibTcl::TCL_ALL_EVENTS) }
+            break if @deleted
+            drain_main_queue
+            on_tick.try &.call
+          end
+        {% end %}
+      end
+    end
+
+    # True while this interpreter is actively servicing Tk events -
+    # inside #mainloop, #pump_once, #spin_until or App#update. Anything
+    # armed while this reads false is being armed by code that isn't
+    # letting the loop run, so it can't expect to be serviced on time.
+    #
+    # RepeatingTimer is the only caller: drift alone can't tell "this
+    # tick was late because something blocked the loop" apart from "this
+    # timer was armed during startup and nothing was pumping yet", and
+    # this is the difference. @api private
+    def event_loop_running? : Bool
+      @event_loop_depth > 0
+    end
+
+    # Marks its block as one that services Tk events, for
+    # #event_loop_running?. A depth counter rather than a flag: nesting
+    # is normal (App#update called from a callback #mainloop dispatched,
+    # #spin_until from inside #mainloop), and the inner one returning
+    # must not report the outer loop as gone. @api private
+    def pumping_events(& : -> T) : T forall T
+      @event_loop_depth += 1
+      begin
+        yield
+      ensure
+        @event_loop_depth -= 1
+      end
     end
 
     # Non-blocking: processes whatever Tk event is immediately available
@@ -1142,8 +1174,10 @@ module Tryst
     # window to close (which is the only thing that ends #mainloop).
     def pump_once : Nil
       check_thread_affinity!
-      guarded_entry { LibTcl.do_one_event(LibTcl::TCL_DONT_WAIT) }
-      drain_main_queue
+      pumping_events do
+        guarded_entry { LibTcl.do_one_event(LibTcl::TCL_DONT_WAIT) }
+        drain_main_queue
+      end
     end
 
     # App#off_thread's in-callback path: blocks (this C stack, not the
@@ -1153,9 +1187,11 @@ module Tryst
     # already-parked fiber re-entering (allowed), not a second one.
     def spin_until(& : -> Bool) : Nil
       check_thread_affinity!
-      until yield
-        guarded_entry { LibTcl.do_one_event(LibTcl::TCL_ALL_EVENTS) }
-        drain_main_queue
+      pumping_events do
+        until yield
+          guarded_entry { LibTcl.do_one_event(LibTcl::TCL_ALL_EVENTS) }
+          drain_main_queue
+        end
       end
     end
 

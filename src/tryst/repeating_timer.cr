@@ -9,6 +9,17 @@ module Tryst
   # the interval), a warning is printed to stderr. This helps catch
   # blocks that are too slow for the requested interval.
   #
+  # One tick never gets that check: the first one, when the timer was
+  # armed while no event loop was running (App#event_loop_running?).
+  # Drift is measured from the moment the timer arms, so a timer created
+  # during startup can only report how long the rest of startup took
+  # before #mainloop began - "the loop wasn't pumping yet", which is
+  # indistinguishable from "the loop was blocked" if you look at drift
+  # alone. Warning about it is a guaranteed false positive on every
+  # application that builds its UI before entering the loop, so it's
+  # skipped instead. Everything from the second tick on is measured
+  # normally, since by then the loop is what rearmed the timer.
+  #
   # @see App#every
   class RepeatingTimer
     # Interval in milliseconds.
@@ -21,6 +32,7 @@ module Tryst
     getter late_ticks : Int32
 
     @after_id : AfterHandle?
+    @skip_first_drift_check : Bool
     @next_expected : Time::Instant?
     @policy : ErrorPolicy
     @handler : ErrorHandler?
@@ -39,6 +51,9 @@ module Tryst
       @last_error = nil
       @late_ticks = 0
       @next_expected = nil
+      # Read here, not at tick time: by then #mainloop is running and
+      # would answer true no matter when the timer was actually armed.
+      @skip_first_drift_check = !@app.event_loop_running?
       schedule
     end
 
@@ -102,10 +117,21 @@ module Tryst
     private def check_drift : Nil
       next_expected = @next_expected
       return unless next_expected
+
+      # See the class doc comment: measuring this one would only report
+      # how long the event loop took to start. Cleared either way, so
+      # it only ever costs the first tick.
+      if @skip_first_drift_check
+        @skip_first_drift_check = false
+        return
+      end
+
       drift = Time.instant - next_expected
       if drift > @interval.milliseconds
         @late_ticks += 1
-        STDERR.puts "Tryst::RepeatingTimer: tick #{@late_ticks} fired #{drift.total_milliseconds.round}ms late " \
+        # "late tick N", not "tick N" - @late_ticks counts the late ones,
+        # so this is the Nth tick that was late, not the Nth tick.
+        STDERR.puts "Tryst::RepeatingTimer: late tick #{@late_ticks} fired #{drift.total_milliseconds.round}ms late " \
                     "(interval=#{@interval}ms)"
       end
     end

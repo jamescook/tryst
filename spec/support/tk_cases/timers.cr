@@ -329,3 +329,69 @@ tk_test "RepeatingTimer#last_error is nil when there have been no errors" do |ap
   raise "expected nil" unless timer.last_error.nil?
   timer.cancel
 end
+
+# drift reporting
+
+tk_test "event_loop_running? is false outside a pump and true inside one" do |app|
+  raise "expected false before any pump" if app.event_loop_running?
+
+  seen_in_update = false
+  app.after_idle { seen_in_update = app.event_loop_running? }
+  app.update
+  raise "expected true inside App#update" unless seen_in_update
+
+  seen_in_pump = false
+  app.after_idle { seen_in_pump = app.event_loop_running? }
+  app.interp.wait_until(2.seconds) { seen_in_pump }
+  raise "expected true inside Interp#pump_once" unless seen_in_pump
+
+  raise "expected false again once the pump returned" if app.event_loop_running?
+end
+
+# A timer armed while nothing is pumping can only measure how long its
+# caller took to start the loop - see RepeatingTimer's own doc comment.
+# `sleep` is the point here, not an accident: nothing else pumps this
+# interpreter, so it reproduces exactly what an app building its UI
+# between App#every and App#mainloop does.
+tk_test "a timer armed outside the event loop doesn't count its first tick as late" do |app|
+  ticks = 0
+  timer = app.every(20, on_error: :ignore) { ticks += 1 }
+  begin
+    sleep 60.milliseconds
+    app.update
+    # Assert the tick actually happened, or late_ticks == 0 below would
+    # also pass for a timer that never fired at all.
+    raise "expected the first tick to have fired" unless ticks == 1
+    raise "expected the first tick to be exempt, got #{timer.late_ticks}" unless timer.late_ticks == 0
+
+    # The second tick was armed by the loop itself, so it counts.
+    sleep 60.milliseconds
+    app.update
+    raise "expected a second tick, got #{ticks}" unless ticks == 2
+    raise "expected the second tick to be counted late, got #{timer.late_ticks}" unless timer.late_ticks == 1
+  ensure
+    timer.cancel
+  end
+end
+
+# The exemption is for the first tick only, and only when nothing was
+# pumping at arm time - a timer armed from inside a callback the loop
+# dispatched gets none.
+tk_test "a timer armed inside the event loop counts its first tick as late" do |app|
+  ticks = 0
+  armed = nil.as(Tryst::RepeatingTimer?)
+  app.after_idle { armed = app.every(20, on_error: :ignore) { ticks += 1 } }
+  app.update
+
+  timer = armed
+  raise "timer was never armed" unless timer
+
+  begin
+    sleep 60.milliseconds
+    app.update
+    raise "expected the first tick to have fired" unless ticks == 1
+    raise "expected the first tick to be counted late, got #{timer.late_ticks}" unless timer.late_ticks == 1
+  ensure
+    timer.cancel
+  end
+end
